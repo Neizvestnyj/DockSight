@@ -12,6 +12,7 @@ HEADERS = {"Authorization": f"Bearer {TOKEN}"}
 
 
 def client() -> TestClient:
+    """Create an authenticated in-process client with deterministic runtime and model ports."""
     settings = Settings(api_token=TOKEN, cors_origins=("http://localhost:5173",), _env_file=None)
     runtime = FakeRuntime()
     model = ScriptedModel(
@@ -35,6 +36,7 @@ def client() -> TestClient:
 
 
 def test_http_authentication_hosts_and_unknown_host() -> None:
+    """Verify http authentication hosts and unknown host."""
     with client() as api:
         assert api.get("/api/v1/hosts").status_code == 401
         response = api.get("/api/v1/hosts", headers=HEADERS)
@@ -44,15 +46,12 @@ def test_http_authentication_hosts_and_unknown_host() -> None:
 
 
 def test_streamed_diagnosis_contains_validated_cards_and_terminal_event() -> None:
+    """Verify streamed diagnosis contains validated cards and terminal event."""
     with client() as api:
-        response = api.post(
-            "/api/v1/chat/turns", headers=HEADERS, json={"host": "local", "query": "Inspect worker"}
-        )
+        response = api.post("/api/v1/chat/turns", headers=HEADERS, json={"host": "local", "query": "Inspect worker"})
         assert response.status_code == 200
         assert response.headers["content-type"].startswith("text/event-stream")
-        events = [
-            json.loads(line[6:]) for line in response.text.splitlines() if line.startswith("data: ")
-        ]
+        events = [json.loads(line[6:]) for line in response.text.splitlines() if line.startswith("data: ")]
         answer = next(event["answer"] for event in events if event["type"] == "answer.ready")
         assert answer["widgets"][0]["snapshot"]["id"] == "a" * 64
         action = answer["widgets"][0]["actions"][0]
@@ -62,6 +61,7 @@ def test_streamed_diagnosis_contains_validated_cards_and_terminal_event() -> Non
 
 
 def test_action_endpoint_requires_confirmation_and_deduplicates_execution() -> None:
+    """Verify action endpoint requires confirmation and deduplicates execution."""
     with client() as api:
         prepared = api.post(
             "/api/v1/actions",
@@ -80,6 +80,7 @@ def test_action_endpoint_requires_confirmation_and_deduplicates_execution() -> N
 
 
 def test_cors_preflight_does_not_require_a_token_and_foreign_origin_is_rejected() -> None:
+    """Verify cors preflight does not require a token and foreign origin is rejected."""
     with client() as api:
         response = api.options(
             "/api/v1/chat/turns",
@@ -91,15 +92,11 @@ def test_cors_preflight_does_not_require_a_token_and_foreign_origin_is_rejected(
         )
         assert response.status_code == 200
         assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
-        assert (
-            api.get(
-                "/api/v1/hosts", headers={**HEADERS, "Origin": "http://foreign.example"}
-            ).status_code
-            == 403
-        )
+        assert api.get("/api/v1/hosts", headers={**HEADERS, "Origin": "http://foreign.example"}).status_code == 403
 
 
 def test_invalid_and_oversized_requests_do_not_echo_sensitive_input() -> None:
+    """Verify invalid and oversized requests do not echo sensitive input."""
     with client() as api:
         response = api.post(
             "/api/v1/chat/turns",
@@ -113,6 +110,7 @@ def test_invalid_and_oversized_requests_do_not_echo_sensitive_input() -> None:
 
 
 def test_chunked_requests_are_limited_without_content_length() -> None:
+    """Verify chunked requests are limited without content length."""
     with client() as api:
         response = api.post(
             "/api/v1/chat/turns",
@@ -123,6 +121,7 @@ def test_chunked_requests_are_limited_without_content_length() -> None:
 
 
 def test_openapi_describes_authentication_and_sse() -> None:
+    """Verify openapi describes authentication and sse."""
     with client() as api:
         document = api.get("/openapi.json").json()
         chat = document["paths"]["/api/v1/chat/turns"]["post"]

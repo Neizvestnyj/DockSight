@@ -10,12 +10,12 @@ from docksight.domain.runtime import ContainerSnapshot, LogBatch, StackSummary
 
 @dataclass
 class EvidenceContext:
+    """Own a turn's bounded evidence and typed runtime snapshots."""
+
     evidence: dict[str, EvidenceRef] = field(default_factory=dict[str, EvidenceRef])
     snapshots: dict[str, ContainerSnapshot] = field(default_factory=dict[str, ContainerSnapshot])
     logs: dict[str, LogBatch] = field(default_factory=dict[str, LogBatch])
-    stacks: dict[str, tuple[StackSummary, ...]] = field(
-        default_factory=dict[str, tuple[StackSummary, ...]]
-    )
+    stacks: dict[str, tuple[StackSummary, ...]] = field(default_factory=dict[str, tuple[StackSummary, ...]])
     used_bytes: int = 0
 
     def record(
@@ -27,15 +27,12 @@ class EvidenceContext:
         logs: LogBatch | None = None,
         stacks: tuple[StackSummary, ...] | None = None,
     ) -> EvidenceRef:
+        """Assign an evidence ID and retain its typed data within turn limits."""
         size = len(json.dumps(data, ensure_ascii=False).encode())
         if len(self.evidence) >= 64 or self.used_bytes + size > 65536:
-            raise DockSightError(
-                "evidence_limit", "Evidence budget reached; finalize with collected evidence", 409
-            )
+            raise DockSightError("evidence_limit", "Evidence budget reached; finalize with collected evidence", 409)
         evidence_id = f"e{len(self.evidence) + 1}"
-        item = EvidenceRef(
-            evidence_id, kind, host, snapshot.id if snapshot else None, datetime.now(UTC), data
-        )
+        item = EvidenceRef(evidence_id, kind, host, snapshot.id if snapshot else None, datetime.now(UTC), data)
         self.evidence[evidence_id] = item
         self.used_bytes += size
         if snapshot is not None:

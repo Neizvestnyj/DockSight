@@ -1,6 +1,6 @@
 from pathlib import Path
 from typing import Self
-from urllib.parse import urlparse
+from urllib.parse import ParseResult, urlparse
 
 import docker
 import yaml
@@ -12,6 +12,8 @@ from docksight.domain.errors import DockSightError
 
 
 class HostConfig(BaseModel):
+    """Describe an operator-configured Docker endpoint and optional mTLS files."""
+
     model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
     id: str = Field(pattern=r"^[a-z0-9][a-z0-9_-]{0,63}$")
     name: str = Field(default="", max_length=100)
@@ -22,6 +24,7 @@ class HostConfig(BaseModel):
 
     @model_validator(mode="after")
     def secure_transport(self) -> Self:
+        """Reject unsupported or insecure Docker connection settings."""
         if self.url is None:
             return self
         parsed = urlparse(self.url)
@@ -30,22 +33,30 @@ class HostConfig(BaseModel):
         if parsed.password or parsed.query or parsed.fragment:
             raise ValueError("Credentials and query parameters are not allowed in host URLs")
         if parsed.scheme in {"ssh", "tcp"}:
-            if not parsed.hostname or parsed.hostname.startswith("-"):
-                raise ValueError("Invalid Docker hostname")
-            if parsed.path not in {"", "/"}:
-                raise ValueError("Remote Docker URLs cannot contain a path")
+            _validate_remote_url(parsed)
         if parsed.scheme == "tcp" and not all((self.ca_cert, self.client_cert, self.client_key)):
             raise ValueError("TCP connections require mTLS certificates")
 
         return self
 
 
+def _validate_remote_url(parsed: ParseResult) -> None:
+    """Reject unsafe remote hostnames and paths before constructing an SDK client."""
+    if not parsed.hostname or parsed.hostname.startswith("-"):
+        raise ValueError("Invalid Docker hostname")
+    if parsed.path not in {"", "/"}:
+        raise ValueError("Remote Docker URLs cannot contain a path")
+
+
 class HostsFile(BaseModel):
+    """Validate a bounded collection of configured Docker hosts."""
+
     model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
     hosts: list[HostConfig] = Field(min_length=1, max_length=32)
 
 
 def load_hosts(path: str | None) -> tuple[HostConfig, ...]:
+    """Load unique host definitions from bounded YAML or use the local Docker context."""
     if path is None:
         return (HostConfig(id="local", name="Local Docker"),)
     try:
@@ -63,6 +74,7 @@ def load_hosts(path: str | None) -> tuple[HostConfig, ...]:
 
 
 def connect(host: HostConfig, timeout: float) -> DockerClient:
+    """Create an SDK client with verified SSH or mTLS for remote hosts."""
     if host.url is None:
         client = docker.from_env(timeout=max(1, int(timeout)))
         if client.api.base_url.startswith("http://"):
@@ -79,6 +91,4 @@ def connect(host: HostConfig, timeout: float) -> DockerClient:
             verify=True,
         )
 
-    return DockerClient(
-        base_url=host.url, tls=tls, timeout=max(1, int(timeout)), use_ssh_client=False
-    )
+    return DockerClient(base_url=host.url, tls=tls, timeout=max(1, int(timeout)), use_ssh_client=False)

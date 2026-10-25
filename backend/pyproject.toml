@@ -10,10 +10,14 @@ dependencies = [
   "fastapi>=0.115",
   "httpx>=0.28",
   "openai>=2.0",
+  "paramiko>=3.5,<6",
+  "pydantic>=2.8,<3",
   "pydantic-settings>=2.8",
   "python-dotenv>=1.0",
   "pyyaml>=6.0",
   "pywin32>=308; sys_platform == 'win32'",
+  "requests>=2.32,<3",
+  "starlette>=0.40,<2",
   "uvicorn>=0.34",
 ]
 
@@ -26,8 +30,12 @@ packages = ["src/docksight"]
 
 [dependency-groups]
 dev = [
+  "complexipy>=6.1,<7",
+  "hadolint-py>=2.15.1.2,<3",
   "httpx2>=2.16",
   "import-linter>=2.3",
+  "interrogate>=1.7,<2",
+  "pre-commit>=4.5,<5",
   "pyright>=1.1.400",
   "pytest>=8.3",
   "pytest-asyncio>=0.25",
@@ -45,7 +53,7 @@ markers = ["docker: opt-in real Docker tests", "live: opt-in configured model te
 
 [tool.ruff]
 target-version = "py312"
-line-length = 100
+line-length = 120
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "ASYNC", "RUF"]
@@ -56,6 +64,20 @@ typeCheckingMode = "strict"
 pythonVersion = "3.12"
 venvPath = "."
 venv = ".venv"
+
+[tool.interrogate]
+fail-under = 100
+ignore-module = true
+ignore-init-method = false
+ignore-magic = false
+ignore-private = false
+ignore-semiprivate = false
+ignore-nested-functions = false
+ignore-nested-classes = false
+
+[tool.complexipy]
+max-complexity-allowed = 10
+cache-dir = ".complexipy_cache"
 
 [tool.importlinter]
 root_package = "docksight"

@@ -12,11 +12,7 @@ jobs:
           enable-cache: true
           cache-dependency-glob: backend/uv.lock
       - run: uv sync --project backend --locked
-      - run: uv run --project backend ruff check backend examples
-      - run: uv run --project backend ruff format --check backend examples
-      - run: uv run --project backend pyright --project backend
-      - run: uv run --project backend lint-imports --config backend/pyproject.toml
-      - run: uv run --project backend pytest backend/tests
+      - run: uv run --project backend pre-commit run --all-files
       - run: uv run --project backend pytest backend/tests/integration -m docker
         env:
           DOCKSIGHT_TEST_DOCKER: "1"
@@ -25,3 +21,18 @@ jobs:
         env:
           DOCKSIGHT_TEST_DOCKER: "1"
           DOCKSIGHT_TEST_BACKEND_IMAGE: docksight-backend:ci
+
+  compatibility:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: ${{ matrix.python }}
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - run: uv sync --project backend --locked --python ${{ matrix.python }}
+      - run: uv run --project backend --python ${{ matrix.python }} pytest backend/tests

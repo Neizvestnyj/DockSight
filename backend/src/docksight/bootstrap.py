@@ -30,6 +30,8 @@ from docksight.application.views.assembler import ViewAssembler
 
 
 class Settings(BaseSettings):
+    """Validate environment-based credentials, provider selection, and resource budgets."""
+
     model_config = SettingsConfigDict(
         env_prefix="DOCKSIGHT_", env_file=".env", extra="ignore", hide_input_in_errors=True
     )
@@ -62,6 +64,7 @@ class Settings(BaseSettings):
     @field_validator("api_token")
     @classmethod
     def validate_token(cls, value: SecretStr) -> SecretStr:
+        """Reject API tokens shorter than the minimum operator credential length."""
         if len(value.get_secret_value()) < 24:
             raise ValueError("API token must contain at least 24 characters")
 
@@ -70,6 +73,7 @@ class Settings(BaseSettings):
     @field_validator("model_base_url")
     @classmethod
     def validate_model_url(cls, value: str | None) -> str | None:
+        """Reject provider URLs with credentials, queries, fragments, or invalid schemes."""
         if value is not None:
             parsed = urlparse(value)
             if (
@@ -80,32 +84,93 @@ class Settings(BaseSettings):
                 or parsed.query
                 or parsed.fragment
             ):
-                raise ValueError(
-                    "Model endpoint must be an HTTP(S) URL without credentials or query parameters"
-                )
+                raise ValueError("Model endpoint must be an HTTP(S) URL without credentials or query parameters")
 
         return value
 
 
 @dataclass
 class Components:
+    """Own wired application services and the cleanup callbacks for their adapters."""
+
     queries: RuntimeQueries
     diagnostics: Diagnostics
     actions: Actions
     closers: list[Callable[[], Awaitable[None]]]
 
     async def close(self) -> None:
+        """Drain action work before closing adapters in reverse construction order."""
         await self.actions.close()
         for close in reversed(self.closers):
             await close()
 
 
 def configure_logging() -> None:
+    """Configure the application logger once without propagating to root handlers."""
     logger = logging.getLogger("docksight")
     if not logger.handlers:
         logger.addHandler(logging.StreamHandler())
     logger.setLevel(logging.INFO)
     logger.propagate = False
+
+
+def _provider_key(settings: Settings) -> str | None:
+    """Resolve explicit credentials before provider-specific environment defaults."""
+    if settings.model_api_key and settings.model_api_key.get_secret_value():
+        return settings.model_api_key.get_secret_value()
+    if settings.provider == "anthropic":
+        return os.getenv("ANTHROPIC_API_KEY")
+    if settings.provider in {"openai", "compatible"}:
+        return os.getenv("OPENAI_API_KEY")
+    return None
+
+
+def _openai_model(settings: Settings, key: str | None, closers: list[Callable[[], Awaitable[None]]]) -> ModelPort:
+    """Wire the native Responses adapter or a configured compatible endpoint."""
+    if settings.provider == "compatible":
+        if not settings.model_base_url:
+            raise ValueError("Compatible providers require DOCKSIGHT_MODEL_BASE_URL")
+        key = key or "local-no-key"
+    if not key:
+        raise ValueError("Configure DOCKSIGHT_MODEL_API_KEY or OPENAI_API_KEY")
+    client = AsyncOpenAI(
+        api_key=key,
+        base_url=settings.model_base_url,
+        timeout=settings.model_timeout,
+        max_retries=0,
+    )
+    closers.append(client.close)
+    if settings.provider == "openai":
+        return OpenAIModel(client, settings.model, settings.model_max_tokens)
+    return CompatibleModel(client, settings.model, settings.model_max_tokens, settings.model_structured_output)
+
+
+def _build_model(settings: Settings, key: str | None, closers: list[Callable[[], Awaitable[None]]]) -> ModelPort:
+    """Validate model capabilities and register the selected client's cleanup."""
+    if not settings.model_supports_tools:
+        raise ValueError("Docker diagnostics require a model with tool-calling support")
+    if settings.model_structured_output == "tool" and settings.provider != "compatible":
+        raise ValueError("Tool-based structured output requires provider=compatible")
+    if settings.provider == "ollama":
+        client = httpx.AsyncClient(
+            base_url=settings.model_base_url or "http://127.0.0.1:11434",
+            timeout=settings.model_timeout,
+            headers={"Authorization": f"Bearer {key}"} if key else {},
+        )
+        closers.append(client.aclose)
+        return OllamaModel(client, settings.model, settings.model_max_tokens)
+    if settings.provider == "anthropic":
+        if not key:
+            raise ValueError("Configure DOCKSIGHT_MODEL_API_KEY or ANTHROPIC_API_KEY")
+        anthropic_client = AsyncAnthropic(
+            api_key=key,
+            base_url=settings.model_base_url,
+            timeout=settings.model_timeout,
+            max_retries=0,
+        )
+        closers.append(anthropic_client.close)
+        return AnthropicModel(anthropic_client, settings.model, settings.model_max_tokens)
+    return _openai_model(settings, key, closers)
 
 
 def build_components(
@@ -115,16 +180,9 @@ def build_components(
     writer: RuntimeMutationPort | None = None,
     model: ModelPort | None = None,
 ) -> Components:
+    """Wire hexagonal services with configured adapters or explicitly injected test ports."""
     configure_logging()
-    effective_key = settings.model_api_key.get_secret_value() if settings.model_api_key else None
-    if not effective_key:
-        effective_key = (
-            os.getenv("ANTHROPIC_API_KEY")
-            if settings.provider == "anthropic"
-            else os.getenv("OPENAI_API_KEY")
-            if settings.provider in {"openai", "compatible"}
-            else None
-        )
+    effective_key = _provider_key(settings)
     secrets = (settings.api_token.get_secret_value(),)
     if effective_key:
         secrets = (*secrets, effective_key)
@@ -142,56 +200,7 @@ def build_components(
     if writer is None:
         raise ValueError("A runtime mutation adapter must be supplied with a custom reader")
     if model is None:
-        if not settings.model_supports_tools:
-            raise ValueError("Docker diagnostics require a model with tool-calling support")
-        if settings.model_structured_output == "tool" and settings.provider != "compatible":
-            raise ValueError("Tool-based structured output requires provider=compatible")
-        key = effective_key
-        if settings.provider == "ollama":
-            client = httpx.AsyncClient(
-                base_url=settings.model_base_url or "http://127.0.0.1:11434",
-                timeout=settings.model_timeout,
-                headers={"Authorization": f"Bearer {key}"} if key else {},
-            )
-            closers.append(client.aclose)
-            model = OllamaModel(client, settings.model, settings.model_max_tokens)
-        elif settings.provider == "anthropic":
-            key = key or os.getenv("ANTHROPIC_API_KEY")
-            if not key:
-                raise ValueError("Configure DOCKSIGHT_MODEL_API_KEY or ANTHROPIC_API_KEY")
-            anthropic_client = AsyncAnthropic(
-                api_key=key,
-                base_url=settings.model_base_url,
-                timeout=settings.model_timeout,
-                max_retries=0,
-            )
-            closers.append(anthropic_client.close)
-            model = AnthropicModel(anthropic_client, settings.model, settings.model_max_tokens)
-        else:
-            key = key or os.getenv("OPENAI_API_KEY")
-            if settings.provider == "compatible":
-                if not settings.model_base_url:
-                    raise ValueError("Compatible providers require DOCKSIGHT_MODEL_BASE_URL")
-                key = key or "local-no-key"
-            if not key:
-                raise ValueError("Configure DOCKSIGHT_MODEL_API_KEY or OPENAI_API_KEY")
-            openai_client = AsyncOpenAI(
-                api_key=key,
-                base_url=settings.model_base_url,
-                timeout=settings.model_timeout,
-                max_retries=0,
-            )
-            closers.append(openai_client.close)
-            model = (
-                OpenAIModel(openai_client, settings.model, settings.model_max_tokens)
-                if settings.provider == "openai"
-                else CompatibleModel(
-                    openai_client,
-                    settings.model,
-                    settings.model_max_tokens,
-                    settings.model_structured_output,
-                )
-            )
+        model = _build_model(settings, effective_key, closers)
     actions = Actions(
         reader,
         writer,

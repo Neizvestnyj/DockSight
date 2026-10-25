@@ -3,6 +3,7 @@ from pathlib import Path
 
 
 def main() -> None:
+    """Fail on first startup and mark subsequent starts healthy until stopped."""
     attempted = Path("/state/attempted")
     if not attempted.exists():
         attempted.touch()

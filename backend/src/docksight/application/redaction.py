@@ -19,10 +19,12 @@ _TOKEN: Final = re.compile(
 
 
 def secret_name(name: str) -> bool:
+    """Identify environment or field names that may contain credentials."""
     return bool(_SECRET_NAME.search(name))
 
 
 def _mask_assignment(match: re.Match[str]) -> str:
+    """Replace a credential assignment while retaining its recognizable key."""
     value = match.group(2)
     replacement = "[REDACTED]"
     if value[0] in {'"', "'"}:
@@ -32,10 +34,14 @@ def _mask_assignment(match: re.Match[str]) -> str:
 
 
 class Redactor:
+    """Remove configured secrets and common credential patterns from untrusted text."""
+
     def __init__(self, secrets: tuple[str, ...] = ()) -> None:
+        """Retain non-empty secret values for exact replacement."""
         self.secrets = tuple(sorted({value for value in secrets if value}, key=len, reverse=True))
 
     def with_environment(self, environment: list[str]) -> "Redactor":
+        """Extend secret values using sensitive container environment entries."""
         values = tuple(
             value
             for entry in environment
@@ -46,6 +52,7 @@ class Redactor:
         return Redactor((*self.secrets, *values))
 
     def text(self, value: str) -> str:
+        """Redact credentials, private keys, connection passwords, and control sequences."""
         value = _PRIVATE_KEY.sub("[REDACTED]", value)
         value = _URL_AUTH.sub(r"\1[REDACTED]@", value)
         value = _ASSIGNMENT.sub(_mask_assignment, value)

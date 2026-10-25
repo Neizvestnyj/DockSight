@@ -10,8 +10,46 @@ from docksight.domain.diagnostics import JsonObject
 from docksight.domain.errors import DockSightError
 
 
+def _messages(messages: Sequence[ModelMessage]) -> list[dict[str, Any]]:
+    """Encode native Ollama tool calls and tool-name associations."""
+    rows: list[dict[str, Any]] = []
+    for message in messages:
+        row: dict[str, Any] = {"role": message.role, "content": message.content}
+        if message.tool_calls:
+            row["tool_calls"] = [
+                {"function": {"name": call.name, "arguments": call.arguments}} for call in message.tool_calls
+            ]
+        if message.tool_name:
+            row["tool_name"] = message.tool_name
+        rows.append(row)
+    return rows
+
+
+def _reply(data: dict[str, Any]) -> ModelReply:
+    """Parse a native reply and generate IDs when Ollama omits them."""
+    if data.get("done_reason") == "length":
+        raise DockSightError("model_truncated", "Model output exceeded its token limit", 502)
+    message: dict[str, Any] = data["message"]
+    raw_calls: list[dict[str, Any]] = message.get("tool_calls") or []
+    calls = tuple(
+        ToolCall(
+            raw.get("id") or f"call_{uuid4().hex}", raw["function"]["name"], parse_object(raw["function"]["arguments"])
+        )
+        for raw in raw_calls
+    )
+    return ModelReply(
+        str(message.get("content") or ""),
+        calls,
+        input_tokens=int(data.get("prompt_eval_count", 0)),
+        output_tokens=int(data.get("eval_count", 0)),
+    )
+
+
 class OllamaModel:
+    """Implement the model port through Ollama's native chat API."""
+
     def __init__(self, client: httpx.AsyncClient, model: str, max_tokens: int = 4096) -> None:
+        """Bind the Ollama HTTP client, model name, and output token limit."""
         self.client = client
         self.model = model
         self.max_tokens = max_tokens
@@ -22,20 +60,10 @@ class OllamaModel:
         tools: Sequence[ToolSpec] = (),
         schema: JsonObject | None = None,
     ) -> ModelReply:
-        rows: list[dict[str, Any]] = []
-        for message in messages:
-            row: dict[str, Any] = {"role": message.role, "content": message.content}
-            if message.tool_calls:
-                row["tool_calls"] = [
-                    {"function": {"name": call.name, "arguments": call.arguments}}
-                    for call in message.tool_calls
-                ]
-            if message.tool_name:
-                row["tool_name"] = message.tool_name
-            rows.append(row)
+        """Request native tool calls or schema output with thinking disabled."""
         body: dict[str, Any] = {
             "model": self.model,
-            "messages": rows,
+            "messages": _messages(messages),
             "stream": False,
             "think": False,
             "options": {"temperature": 0, "num_predict": self.max_tokens},
@@ -58,36 +86,10 @@ class OllamaModel:
             response = await self.client.post("/api/chat", json=body)
             if response.is_error:
                 raise provider_error(response.status_code)
-            data: dict[str, Any] = response.json()
-            if data.get("done_reason") == "length":
-                raise DockSightError(
-                    "model_truncated", "Model output exceeded its token limit", 502
-                )
-            message_data: dict[str, Any] = data["message"]
-            calls: list[ToolCall] = []
-            raw_calls: list[dict[str, Any]] = message_data.get("tool_calls") or []
-            for raw in raw_calls:
-                calls.append(
-                    ToolCall(
-                        raw.get("id") or f"call_{uuid4().hex}",
-                        raw["function"]["name"],
-                        parse_object(raw["function"]["arguments"]),
-                    )
-                )
-
-            return ModelReply(
-                str(message_data.get("content") or ""),
-                tuple(calls),
-                input_tokens=int(data.get("prompt_eval_count", 0)),
-                output_tokens=int(data.get("eval_count", 0)),
-            )
+            return _reply(response.json())
         except httpx.TimeoutException as exc:
             raise DockSightError("provider_timeout", "Model provider timed out", 504) from exc
         except httpx.HTTPError as exc:
-            raise DockSightError(
-                "provider_unavailable", "Model provider is unavailable", 503
-            ) from exc
+            raise DockSightError("provider_unavailable", "Model provider is unavailable", 503) from exc
         except (ValueError, KeyError, TypeError) as exc:
-            raise DockSightError(
-                "invalid_model_response", "Model provider returned an invalid response", 502
-            ) from exc
+            raise DockSightError("invalid_model_response", "Model provider returned an invalid response", 502) from exc

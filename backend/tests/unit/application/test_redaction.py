@@ -12,6 +12,7 @@ from docksight.application.redaction import Redactor
     ],
 )
 def test_json_and_header_credentials_are_redacted(text: str) -> None:
+    """Verify json and header credentials are redacted."""
     result = Redactor().text(text)
     assert "private-sentinel" not in result
     assert "[REDACTED]" in result

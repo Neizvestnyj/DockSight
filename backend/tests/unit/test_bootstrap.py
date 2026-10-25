@@ -7,17 +7,20 @@ from docksight.main import create_app
 
 
 def test_missing_token_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify missing token is rejected."""
     monkeypatch.delenv("DOCKSIGHT_API_TOKEN", raising=False)
     with pytest.raises(ValidationError):
         Settings(_env_file=None)
 
 
 def test_invalid_provider_and_short_token_are_rejected() -> None:
+    """Verify invalid provider and short token are rejected."""
     with pytest.raises(ValidationError):
         Settings(api_token="short", provider="unknown", _env_file=None)
 
 
 def test_health_does_not_require_a_docker_connection() -> None:
+    """Verify health does not require a docker connection."""
     settings = Settings(api_token="test-token-at-least-24-chars", _env_file=None)
     with TestClient(create_app(settings)) as client:
         response = client.get("/health/live")
@@ -27,6 +30,7 @@ def test_health_does_not_require_a_docker_connection() -> None:
 
 
 def test_api_does_not_expose_configured_hosts_without_authentication() -> None:
+    """Verify api does not expose configured hosts without authentication."""
     settings = Settings(api_token="test-token-at-least-24-chars", _env_file=None)
     with TestClient(create_app(settings)) as client:
         response = client.get("/api/v1/hosts")

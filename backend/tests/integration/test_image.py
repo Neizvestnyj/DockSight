@@ -16,6 +16,7 @@ pytestmark = [
 
 
 def test_built_image_starts_as_non_root_and_serves_health() -> None:
+    """Verify built image starts as non root and serves health."""
     owner = str(uuid4())
     client = docker.from_env()
     container = client.containers.run(

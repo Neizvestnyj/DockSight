@@ -17,6 +17,7 @@ async def encode_events(
     request_id: str,
     heartbeat: float = 10,
 ) -> AsyncGenerator[str]:
+    """Encode typed events with heartbeats and close pending work on disconnect."""
     pending: asyncio.Task[TurnEvent] | None = asyncio.create_task(anext(source))
     turn_id: str | None = None
     try:
@@ -66,9 +67,10 @@ async def encode_events(
 
 
 class EventResponse(StreamingResponse):
-    def __init__(
-        self, source: AsyncGenerator[TurnEvent], request_id: str, status_code: int = 200
-    ) -> None:
+    """Serve diagnostic SSE and finalize its source during cancellation."""
+
+    def __init__(self, source: AsyncGenerator[TurnEvent], request_id: str, status_code: int = 200) -> None:
+        """Configure unbuffered event streaming and request metadata."""
         self.events = encode_events(source, request_id)
         super().__init__(
             self.events,
@@ -81,6 +83,7 @@ class EventResponse(StreamingResponse):
         )
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        """Close the event generator even when ASGI cancels the response."""
         try:
             await super().__call__(scope, receive, send)
         finally:

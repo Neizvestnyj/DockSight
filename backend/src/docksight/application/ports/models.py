@@ -7,6 +7,8 @@ from docksight.domain.diagnostics import JsonObject
 
 @dataclass(frozen=True)
 class ToolSpec:
+    """Describe an application-approved model tool and its argument schema."""
+
     name: str
     description: str
     parameters: JsonObject
@@ -14,6 +16,8 @@ class ToolSpec:
 
 @dataclass(frozen=True)
 class ToolCall:
+    """Identify a model-selected tool invocation and parsed arguments."""
+
     id: str
     name: str
     arguments: JsonObject
@@ -21,6 +25,8 @@ class ToolCall:
 
 @dataclass(frozen=True)
 class ModelMessage:
+    """Carry provider-neutral conversation data with optional native replay items."""
+
     role: Literal["system", "user", "assistant", "tool"]
     content: str = ""
     tool_calls: tuple[ToolCall, ...] = ()
@@ -31,6 +37,8 @@ class ModelMessage:
 
 @dataclass(frozen=True)
 class ModelReply:
+    """Return normalized output, tool calls, replay data, and token usage."""
+
     content: str
     tool_calls: tuple[ToolCall, ...] = ()
     native: tuple[JsonObject, ...] = ()
@@ -39,9 +47,13 @@ class ModelReply:
 
 
 class ModelPort(Protocol):
+    """Define provider-independent tool calling and structured final output."""
+
     async def complete(
         self,
         messages: Sequence[ModelMessage],
         tools: Sequence[ToolSpec] = (),
         schema: JsonObject | None = None,
-    ) -> ModelReply: ...
+    ) -> ModelReply:
+        """Produce a model reply using approved tools or the requested JSON schema."""
+        ...

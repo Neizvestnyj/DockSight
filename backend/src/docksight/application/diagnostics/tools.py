@@ -13,14 +13,20 @@ from docksight.domain.runtime import ContainerSnapshot, LogBatch, StackSummary
 
 
 class NoArgs(Contract):
+    """Reject arguments for tools that need only the selected host."""
+
     pass
 
 
 class ContainerArgs(Contract):
+    """Validate a Docker container identifier without accepting a host override."""
+
     container_id: str = Field(pattern=r"^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$")
 
 
 class StackArgs(Contract):
+    """Select Compose grouping or manager-only Swarm service reads."""
+
     kind: Literal["compose", "swarm"] = "compose"
 
 
@@ -41,6 +47,7 @@ _STACKS: Final = TypeAdapter(tuple[StackSummary, ...])
 
 
 def tool_specs() -> tuple[ToolSpec, ...]:
+    """Expose schemas for the read-only diagnostic tool allowlist."""
     return tuple(
         ToolSpec(name, description, cast(JsonObject, schema.model_json_schema()))
         for name, (schema, description) in _TOOLS.items()
@@ -48,6 +55,8 @@ def tool_specs() -> tuple[ToolSpec, ...]:
 
 
 class DiagnosticTools:
+    """Validate model tool calls and record evidence on the selected host."""
+
     def __init__(
         self,
         runtime: RuntimeReadPort,
@@ -56,6 +65,7 @@ class DiagnosticTools:
         log_lines: int = 200,
         log_bytes: int = 65536,
     ) -> None:
+        """Bind one host, evidence context, and bounded log read settings."""
         self.runtime = runtime
         self.context = context
         self.host = host
@@ -63,33 +73,16 @@ class DiagnosticTools:
         self.log_bytes = log_bytes
 
     async def execute(self, call: ToolCall) -> JsonObject:
+        """Reject unknown tools or arguments before dispatching a bounded runtime read."""
         definition = _TOOLS.get(call.name)
         if definition is None:
             raise DockSightError("unknown_tool", "Tool is not allowed", 422)
         try:
             args = definition[0].model_validate(call.arguments)
         except ValidationError as exc:
-            raise DockSightError(
-                "invalid_tool_arguments", "Tool arguments do not match its schema", 422
-            ) from exc
+            raise DockSightError("invalid_tool_arguments", "Tool arguments do not match its schema", 422) from exc
         if isinstance(args, NoArgs):
-            rows = await self.runtime.containers(self.host)
-            results: list[JsonValue] = []
-            for snapshot in rows[:32]:
-                try:
-                    item = self.context.record(
-                        "container",
-                        self.host,
-                        cast(JsonObject, _SNAPSHOT.dump_python(snapshot, mode="json")),
-                        snapshot,
-                    )
-                except DockSightError as exc:
-                    if exc.code != "evidence_limit":
-                        raise
-                    break
-                results.append({"evidence_id": item.id, "data": item.data})
-
-            return {"containers": results, "truncated": len(results) < len(rows)}
+            return await self._containers()
         if isinstance(args, StackArgs):
             stacks = await self.runtime.stacks(self.host, args.kind)
             item = self.context.record(
@@ -101,17 +94,38 @@ class DiagnosticTools:
 
             return {"evidence_id": item.id, "data": item.data}
         assert isinstance(args, ContainerArgs)
-        snapshot = await self.runtime.inspect(self.host, args.container_id)
+        return await self._container(call.name, args.container_id)
+
+    async def _containers(self) -> JsonObject:
+        """Record bounded inventory and report truncation when evidence capacity is reached."""
+        rows = await self.runtime.containers(self.host)
+        results: list[JsonValue] = []
+        for snapshot in rows[:32]:
+            try:
+                item = self.context.record(
+                    "container",
+                    self.host,
+                    cast(JsonObject, _SNAPSHOT.dump_python(snapshot, mode="json")),
+                    snapshot,
+                )
+            except DockSightError as exc:
+                if exc.code != "evidence_limit":
+                    raise
+                break
+            results.append({"evidence_id": item.id, "data": item.data})
+        return {"containers": results, "truncated": len(results) < len(rows)}
+
+    async def _container(self, tool: str, container_id: str) -> JsonObject:
+        """Resolve one container before collecting its allowlisted evidence."""
+        snapshot = await self.runtime.inspect(self.host, container_id)
         data = cast(JsonObject, _SNAPSHOT.dump_python(snapshot, mode="json"))
-        if call.name == "get_container_stats":
+        if tool == "get_container_stats":
             snapshot = replace(snapshot, metrics=await self.runtime.stats(self.host, snapshot.id))
             data = cast(JsonObject, _SNAPSHOT.dump_python(snapshot, mode="json"))
             item = self.context.record("stats", self.host, data, snapshot)
-        elif call.name == "get_container_env":
-            item = self.context.record(
-                "env", self.host, {"variables": dict(snapshot.environment)}, snapshot
-            )
-        elif call.name == "get_container_logs":
+        elif tool == "get_container_env":
+            item = self.context.record("env", self.host, {"variables": dict(snapshot.environment)}, snapshot)
+        elif tool == "get_container_logs":
             container = self.context.record("container", self.host, data, snapshot)
             logs = await self.runtime.logs(self.host, snapshot.id, self.log_lines, self.log_bytes)
             item = self.context.record(

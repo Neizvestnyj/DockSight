@@ -10,7 +10,7 @@ from docksight.application.diagnostics.context import EvidenceContext
 from docksight.application.diagnostics.prompts import FINAL_PROMPT, SYSTEM_PROMPT
 from docksight.application.diagnostics.tools import DiagnosticTools, tool_specs
 from docksight.application.events import TurnEvent
-from docksight.application.ports.models import ModelMessage, ModelPort
+from docksight.application.ports.models import ModelMessage, ModelPort, ToolCall
 from docksight.application.ports.runtime import RuntimeReadPort
 from docksight.application.ports.state import SessionStore
 from docksight.application.redaction import Redactor
@@ -30,6 +30,8 @@ async def _before_deadline[T](deadline: float, operation: Callable[[], Awaitable
 
 
 class Diagnostics:
+    """Coordinate bounded evidence collection, validated cards, and session history."""
+
     def __init__(
         self,
         runtime: RuntimeReadPort,
@@ -44,6 +46,7 @@ class Diagnostics:
         log_bytes: int = 65536,
         concurrency: int = 4,
     ) -> None:
+        """Bind ports and configure turn concurrency, budgets, and timeouts."""
         self.runtime = runtime
         self.model = model
         self.sessions = sessions
@@ -59,6 +62,7 @@ class Diagnostics:
     async def stream(
         self, actor: str, host: str, query: str, session_id: str | None = None
     ) -> AsyncGenerator[TurnEvent]:
+        """Lease a scoped session and emit one terminal event for a bounded turn."""
         turn_id = str(uuid4())
         deadline = asyncio.get_running_loop().time() + self.timeout
         try:
@@ -67,9 +71,7 @@ class Diagnostics:
             if not query.strip() or len(query) > 4000:
                 raise DockSightError("invalid_query", "Query must contain 1-4000 characters", 422)
             if self._slots.locked():
-                raise DockSightError(
-                    "turn_capacity", "Diagnostic capacity reached; retry later", 503
-                )
+                raise DockSightError("turn_capacity", "Diagnostic capacity reached; retry later", 503)
             async with (
                 self._slots,
                 self.sessions.lease(session_id, actor, host) as session,
@@ -82,51 +84,8 @@ class Diagnostics:
                 ]
                 context = EvidenceContext()
                 tools = DiagnosticTools(self.runtime, context, host, self.log_lines, self.log_bytes)
-                tool_calls = 0
-                for _ in range(self.max_model_calls - 2):
-                    reply = await _before_deadline(
-                        deadline,
-                        lambda: self.model.complete(messages, tool_specs()),
-                    )
-                    messages.append(
-                        ModelMessage(
-                            "assistant", reply.content, reply.tool_calls, native=reply.native
-                        )
-                    )
-                    if not reply.tool_calls:
-                        break
-                    for call in reply.tool_calls:
-                        yield {
-                            "type": "tool.started",
-                            "turn_id": turn_id,
-                            "tool": self.redactor.text(call.name),
-                        }
-                        try:
-                            if tool_calls >= self.max_tool_calls:
-                                raise DockSightError("tool_limit", "Tool budget exhausted", 409)
-                            tool_calls += 1
-                            result = await _before_deadline(
-                                deadline,
-                                lambda tool_call=call: tools.execute(tool_call),
-                            )
-                        except DockSightError as exc:
-                            result = {"error": exc.code, "message": exc.message}
-                        messages.append(
-                            ModelMessage(
-                                "tool",
-                                json.dumps(result),
-                                tool_call_id=call.id,
-                                tool_name=call.name,
-                            )
-                        )
-                        yield {
-                            "type": "tool.completed",
-                            "turn_id": turn_id,
-                            "tool": self.redactor.text(call.name),
-                            "ok": "error" not in result,
-                        }
-                    if tool_calls >= self.max_tool_calls:
-                        break
+                async for event in self._explore(messages, tools, turn_id, deadline):
+                    yield event
                 messages.append(ModelMessage("user", FINAL_PROMPT))
                 answer = await _before_deadline(
                     deadline,
@@ -159,16 +118,47 @@ class Diagnostics:
                 "message": exc.message,
             }
 
-    async def _finalize(
-        self, messages: list[ModelMessage], context: EvidenceContext, actor: str
-    ) -> DiagnosisResponse:
+    async def _explore(
+        self, messages: list[ModelMessage], tools: DiagnosticTools, turn_id: str, deadline: float
+    ) -> AsyncGenerator[TurnEvent]:
+        """Collect evidence within shared model, tool, and wall-clock budgets."""
+        tool_calls = 0
+        for _ in range(self.max_model_calls - 2):
+            reply = await _before_deadline(deadline, lambda: self.model.complete(messages, tool_specs()))
+            messages.append(ModelMessage("assistant", reply.content, reply.tool_calls, native=reply.native))
+            if not reply.tool_calls:
+                break
+            for call in reply.tool_calls:
+                name = self.redactor.text(call.name)
+                yield {"type": "tool.started", "turn_id": turn_id, "tool": name}
+                result = await self._tool_result(call, tools, deadline, tool_calls)
+                tool_calls += 1
+                messages.append(ModelMessage("tool", json.dumps(result), tool_call_id=call.id, tool_name=call.name))
+                yield {
+                    "type": "tool.completed",
+                    "turn_id": turn_id,
+                    "tool": name,
+                    "ok": "error" not in result,
+                }
+            if tool_calls >= self.max_tool_calls:
+                break
+
+    async def _tool_result(self, call: ToolCall, tools: DiagnosticTools, deadline: float, used: int) -> JsonObject:
+        """Return a safe tool result while preserving the absolute turn deadline."""
+        try:
+            if used >= self.max_tool_calls:
+                raise DockSightError("tool_limit", "Tool budget exhausted", 409)
+            return await _before_deadline(deadline, lambda: tools.execute(call))
+        except DockSightError as exc:
+            return {"error": exc.code, "message": exc.message}
+
+    async def _finalize(self, messages: list[ModelMessage], context: EvidenceContext, actor: str) -> DiagnosisResponse:
+        """Validate the final proposal and allow one budgeted schema or evidence repair."""
         for attempt in range(2):
             reply = await self.model.complete(messages, schema=proposal_schema())
             try:
                 if reply.tool_calls:
-                    raise DockSightError(
-                        "invalid_model_response", "Final response must not call tools", 502
-                    )
+                    raise DockSightError("invalid_model_response", "Final response must not call tools", 502)
                 proposal = DiagnosisProposal.model_validate_json(reply.content)
                 proposal.summary = self.redactor.text(proposal.summary)
 

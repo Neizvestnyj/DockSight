@@ -24,6 +24,7 @@ pytestmark = [
 
 
 async def test_real_container_reads_redaction_and_mutations() -> None:
+    """Verify real container reads redaction and mutations."""
     owner = str(uuid4())
     client = docker.from_env()
     container = client.containers.run(
@@ -63,6 +64,7 @@ async def test_real_container_reads_redaction_and_mutations() -> None:
 
 
 def test_real_docker_http_diagnosis_and_confirmed_restart() -> None:
+    """Verify real docker http diagnosis and confirmed restart."""
     owner = str(uuid4())
     client = docker.from_env()
     program = "\n".join(
@@ -116,11 +118,7 @@ def test_real_docker_http_diagnosis_and_confirmed_restart() -> None:
                 headers=headers,
                 json={"host": "local", "query": f"Inspect {container.id}"},
             )
-            events = [
-                json.loads(line[6:])
-                for line in response.text.splitlines()
-                if line.startswith("data: ")
-            ]
+            events = [json.loads(line[6:]) for line in response.text.splitlines() if line.startswith("data: ")]
             answer = next(event["answer"] for event in events if event["type"] == "answer.ready")
             assert answer["widgets"][0]["snapshot"]["state"] == "exited"
             action_id = answer["widgets"][0]["actions"][0]["id"]
@@ -131,10 +129,7 @@ def test_real_docker_http_diagnosis_and_confirmed_restart() -> None:
             )
             assert result.json()["state"] == "succeeded"
             assert (
-                api.get(f"/api/v1/hosts/local/containers/{container.id}", headers=headers).json()[
-                    "state"
-                ]
-                == "running"
+                api.get(f"/api/v1/hosts/local/containers/{container.id}", headers=headers).json()["state"] == "running"
             )
     finally:
         container.reload()

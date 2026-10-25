@@ -10,6 +10,7 @@ from docksight.application.ports.models import ModelMessage, ToolSpec
 
 
 async def test_responses_preserves_native_reasoning_and_call_ids() -> None:
+    """Verify responses preserves native reasoning and call ids."""
     requests: list[dict] = []
     output = [
         {"type": "reasoning", "id": "rs_1", "summary": [], "encrypted_content": "opaque-state"},
@@ -26,6 +27,7 @@ async def test_responses_preserves_native_reasoning_and_call_ids() -> None:
     ]
 
     def reply(request: httpx2.Request) -> httpx2.Response:
+        """Validate the outgoing provider payload and return the next fixture response."""
         requests.append(json.loads(request.content))
         return httpx2.Response(
             200,

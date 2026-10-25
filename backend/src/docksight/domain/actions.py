@@ -10,6 +10,7 @@ type Operation = Literal["restart", "stop"]
 
 
 def allowed_operations(state: ContainerState) -> tuple[Operation, ...]:
+    """Return the mutations permitted by the observed container lifecycle state."""
     if state == "running":
         return ("restart", "stop")
     if state in {"created", "exited"}:
@@ -21,6 +22,8 @@ def allowed_operations(state: ContainerState) -> tuple[Operation, ...]:
 
 
 class ActionState(StrEnum):
+    """Enumerate preparation, execution, expiry, and terminal action outcomes."""
+
     PREPARED = "prepared"
     RUNNING = "running"
     SUCCEEDED = "succeeded"
@@ -31,6 +34,8 @@ class ActionState(StrEnum):
 
 @dataclass
 class PreparedAction:
+    """Bind an expiring mutation to its owner, exact target, and observed fingerprint."""
+
     id: str
     actor: str
     host: str
@@ -43,6 +48,7 @@ class PreparedAction:
     message: str = "Confirmation required"
 
     def claim(self, actor: str, key: str, confirmed: bool, now: datetime) -> bool:
+        """Validate ownership and confirmation before claiming one idempotent execution."""
         if actor != self.actor:
             raise DockSightError("action_not_found", "Action not found", 404)
         if not confirmed:
@@ -65,6 +71,7 @@ class PreparedAction:
         return True
 
     def finish(self, state: ActionState, message: str) -> None:
+        """Allow a running action to enter a valid terminal execution state once."""
         if self.state != ActionState.RUNNING or state not in {
             ActionState.SUCCEEDED,
             ActionState.FAILED,

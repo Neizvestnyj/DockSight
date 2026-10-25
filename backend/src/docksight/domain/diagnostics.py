@@ -8,6 +8,8 @@ type JsonObject = dict[str, JsonValue]
 
 @dataclass(frozen=True)
 class EvidenceRef:
+    """Identify a timestamped, host-scoped runtime observation used by a diagnosis."""
+
     id: str
     kind: Literal["container", "logs", "stats", "stack", "env"]
     host: str

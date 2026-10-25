@@ -9,9 +9,11 @@ from docksight.domain.errors import DockSightError
 
 
 async def test_ollama_parses_tools_and_sends_native_schema() -> None:
+    """Verify ollama parses tools and sends native schema."""
     requests: list[dict] = []
 
     def reply(request: httpx.Request) -> httpx.Response:
+        """Validate the outgoing provider payload and return the next fixture response."""
         requests.append(json.loads(request.content))
         return httpx.Response(
             200,
@@ -34,9 +36,7 @@ async def test_ollama_parses_tools_and_sends_native_schema() -> None:
             },
         )
 
-    async with httpx.AsyncClient(
-        transport=httpx.MockTransport(reply), base_url="http://ollama"
-    ) as client:
+    async with httpx.AsyncClient(transport=httpx.MockTransport(reply), base_url="http://ollama") as client:
         model = OllamaModel(client, "test-model")
         tool = ToolSpec("inspect_container", "Inspect", {"type": "object", "properties": {}})
         result = await model.complete([ModelMessage("user", "Inspect worker")], [tool])
@@ -50,10 +50,9 @@ async def test_ollama_parses_tools_and_sends_native_schema() -> None:
 
 @pytest.mark.parametrize("status", [400, 429, 500])
 async def test_provider_errors_do_not_expose_response_bodies(status: int) -> None:
+    """Verify provider errors do not expose response bodies."""
     async with httpx.AsyncClient(
-        transport=httpx.MockTransport(
-            lambda _: httpx.Response(status, text="api_key=private-sentinel")
-        ),
+        transport=httpx.MockTransport(lambda _: httpx.Response(status, text="api_key=private-sentinel")),
         base_url="http://ollama",
     ) as client:
         with pytest.raises(DockSightError) as error:

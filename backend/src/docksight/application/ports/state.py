@@ -11,6 +11,8 @@ from docksight.domain.diagnostics import JsonObject
 
 @dataclass
 class Session:
+    """Retain conversation history bound to one actor and configured host."""
+
     id: str
     actor: str
     host: str
@@ -18,17 +20,29 @@ class Session:
 
 
 class SessionStore(Protocol):
+    """Define scoped session retention and exclusive turn ownership."""
+
     def lease(
         self,
         session_id: str | None,
         actor: str,
         host: str,
-    ) -> AbstractAsyncContextManager[Session]: ...
+    ) -> AbstractAsyncContextManager[Session]:
+        """Lease an existing scoped session or create one for this actor and host."""
+        ...
 
 
 class ActionStore(Protocol):
-    async def add(self, action: PreparedAction) -> None: ...
-    async def get(self, action_id: str, actor: str) -> PreparedAction: ...
+    """Define atomic action claims and serialization of exact-container mutations."""
+
+    async def add(self, action: PreparedAction) -> None:
+        """Retain a newly prepared action within storage capacity."""
+        ...
+
+    async def get(self, action_id: str, actor: str) -> PreparedAction:
+        """Resolve an action only within its actor's scope."""
+        ...
+
     async def claim(
         self,
         action_id: str,
@@ -36,13 +50,25 @@ class ActionStore(Protocol):
         key: str,
         confirmed: bool,
         now: datetime,
-    ) -> tuple[PreparedAction, bool]: ...
-    def target_lock(self, host: str, container_id: str) -> AbstractAsyncContextManager[None]: ...
-    async def block_target(self, host: str, container_id: str) -> None: ...
+    ) -> tuple[PreparedAction, bool]:
+        """Atomically validate confirmation, expiry, ownership, and idempotency."""
+        ...
+
+    def target_lock(self, host: str, container_id: str) -> AbstractAsyncContextManager[None]:
+        """Hold exclusive mutation access to one host/container pair."""
+        ...
+
+    async def block_target(self, host: str, container_id: str) -> None:
+        """Reject future mutations for a target with an unknown prior outcome."""
+        ...
 
 
 class AuditPort(Protocol):
-    async def record(self, event: str, data: JsonObject) -> None: ...
+    """Define emission of sanitized action audit events."""
+
+    async def record(self, event: str, data: JsonObject) -> None:
+        """Record an action event or raise when the audit output is unavailable."""
+        ...
 
 
 type EventStream = AsyncIterator[JsonObject]

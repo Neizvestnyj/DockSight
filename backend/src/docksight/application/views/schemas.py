@@ -9,16 +9,21 @@ from docksight.domain.runtime import ContainerSnapshot, LogBatch, StackSummary
 
 
 class Contract(BaseModel):
+    """Forbid unrecognized fields in application and HTTP data contracts."""
+
     model_config = ConfigDict(extra="forbid")
 
 
 class WidgetProposal(Contract):
+    """Let a model select a widget and evidence without supplying runtime values."""
+
     widget_type: Literal["container_status", "log_anomalies", "compose_stack", "env_inspector"]
     evidence_ids: list[str] = Field(min_length=1, max_length=10)
     action: Operation | None = None
 
     @model_validator(mode="after")
     def check_action(self) -> Self:
+        """Reject action proposals on widgets other than container status cards."""
         if self.action and self.widget_type != "container_status":
             raise ValueError("Actions belong to container status cards")
 
@@ -26,6 +31,8 @@ class WidgetProposal(Contract):
 
 
 class DiagnosisProposal(Contract):
+    """Bound model-authored narrative, evidence references, and requested widgets."""
+
     summary: str = Field(min_length=1, max_length=2000)
     evidence_ids: list[str] = Field(max_length=20)
     uncertain: bool
@@ -33,6 +40,7 @@ class DiagnosisProposal(Contract):
 
     @model_validator(mode="after")
     def check_evidence(self) -> Self:
+        """Require evidence for any diagnosis the model declares confident."""
         if not self.uncertain and not self.evidence_ids:
             raise ValueError("A confident diagnosis requires evidence")
 
@@ -40,6 +48,8 @@ class DiagnosisProposal(Contract):
 
 
 class ActionView(Contract):
+    """Expose an opaque prepared action that always requires explicit confirmation."""
+
     id: str
     host: str
     container_id: str
@@ -51,6 +61,8 @@ class ActionView(Contract):
 
 
 class ContainerStatusCard(Contract):
+    """Present an observed container snapshot and server-prepared actions."""
+
     widget_type: Literal["container_status"] = "container_status"
     snapshot: ContainerSnapshot
     evidence_ids: list[str]
@@ -58,6 +70,8 @@ class ContainerStatusCard(Contract):
 
 
 class LogAnomalyCard(Contract):
+    """Present bounded sanitized logs linked to their collected evidence."""
+
     widget_type: Literal["log_anomalies"] = "log_anomalies"
     host: str
     container_id: str
@@ -66,6 +80,8 @@ class LogAnomalyCard(Contract):
 
 
 class ComposeStackCard(Contract):
+    """Present server-read Compose or Swarm summaries for a configured host."""
+
     widget_type: Literal["compose_stack"] = "compose_stack"
     host: str
     stacks: list[StackSummary]
@@ -73,6 +89,8 @@ class ComposeStackCard(Contract):
 
 
 class EnvInspectorCard(Contract):
+    """Present allowlisted environment variables as a read-only widget."""
+
     widget_type: Literal["env_inspector"] = "env_inspector"
     host: str
     container_id: str
@@ -88,6 +106,8 @@ type Widget = Annotated[
 
 
 class DiagnosisResponse(Contract):
+    """Return the versioned diagnosis with evidence and validated UI cards."""
+
     schema_version: Literal[1] = 1
     summary: str
     uncertain: bool

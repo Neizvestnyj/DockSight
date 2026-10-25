@@ -12,9 +12,11 @@ from docksight.domain.errors import DockSightError
 
 
 async def test_anthropic_tool_results_use_native_message_blocks() -> None:
+    """Verify anthropic tool results use native message blocks."""
     requests: list[dict] = []
 
     def reply(request: httpx2.Request) -> httpx2.Response:
+        """Validate the outgoing provider payload and return the next fixture response."""
         requests.append(json.loads(request.content))
         return httpx2.Response(
             200,
@@ -59,9 +61,7 @@ async def test_anthropic_tool_results_use_native_message_blocks() -> None:
                 "additionalProperties": False,
             },
         )
-        result = await model.complete(
-            [ModelMessage("system", "Read only"), ModelMessage("user", "Inspect")], [tool]
-        )
+        result = await model.complete([ModelMessage("system", "Read only"), ModelMessage("user", "Inspect")], [tool])
         assert result.tool_calls[0].id == "tool_1"
         await model.complete(
             [
@@ -78,9 +78,11 @@ async def test_anthropic_tool_results_use_native_message_blocks() -> None:
 
 
 async def test_rate_limit_is_reported_without_automatic_retries() -> None:
+    """Verify rate limit is reported without automatic retries."""
     requests: list[str] = []
 
     def reply(request: httpx2.Request) -> httpx2.Response:
+        """Validate the outgoing provider payload and return the next fixture response."""
         requests.append(str(request.url))
         return httpx2.Response(
             429,

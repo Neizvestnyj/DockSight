@@ -15,6 +15,7 @@ from docksight.domain.runtime import (
 
 
 def parse_time(value: str) -> datetime | None:
+    """Parse Docker timestamps as UTC and discard missing or invalid values."""
     if not value or value.startswith("0001-"):
         return None
     try:
@@ -29,6 +30,7 @@ def map_container(
     env_allowlist: tuple[str, ...],
     redactor: Redactor,
 ) -> ContainerSnapshot:
+    """Allowlist inspect fields and redact names, images, labels, and environment values."""
     config: dict[str, Any] = raw.get("Config") or {}
     state: dict[str, Any] = raw.get("State") or {}
     labels: dict[str, str] = config.get("Labels") or {}
@@ -60,7 +62,8 @@ def map_container(
     )
 
 
-def map_metrics(raw: Mapping[str, Any]) -> ResourceMetrics:
+def _cpu_percent(raw: Mapping[str, Any]) -> float | None:
+    """Calculate Docker CPU usage from two valid monotonic samples."""
     cpu: dict[str, Any] = raw.get("cpu_stats") or {}
     previous: dict[str, Any] = raw.get("precpu_stats") or {}
     usage_now: dict[str, Any] = cpu.get("cpu_usage") or {}
@@ -69,29 +72,35 @@ def map_metrics(raw: Mapping[str, Any]) -> ResourceMetrics:
     previous_total = usage_previous.get("total_usage")
     system = cpu.get("system_cpu_usage")
     previous_system = previous.get("system_cpu_usage")
-    percent = None
     if (
-        isinstance(current_total, (int, float))
-        and isinstance(previous_total, (int, float))
-        and isinstance(system, (int, float))
-        and isinstance(previous_system, (int, float))
+        not isinstance(current_total, (int, float))
+        or not isinstance(previous_total, (int, float))
+        or not isinstance(system, (int, float))
+        or not isinstance(previous_system, (int, float))
     ):
-        delta = system - previous_system
-        if delta > 0 and current_total >= previous_total:
-            count = cpu.get("online_cpus") or len(usage_now.get("percpu_usage", [])) or 1
-            value = (current_total - previous_total) / delta * count * 100
-            if math.isfinite(value):
-                percent = round(value, 2)
+        return None
+    delta = system - previous_system
+    if delta <= 0 or current_total < previous_total:
+        return None
+    count = cpu.get("online_cpus") or len(usage_now.get("percpu_usage", [])) or 1
+    value = (current_total - previous_total) / delta * count * 100
+
+    return round(value, 2) if math.isfinite(value) else None
+
+
+def map_metrics(raw: Mapping[str, Any]) -> ResourceMetrics:
+    """Map CPU and cache-adjusted memory counters into the runtime contract."""
     memory: dict[str, Any] = raw.get("memory_stats") or {}
     usage = memory.get("usage")
     if isinstance(usage, int):
         stats: dict[str, Any] = memory.get("stats") or {}
         usage = max(0, usage - stats.get("inactive_file", stats.get("total_inactive_file", 0)))
 
-    return ResourceMetrics(percent, usage, memory.get("limit"))
+    return ResourceMetrics(_cpu_percent(raw), usage, memory.get("limit"))
 
 
 def parse_logs(raw: bytes, redactor: Redactor, max_bytes: int, lines: int) -> LogBatch:
+    """Redact bounded log lines and discard a partial line at the input cutoff."""
     truncated = len(raw) > max_bytes
     if truncated:
         raw = raw[:max_bytes]

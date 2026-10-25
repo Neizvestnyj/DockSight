@@ -10,6 +10,7 @@ from docksight.domain.errors import DockSightError
 
 
 def safe_stack(exc: Exception) -> list[dict[str, str | int]]:
+    """Return traceback locations without exception text or local values."""
     return [
         {"file": frame.filename, "line": frame.lineno or 0, "function": frame.name}
         for frame in traceback.extract_tb(exc.__traceback__)
@@ -17,6 +18,7 @@ def safe_stack(exc: Exception) -> list[dict[str, str | int]]:
 
 
 def error_response(request: Request, code: str, message: str, status: int) -> JSONResponse:
+    """Build a stable error envelope with its request identifier."""
     request_id: str = request.state.request_id
 
     return JSONResponse(
@@ -27,18 +29,21 @@ def error_response(request: Request, code: str, message: str, status: int) -> JS
 
 
 def install_errors(app: FastAPI) -> None:
+    """Register safe handlers for domain, validation, and unexpected failures."""
+
     @app.exception_handler(DockSightError)
     async def domain_error(request: Request, exc: DockSightError) -> JSONResponse:
+        """Expose the domain error's public code, message, and status."""
         return error_response(request, exc.code, exc.message, exc.status)
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
-        return error_response(
-            request, "invalid_request", "Request does not match the API schema", 422
-        )
+        """Report invalid input without echoing submitted values."""
+        return error_response(request, "invalid_request", "Request does not match the API schema", 422)
 
     @app.exception_handler(Exception)
     async def unexpected_error(request: Request, exc: Exception) -> JSONResponse:
+        """Log safe traceback locations and return an opaque server error."""
         logging.getLogger("docksight.http").error(
             json.dumps(
                 {

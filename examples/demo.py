@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 
 
 def main() -> None:
+    """Run the API demo with explicit mutation confirmation."""
     parser = argparse.ArgumentParser(
         description="Inspect DockSight responses and confirm an action"
     )
@@ -42,18 +43,7 @@ def main() -> None:
             base_url=args.url, headers={"Authorization": f"Bearer {token}"}, timeout=300
         ) as client:
             if args.command == "diagnose":
-                with client.stream(
-                    "POST",
-                    "/api/v1/chat/turns",
-                    json={"host": args.host, "query": args.query},
-                ) as response:
-                    response.raise_for_status()
-                    for line in response.iter_lines():
-                        if line.startswith("data: "):
-                            event = json.loads(line[6:])
-                            print(json.dumps(event, indent=2, ensure_ascii=False))
-                            if event["type"] == "turn.failed":
-                                raise SystemExit(1)
+                _diagnose(client, args.host, args.query)
             elif args.command == "execute":
                 key = args.key or str(uuid4())
                 print(f"Idempotency key: {key}")
@@ -73,6 +63,22 @@ def main() -> None:
             f"DockSight request failed ({type(exc).__name__}). Check the server and action state."
         )
         raise SystemExit(1) from None
+
+
+def _diagnose(client: httpx.Client, host: str, query: str) -> None:
+    """Print streamed diagnostic events and fail when the server terminates the turn."""
+    with client.stream(
+        "POST",
+        "/api/v1/chat/turns",
+        json={"host": host, "query": query},
+    ) as response:
+        response.raise_for_status()
+        for line in response.iter_lines():
+            if line.startswith("data: "):
+                event = json.loads(line[6:])
+                print(json.dumps(event, indent=2, ensure_ascii=False))
+                if event["type"] == "turn.failed":
+                    raise SystemExit(1)
 
 
 if __name__ == "__main__":
