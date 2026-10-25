@@ -59,6 +59,7 @@ Settings use the `DOCKSIGHT_` prefix and can be loaded from the root `.env`. Arr
 | `PROVIDER` / `MODEL`                 | `ollama` / `qwen3.5:9b`  | Independent provider and model selection            |
 | `MODEL_BASE_URL` / `MODEL_API_KEY`   | Provider default / unset | Server endpoint and credentials                     |
 | `MODEL_STRUCTURED_OUTPUT`            | `native`                 | Compatible adapter also supports `tool`             |
+| `OLLAMA_CONTEXT_LENGTH`              | `16384` tokens           | Native Ollama context for prompts, tools, and replies |
 | `HOSTS_FILE`                         | unset                    | Configured hosts; see `examples/hosts.yaml`         |
 | `ENV_ALLOWLIST` / `CORS_ORIGINS`     | `[]` / `[]`              | Explicit environment fields and browser origins     |
 | `MAX_MODEL_CALLS` / `MAX_TOOL_CALLS` | `6` / `12`               | Per-turn budgets, including finalization and repair |
@@ -69,6 +70,9 @@ Local Docker follows the current context and Docker environment variables. SSH u
 SSH agent/config, and verified `~/.ssh/known_hosts`. Use `ProxyCommand` for jump hosts. TCP hosts require mTLS. Inspect
 and environment fields are allowlisted; log redaction is best effort. Cloud providers receive the sanitized evidence
 selected by the diagnostic loop.
+
+Native Ollama requests set an explicit context window. A small server default can truncate the original query and tool
+results. Increase `DOCKSIGHT_OLLAMA_CONTEXT_LENGTH` for larger inventories or logs; larger contexts need more memory.
 
 ## Development
 

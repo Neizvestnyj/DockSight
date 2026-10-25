@@ -44,8 +44,10 @@ async def test_ollama_parses_tools_and_sends_native_schema() -> None:
         assert result.input_tokens == 8
         assert requests[0]["stream"] is False
         assert requests[0]["think"] is False
+        assert requests[0]["options"].get("num_ctx") == 16384
         await model.complete([ModelMessage("user", "Respond")], schema={"type": "object"})
         assert requests[1]["format"] == {"type": "object"}
+        assert requests[1]["options"].get("num_ctx") == 16384
 
 
 @pytest.mark.parametrize("status", [400, 429, 500])

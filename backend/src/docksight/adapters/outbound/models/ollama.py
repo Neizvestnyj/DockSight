@@ -48,11 +48,14 @@ def _reply(data: dict[str, Any]) -> ModelReply:
 class OllamaModel:
     """Implement the model port through Ollama's native chat API."""
 
-    def __init__(self, client: httpx.AsyncClient, model: str, max_tokens: int = 4096) -> None:
-        """Bind the Ollama HTTP client, model name, and output token limit."""
+    def __init__(
+        self, client: httpx.AsyncClient, model: str, max_tokens: int = 4096, context_length: int = 16384
+    ) -> None:
+        """Bind the client and explicit generation and context limits."""
         self.client = client
         self.model = model
         self.max_tokens = max_tokens
+        self.context_length = context_length
 
     async def complete(
         self,
@@ -66,7 +69,7 @@ class OllamaModel:
             "messages": _messages(messages),
             "stream": False,
             "think": False,
-            "options": {"temperature": 0, "num_predict": self.max_tokens},
+            "options": {"temperature": 0, "num_predict": self.max_tokens, "num_ctx": self.context_length},
         }
         if schema is not None:
             body["format"] = schema

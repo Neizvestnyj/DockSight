@@ -51,6 +51,7 @@ class Settings(BaseSettings):
     turn_timeout: float = Field(default=180, gt=0, le=900)
     model_timeout: float = Field(default=60, gt=0, le=300)
     model_max_tokens: int = Field(default=4096, ge=256, le=32768)
+    ollama_context_length: int = Field(default=16384, ge=4096, le=262144)
     docker_timeout: float = Field(default=15, gt=0, le=120)
     action_timeout: float = Field(default=30, gt=0, le=300)
     action_ttl: int = Field(default=300, ge=1, le=3600)
@@ -158,7 +159,7 @@ def _build_model(settings: Settings, key: str | None, closers: list[Callable[[],
             headers={"Authorization": f"Bearer {key}"} if key else {},
         )
         closers.append(client.aclose)
-        return OllamaModel(client, settings.model, settings.model_max_tokens)
+        return OllamaModel(client, settings.model, settings.model_max_tokens, settings.ollama_context_length)
     if settings.provider == "anthropic":
         if not key:
             raise ValueError("Configure DOCKSIGHT_MODEL_API_KEY or ANTHROPIC_API_KEY")
