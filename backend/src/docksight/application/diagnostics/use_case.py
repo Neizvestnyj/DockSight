@@ -9,6 +9,7 @@ from pydantic import ValidationError
 from docksight.application.diagnostics.context import EvidenceContext
 from docksight.application.diagnostics.prompts import FINAL_PROMPT, SYSTEM_PROMPT
 from docksight.application.diagnostics.tools import DiagnosticTools, tool_specs
+from docksight.application.events import TurnEvent
 from docksight.application.ports.models import ModelMessage, ModelPort
 from docksight.application.ports.runtime import RuntimeReadPort
 from docksight.application.ports.state import SessionStore
@@ -49,7 +50,7 @@ class Diagnostics:
 
     async def stream(
         self, actor: str, host: str, query: str, session_id: str | None = None
-    ) -> AsyncGenerator[JsonObject]:
+    ) -> AsyncGenerator[TurnEvent]:
         turn_id = str(uuid4())
         try:
             if host not in {item.id for item in self.runtime.hosts()}:

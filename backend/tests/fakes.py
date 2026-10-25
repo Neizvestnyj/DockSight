@@ -33,6 +33,7 @@ class FakeRuntime:
     def __init__(self) -> None:
         self.item = snapshot()
         self.mutations: list[str] = []
+        self.log_batch = LogBatch((LogEntry("ConnectionRefusedError: database unavailable"),))
 
     def hosts(self) -> tuple[Host, ...]:
         return (Host("local", "Local"),)
@@ -44,7 +45,7 @@ class FakeRuntime:
         return self.item
 
     async def logs(self, host: str, container_id: str, lines: int, max_bytes: int) -> LogBatch:
-        return LogBatch((LogEntry("ConnectionRefusedError: database unavailable"),))
+        return self.log_batch
 
     async def stats(self, host: str, container_id: str) -> ResourceMetrics:
         return ResourceMetrics(None, 1024, 4096)

@@ -9,8 +9,8 @@ _PRIVATE_KEY: Final = re.compile(
     re.S,
 )
 _ASSIGNMENT: Final = re.compile(
-    r"(?i)((?:password|passwd|secret|token|api[_-]?key|authorization)\s*[=:]\s*)"
-    r"(?:\"[^\"]*\"|'[^']*'|[^\s,;]+)",
+    r"(?i)((?:password|passwd|secret|token|api[_-]?key|authorization)[\"']?\s*[=:]\s*)"
+    r"(\"[^\"]*\"|'[^']*'|Bearer\s+[^\s,;]+|[^\s,;]+)",
 )
 _URL_AUTH: Final = re.compile(r"(\w+://)[^\s/@:]+:[^\s/@]+@")
 _TOKEN: Final = re.compile(
@@ -20,6 +20,15 @@ _TOKEN: Final = re.compile(
 
 def secret_name(name: str) -> bool:
     return bool(_SECRET_NAME.search(name))
+
+
+def _mask_assignment(match: re.Match[str]) -> str:
+    value = match.group(2)
+    replacement = "[REDACTED]"
+    if value[0] in {'"', "'"}:
+        replacement = f"{value[0]}{replacement}{value[0]}"
+
+    return match.group(1) + replacement
 
 
 class Redactor:
@@ -39,7 +48,7 @@ class Redactor:
     def text(self, value: str) -> str:
         value = _PRIVATE_KEY.sub("[REDACTED]", value)
         value = _URL_AUTH.sub(r"\1[REDACTED]@", value)
-        value = _ASSIGNMENT.sub(r"\1[REDACTED]", value)
+        value = _ASSIGNMENT.sub(_mask_assignment, value)
         value = _TOKEN.sub("[REDACTED]", value)
         for secret in self.secrets:
             value = value.replace(secret, "[REDACTED]")

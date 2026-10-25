@@ -20,3 +20,8 @@ jobs:
       - run: uv run --project backend pytest backend/tests/integration -m docker
         env:
           DOCKSIGHT_TEST_DOCKER: "1"
+      - run: docker build -f backend/Dockerfile -t docksight-backend:ci .
+      - run: uv run --project backend pytest backend/tests/integration/test_image.py
+        env:
+          DOCKSIGHT_TEST_DOCKER: "1"
+          DOCKSIGHT_TEST_BACKEND_IMAGE: docksight-backend:ci

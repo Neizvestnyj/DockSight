@@ -1,0 +1,12 @@
+hosts:
+  - id: local
+    name: Local Docker
+    # Omit url to use the current Docker context and environment.
+  # - id: staging
+  #   name: Staging
+  #   url: ssh://deploy@staging
+  # - id: production
+  #   url: tcp://docker.example.com:2376
+  #   ca_cert: /secure/docker/ca.pem
+  #   client_cert: /secure/docker/cert.pem
+  #   client_key: /secure/docker/key.pem

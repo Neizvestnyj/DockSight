@@ -1,5 +1,8 @@
 .env
 .env.*
+*.env
+*.pem
+*.key
 !.env.example
 .venv/
 __pycache__/

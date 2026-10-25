@@ -9,15 +9,15 @@ from starlette.responses import StreamingResponse
 from starlette.types import Receive, Scope, Send
 
 from docksight.adapters.inbound.http.errors import safe_stack
-from docksight.domain.diagnostics import JsonObject
+from docksight.application.events import TurnEvent
 
 
 async def encode_events(
-    source: AsyncGenerator[JsonObject],
+    source: AsyncGenerator[TurnEvent],
     request_id: str,
     heartbeat: float = 10,
 ) -> AsyncGenerator[str]:
-    pending: asyncio.Task[JsonObject] | None = asyncio.create_task(anext(source))
+    pending: asyncio.Task[TurnEvent] | None = asyncio.create_task(anext(source))
     turn_id: str | None = None
     try:
         while True:
@@ -66,7 +66,9 @@ async def encode_events(
 
 
 class EventResponse(StreamingResponse):
-    def __init__(self, source: AsyncGenerator[JsonObject], request_id: str, status_code: int = 200) -> None:
+    def __init__(
+        self, source: AsyncGenerator[TurnEvent], request_id: str, status_code: int = 200
+    ) -> None:
         self.events = encode_events(source, request_id)
         super().__init__(
             self.events,

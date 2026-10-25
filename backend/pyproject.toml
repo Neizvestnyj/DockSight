@@ -11,6 +11,7 @@ dependencies = [
   "httpx>=0.28",
   "openai>=2.0",
   "pydantic-settings>=2.8",
+  "python-dotenv>=1.0",
   "pyyaml>=6.0",
   "pywin32>=308; sys_platform == 'win32'",
   "uvicorn>=0.34",
@@ -40,7 +41,7 @@ testpaths = ["tests"]
 pythonpath = ["src", "."]
 asyncio_mode = "auto"
 addopts = "-ra --import-mode=importlib"
-markers = ["docker: opt-in real Docker tests", "live: opt-in configured model tests"]
+markers = ["docker: opt-in real Docker tests", "live: opt-in configured model tests", "remote: opt-in configured SSH or mTLS host tests"]
 
 [tool.ruff]
 target-version = "py312"

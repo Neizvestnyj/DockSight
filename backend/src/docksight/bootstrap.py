@@ -30,7 +30,9 @@ from docksight.application.views.assembler import ViewAssembler
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="DOCKSIGHT_", env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_prefix="DOCKSIGHT_", env_file=".env", extra="ignore", hide_input_in_errors=True
+    )
 
     api_token: SecretStr = SecretStr("")
     provider: Literal["ollama", "openai", "anthropic", "compatible"] = "ollama"
@@ -114,9 +116,18 @@ def build_components(
     model: ModelPort | None = None,
 ) -> Components:
     configure_logging()
+    effective_key = settings.model_api_key.get_secret_value() if settings.model_api_key else None
+    if not effective_key:
+        effective_key = (
+            os.getenv("ANTHROPIC_API_KEY")
+            if settings.provider == "anthropic"
+            else os.getenv("OPENAI_API_KEY")
+            if settings.provider in {"openai", "compatible"}
+            else None
+        )
     secrets = (settings.api_token.get_secret_value(),)
-    if settings.model_api_key:
-        secrets = (*secrets, settings.model_api_key.get_secret_value())
+    if effective_key:
+        secrets = (*secrets, effective_key)
     redactor = Redactor(secrets)
     closers: list[Callable[[], Awaitable[None]]] = []
     if reader is None:
@@ -135,7 +146,7 @@ def build_components(
             raise ValueError("Docker diagnostics require a model with tool-calling support")
         if settings.model_structured_output == "tool" and settings.provider != "compatible":
             raise ValueError("Tool-based structured output requires provider=compatible")
-        key = settings.model_api_key.get_secret_value() if settings.model_api_key else None
+        key = effective_key
         if settings.provider == "ollama":
             client = httpx.AsyncClient(
                 base_url=settings.model_base_url or "http://127.0.0.1:11434",

@@ -12,7 +12,7 @@ from docksight.domain.errors import DockSightError
 
 
 class HostConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
     id: str = Field(pattern=r"^[a-z0-9][a-z0-9_-]{0,63}$")
     name: str = Field(default="", max_length=100)
     url: str | None = None
@@ -41,7 +41,7 @@ class HostConfig(BaseModel):
 
 
 class HostsFile(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
     hosts: list[HostConfig] = Field(min_length=1, max_length=32)
 
 
