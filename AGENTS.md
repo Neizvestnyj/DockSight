@@ -8,6 +8,8 @@ select from approved tools and widgets.
 
 - Keep backend and future frontend code in this repository.
 - Follow `docs/backend-plan.md`. Implement the backend first.
+- Use `master` as the base branch and `feature/<lowercase-kebab-case>` for
+  features. Implement the backend on `feature/backend`.
 - Run shell commands through `rtk`. On Windows, prefer `rtk read`, `rtk rg`,
   and `rtk proxy` for commands that need their original arguments.
 - Use patch-based edits. Keep files UTF-8 without BOM, with LF line endings.
