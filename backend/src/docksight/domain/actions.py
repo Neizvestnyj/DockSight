@@ -4,8 +4,20 @@ from enum import StrEnum
 from typing import Literal
 
 from docksight.domain.errors import DockSightError
+from docksight.domain.runtime import ContainerState
 
 type Operation = Literal["restart", "stop"]
+
+
+def allowed_operations(state: ContainerState) -> tuple[Operation, ...]:
+    if state == "running":
+        return ("restart", "stop")
+    if state in {"created", "exited"}:
+        return ("restart",)
+    if state == "restarting":
+        return ("stop",)
+
+    return ()
 
 
 class ActionState(StrEnum):

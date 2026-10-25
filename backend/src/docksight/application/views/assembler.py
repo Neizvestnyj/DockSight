@@ -11,7 +11,7 @@ from docksight.application.views.schemas import (
     LogAnomalyCard,
     Widget,
 )
-from docksight.domain.actions import Operation
+from docksight.domain.actions import Operation, allowed_operations
 from docksight.domain.errors import DockSightError
 
 type PrepareAction = Callable[[str, str, str, Operation], Awaitable[ActionView]]
@@ -60,13 +60,7 @@ class ViewAssembler:
             if card.widget_type == "container_status":
                 actions: list[ActionView] = []
                 if self.prepare:
-                    allowed: tuple[Operation, ...] = (
-                        ("restart", "stop")
-                        if snapshot.state == "running"
-                        else ("restart",)
-                        if snapshot.state in {"exited", "created"}
-                        else ()
-                    )
+                    allowed = allowed_operations(snapshot.state)
                     for operation in allowed:
                         actions.append(
                             await self.prepare(actor, snapshot.host, snapshot.id, operation)

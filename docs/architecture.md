@@ -108,6 +108,9 @@ application-owned ports. Core code does not reach into adapters.
 - Cancel diagnostic work when its client disconnects. Once a mutation starts,
   track it to a known or indeterminate outcome even if its caller disconnects.
   A timed-out worker-thread call is not proof that Docker cancelled the action.
+- An indeterminate action blocks new mutations for that target for this process
+  lifetime. Inspect Docker and reconcile its outcome before restarting the
+  backend. In-memory state provides no guarantee across an abrupt process loss.
 - Inject a clock callable for time-based rules. Use small fake ports in core
   tests; Docker and model SDKs are unnecessary for those tests.
 
