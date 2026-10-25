@@ -1,0 +1,175 @@
+import asyncio
+import json
+from collections.abc import AsyncIterator
+from typing import cast
+from uuid import uuid4
+
+from pydantic import ValidationError
+
+from docksight.application.diagnostics.context import EvidenceContext
+from docksight.application.diagnostics.prompts import FINAL_PROMPT, SYSTEM_PROMPT
+from docksight.application.diagnostics.tools import DiagnosticTools, tool_specs
+from docksight.application.ports.models import ModelMessage, ModelPort
+from docksight.application.ports.runtime import RuntimeReadPort
+from docksight.application.ports.state import SessionStore
+from docksight.application.redaction import Redactor
+from docksight.application.views.assembler import ViewAssembler
+from docksight.application.views.registry import proposal_schema
+from docksight.application.views.schemas import DiagnosisProposal, DiagnosisResponse
+from docksight.domain.diagnostics import JsonObject
+from docksight.domain.errors import DockSightError
+
+
+class Diagnostics:
+    def __init__(
+        self,
+        runtime: RuntimeReadPort,
+        model: ModelPort,
+        sessions: SessionStore,
+        redactor: Redactor,
+        assembler: ViewAssembler | None = None,
+        max_model_calls: int = 6,
+        max_tool_calls: int = 12,
+        timeout: float = 180,
+        log_lines: int = 200,
+        log_bytes: int = 65536,
+        concurrency: int = 4,
+    ) -> None:
+        self.runtime = runtime
+        self.model = model
+        self.sessions = sessions
+        self.redactor = redactor
+        self.assembler = assembler or ViewAssembler()
+        self.max_model_calls = max_model_calls
+        self.max_tool_calls = max_tool_calls
+        self.timeout = timeout
+        self.log_lines = log_lines
+        self.log_bytes = log_bytes
+        self._slots = asyncio.Semaphore(concurrency)
+
+    async def stream(
+        self, actor: str, host: str, query: str, session_id: str | None = None
+    ) -> AsyncIterator[JsonObject]:
+        turn_id = str(uuid4())
+        try:
+            if host not in {item.id for item in self.runtime.hosts()}:
+                raise DockSightError("host_not_found", "Configured host not found", 404)
+            if not query.strip() or len(query) > 4000:
+                raise DockSightError("invalid_query", "Query must contain 1-4000 characters", 422)
+            if self._slots.locked():
+                raise DockSightError(
+                    "turn_capacity", "Diagnostic capacity reached; retry later", 503
+                )
+            async with (
+                self._slots,
+                asyncio.timeout(self.timeout),
+                self.sessions.lease(session_id, actor, host) as session,
+            ):
+                yield {"type": "turn.started", "turn_id": turn_id, "session_id": session.id}
+                messages = [
+                    ModelMessage("system", SYSTEM_PROMPT),
+                    *session.history,
+                    ModelMessage("user", self.redactor.text(query)),
+                ]
+                context = EvidenceContext()
+                tools = DiagnosticTools(self.runtime, context, host, self.log_lines, self.log_bytes)
+                tool_calls = 0
+                for _ in range(self.max_model_calls - 2):
+                    reply = await self.model.complete(messages, tool_specs())
+                    messages.append(
+                        ModelMessage(
+                            "assistant", reply.content, reply.tool_calls, native=reply.native
+                        )
+                    )
+                    if not reply.tool_calls:
+                        break
+                    for call in reply.tool_calls:
+                        yield {
+                            "type": "tool.started",
+                            "turn_id": turn_id,
+                            "tool": self.redactor.text(call.name),
+                        }
+                        try:
+                            if tool_calls >= self.max_tool_calls:
+                                raise DockSightError("tool_limit", "Tool budget exhausted", 409)
+                            tool_calls += 1
+                            result = await tools.execute(call)
+                        except DockSightError as exc:
+                            result = {"error": exc.code, "message": exc.message}
+                        messages.append(
+                            ModelMessage(
+                                "tool",
+                                json.dumps(result),
+                                tool_call_id=call.id,
+                                tool_name=call.name,
+                            )
+                        )
+                        yield {
+                            "type": "tool.completed",
+                            "turn_id": turn_id,
+                            "tool": self.redactor.text(call.name),
+                            "ok": "error" not in result,
+                        }
+                    if tool_calls >= self.max_tool_calls:
+                        break
+                messages.append(ModelMessage("user", FINAL_PROMPT))
+                answer = await self._finalize(messages, context, actor)
+                session.history.extend(
+                    [
+                        ModelMessage("user", self.redactor.text(query)),
+                        ModelMessage("assistant", answer.summary),
+                    ]
+                )
+                yield {
+                    "type": "answer.ready",
+                    "turn_id": turn_id,
+                    "answer": cast(JsonObject, answer.model_dump(mode="json")),
+                }
+                yield {"type": "turn.completed", "turn_id": turn_id}
+        except TimeoutError:
+            yield {
+                "type": "turn.failed",
+                "turn_id": turn_id,
+                "code": "turn_timeout",
+                "message": "Diagnostic turn timed out",
+            }
+        except DockSightError as exc:
+            yield {
+                "type": "turn.failed",
+                "turn_id": turn_id,
+                "code": exc.code,
+                "message": exc.message,
+            }
+
+    async def _finalize(
+        self, messages: list[ModelMessage], context: EvidenceContext, actor: str
+    ) -> DiagnosisResponse:
+        for attempt in range(2):
+            reply = await self.model.complete(messages, schema=proposal_schema())
+            try:
+                if reply.tool_calls:
+                    raise DockSightError(
+                        "invalid_model_response", "Final response must not call tools", 502
+                    )
+                proposal = DiagnosisProposal.model_validate_json(reply.content)
+                proposal.summary = self.redactor.text(proposal.summary)
+
+                return await self.assembler.build(proposal, context, actor)
+            except (ValidationError, DockSightError) as exc:
+                if attempt:
+                    raise DockSightError(
+                        "invalid_diagnosis",
+                        "Model could not produce a valid evidence-backed diagnosis",
+                        502,
+                    ) from exc
+                messages.extend(
+                    [
+                        ModelMessage("assistant", reply.content),
+                        ModelMessage(
+                            "user",
+                            "Invalid schema or evidence references. Return a corrected JSON "
+                            "diagnosis using collected evidence only.",
+                        ),
+                    ]
+                )
+        raise AssertionError("Unreachable finalization state")

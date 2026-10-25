@@ -37,7 +37,7 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src"]
+pythonpath = ["src", "."]
 asyncio_mode = "auto"
 addopts = "-ra --import-mode=importlib"
 markers = ["docker: opt-in real Docker tests", "live: opt-in configured model tests"]
