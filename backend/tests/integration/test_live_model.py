@@ -52,5 +52,8 @@ async def test_configured_model_produces_an_evidence_linked_card(case: dict) -> 
         card = next(card for card in answer["widgets"] if card["widget_type"] == "container_status")
         assert card["snapshot"]["state"] == case["state"]
         assert card["snapshot"]["oom_killed"] is case["oom_killed"]
+        assert card["snapshot"]["exit_code"] == case["exit_code"]
+        if case.get("requires_uncertainty"):
+            assert answer["uncertain"] is True
     finally:
         await components.close()

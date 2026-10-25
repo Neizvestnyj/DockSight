@@ -2,7 +2,7 @@
   {"name": "running", "state": "running", "exit_code": 0, "oom_killed": false, "restart_count": 0, "log": "Worker ready", "truncated": false},
   {"name": "crash_loop", "state": "restarting", "exit_code": 1, "oom_killed": false, "restart_count": 9, "log": "ValueError: invalid application configuration", "truncated": false},
   {"name": "oom", "state": "exited", "exit_code": 137, "oom_killed": true, "restart_count": 0, "log": "", "truncated": false},
-  {"name": "unconfirmed_sigkill", "state": "exited", "exit_code": 137, "oom_killed": false, "restart_count": 0, "log": "", "truncated": false},
+  {"name": "unconfirmed_sigkill", "state": "exited", "exit_code": 137, "oom_killed": false, "restart_count": 0, "log": "", "truncated": false, "requires_uncertainty": true},
   {"name": "dependency", "state": "exited", "exit_code": 1, "oom_killed": false, "restart_count": 0, "log": "ConnectionRefusedError: database unavailable", "truncated": false},
-  {"name": "truncated_logs", "state": "exited", "exit_code": 1, "oom_killed": false, "restart_count": 0, "log": "Startup began; remaining logs unavailable", "truncated": true}
+  {"name": "truncated_logs", "state": "exited", "exit_code": 1, "oom_killed": false, "restart_count": 0, "log": "Startup began; remaining logs unavailable", "truncated": true, "requires_uncertainty": true}
 ]
