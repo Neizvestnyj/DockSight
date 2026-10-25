@@ -36,7 +36,8 @@ of the domain. Group related behavior without repeating a hexagon per feature.
 - Use Python 3.12+, FastAPI, Pydantic v2, `pydantic-settings`, `uv`, Ruff,
   Pyright strict, import-linter, pytest, pytest-asyncio, and HTTPX.
 - Use Docker SDK for Python, with bounded worker-thread calls. Support local
-  Unix sockets, Windows named pipes, SSH through the system client, and mTLS.
+  Unix sockets, Windows named pipes, SSH through the SDK's Paramiko client, and
+  mTLS. SSH rejects unknown host keys and reads the user's SSH configuration.
 - Implement native Ollama, OpenAI Responses, and Anthropic Messages adapters,
   plus an OpenAI-compatible Chat Completions adapter for other servers.
   Use HTTPX for Ollama and official SDKs for OpenAI and Anthropic.
