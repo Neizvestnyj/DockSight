@@ -1,6 +1,6 @@
 import asyncio
 import json
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from typing import cast
 from uuid import uuid4
 
@@ -49,7 +49,7 @@ class Diagnostics:
 
     async def stream(
         self, actor: str, host: str, query: str, session_id: str | None = None
-    ) -> AsyncIterator[JsonObject]:
+    ) -> AsyncGenerator[JsonObject]:
         turn_id = str(uuid4())
         try:
             if host not in {item.id for item in self.runtime.hosts()}:

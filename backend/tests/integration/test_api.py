@@ -1,0 +1,130 @@
+import json
+
+from fastapi.testclient import TestClient
+
+from docksight.application.ports.models import ModelReply, ToolCall
+from docksight.bootstrap import Settings, build_components
+from docksight.main import create_app
+from tests.fakes import FakeRuntime, ScriptedModel
+
+TOKEN = "test-token-at-least-24-characters"
+HEADERS = {"Authorization": f"Bearer {TOKEN}"}
+
+
+def client() -> TestClient:
+    settings = Settings(api_token=TOKEN, cors_origins=("http://localhost:5173",), _env_file=None)
+    runtime = FakeRuntime()
+    model = ScriptedModel(
+        [
+            ModelReply("", (ToolCall("c1", "inspect_container", {"container_id": "worker"}),)),
+            ModelReply("Ready"),
+            ModelReply(
+                json.dumps(
+                    {
+                        "summary": "Worker exited",
+                        "uncertain": True,
+                        "evidence_ids": ["e1"],
+                        "widgets": [{"widget_type": "container_status", "evidence_ids": ["e1"]}],
+                    }
+                )
+            ),
+        ]
+    )
+    components = build_components(settings, reader=runtime, writer=runtime, model=model)
+    return TestClient(create_app(settings, components))
+
+
+def test_http_authentication_hosts_and_unknown_host() -> None:
+    with client() as api:
+        assert api.get("/api/v1/hosts").status_code == 401
+        response = api.get("/api/v1/hosts", headers=HEADERS)
+        assert response.json() == [{"id": "local", "name": "Local"}]
+        assert api.get("/api/v1/hosts/unknown/containers", headers=HEADERS).status_code == 404
+        assert api.get("/api/v1/widgets/schema", headers=HEADERS).json()["schema_version"] == 1
+
+
+def test_streamed_diagnosis_contains_validated_cards_and_terminal_event() -> None:
+    with client() as api:
+        response = api.post(
+            "/api/v1/chat/turns", headers=HEADERS, json={"host": "local", "query": "Inspect worker"}
+        )
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/event-stream")
+        events = [
+            json.loads(line[6:]) for line in response.text.splitlines() if line.startswith("data: ")
+        ]
+        answer = next(event["answer"] for event in events if event["type"] == "answer.ready")
+        assert answer["widgets"][0]["snapshot"]["id"] == "a" * 64
+        action = answer["widgets"][0]["actions"][0]
+        assert action["confirmation_required"] is True
+        assert events[-1]["type"] == "turn.completed"
+        assert all(event["request_id"] == response.headers["x-request-id"] for event in events)
+
+
+def test_action_endpoint_requires_confirmation_and_deduplicates_execution() -> None:
+    with client() as api:
+        prepared = api.post(
+            "/api/v1/actions",
+            headers=HEADERS,
+            json={"host": "local", "container_id": "a" * 64, "operation": "restart"},
+        )
+        assert prepared.status_code == 201
+        action_id = prepared.json()["id"]
+        path = f"/api/v1/actions/{action_id}/execute"
+        assert api.post(path, headers=HEADERS, json={"confirmed": True}).status_code == 422
+        headers = {**HEADERS, "Idempotency-Key": "request-1"}
+        assert api.post(path, headers=headers, json={"confirmed": False}).status_code == 409
+        result = api.post(path, headers=headers, json={"confirmed": True})
+        assert result.json()["state"] == "succeeded"
+        assert api.post(path, headers=headers, json={"confirmed": True}).json() == result.json()
+
+
+def test_cors_preflight_does_not_require_a_token_and_foreign_origin_is_rejected() -> None:
+    with client() as api:
+        response = api.options(
+            "/api/v1/chat/turns",
+            headers={
+                "Origin": "http://localhost:5173",
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "authorization,content-type",
+            },
+        )
+        assert response.status_code == 200
+        assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
+        assert (
+            api.get(
+                "/api/v1/hosts", headers={**HEADERS, "Origin": "http://foreign.example"}
+            ).status_code
+            == 403
+        )
+
+
+def test_invalid_and_oversized_requests_do_not_echo_sensitive_input() -> None:
+    with client() as api:
+        response = api.post(
+            "/api/v1/chat/turns",
+            headers=HEADERS,
+            json={"host": "local", "query": "valid", "api_key": "private-sentinel"},
+        )
+        assert response.status_code == 422
+        assert "private-sentinel" not in response.text
+        response = api.post("/api/v1/chat/turns", headers=HEADERS, content=b"x" * 20000)
+        assert response.status_code == 413
+
+
+def test_chunked_requests_are_limited_without_content_length() -> None:
+    with client() as api:
+        response = api.post(
+            "/api/v1/chat/turns",
+            headers={**HEADERS, "Content-Type": "application/json"},
+            content=iter([b"x" * 10000, b"y" * 10000]),
+        )
+        assert response.status_code == 413
+
+
+def test_openapi_describes_authentication_and_sse() -> None:
+    with client() as api:
+        document = api.get("/openapi.json").json()
+        chat = document["paths"]["/api/v1/chat/turns"]["post"]
+        assert "text/event-stream" in chat["responses"]["200"]["content"]
+        assert chat["security"] == [{"HTTPBearer": []}]

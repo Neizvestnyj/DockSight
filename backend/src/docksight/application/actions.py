@@ -77,6 +77,9 @@ class Actions:
 
         return await asyncio.shield(task)
 
+    async def get(self, action_id: str, actor: str) -> ActionView:
+        return action_view(await self.store.get(action_id, actor))
+
     async def _run(self, action: PreparedAction) -> ActionView:
         data: JsonObject = {
             "action_id": action.id,
