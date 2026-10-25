@@ -1,6 +1,6 @@
 import asyncio
 import json
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import cast
 from uuid import uuid4
 
@@ -19,6 +19,14 @@ from docksight.application.views.registry import proposal_schema
 from docksight.application.views.schemas import DiagnosisProposal, DiagnosisResponse
 from docksight.domain.diagnostics import JsonObject
 from docksight.domain.errors import DockSightError
+
+
+async def _before_deadline[T](deadline: float, operation: Callable[[], Awaitable[T]]) -> T:
+    """Keep the deadline across yields without keeping a task-bound timeout scope."""
+    if asyncio.get_running_loop().time() >= deadline:
+        raise TimeoutError
+    async with asyncio.timeout_at(deadline):
+        return await operation()
 
 
 class Diagnostics:
@@ -52,6 +60,7 @@ class Diagnostics:
         self, actor: str, host: str, query: str, session_id: str | None = None
     ) -> AsyncGenerator[TurnEvent]:
         turn_id = str(uuid4())
+        deadline = asyncio.get_running_loop().time() + self.timeout
         try:
             if host not in {item.id for item in self.runtime.hosts()}:
                 raise DockSightError("host_not_found", "Configured host not found", 404)
@@ -63,7 +72,6 @@ class Diagnostics:
                 )
             async with (
                 self._slots,
-                asyncio.timeout(self.timeout),
                 self.sessions.lease(session_id, actor, host) as session,
             ):
                 yield {"type": "turn.started", "turn_id": turn_id, "session_id": session.id}
@@ -76,7 +84,10 @@ class Diagnostics:
                 tools = DiagnosticTools(self.runtime, context, host, self.log_lines, self.log_bytes)
                 tool_calls = 0
                 for _ in range(self.max_model_calls - 2):
-                    reply = await self.model.complete(messages, tool_specs())
+                    reply = await _before_deadline(
+                        deadline,
+                        lambda: self.model.complete(messages, tool_specs()),
+                    )
                     messages.append(
                         ModelMessage(
                             "assistant", reply.content, reply.tool_calls, native=reply.native
@@ -94,7 +105,10 @@ class Diagnostics:
                             if tool_calls >= self.max_tool_calls:
                                 raise DockSightError("tool_limit", "Tool budget exhausted", 409)
                             tool_calls += 1
-                            result = await tools.execute(call)
+                            result = await _before_deadline(
+                                deadline,
+                                lambda tool_call=call: tools.execute(tool_call),
+                            )
                         except DockSightError as exc:
                             result = {"error": exc.code, "message": exc.message}
                         messages.append(
@@ -114,7 +128,10 @@ class Diagnostics:
                     if tool_calls >= self.max_tool_calls:
                         break
                 messages.append(ModelMessage("user", FINAL_PROMPT))
-                answer = await self._finalize(messages, context, actor)
+                answer = await _before_deadline(
+                    deadline,
+                    lambda: self._finalize(messages, context, actor),
+                )
                 session.history.extend(
                     [
                         ModelMessage("user", self.redactor.text(query)),
