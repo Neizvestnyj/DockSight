@@ -7,7 +7,8 @@ select from approved tools and widgets.
 ## Scope and workflow
 
 - Keep backend and future frontend code in this repository.
-- Follow `docs/backend-plan.md`. Implement the backend first.
+- Follow `docs/architecture.md` and `docs/backend-plan.md`. Implement the
+  backend first.
 - Use `master` as the base branch and `feature/<lowercase-kebab-case>` for
   features. Implement the backend on `feature/backend`.
 - Run shell commands through `rtk`. On Windows, prefer `rtk read`, `rtk rg`,
@@ -35,15 +36,19 @@ select from approved tools and widgets.
 ## Stack and boundaries
 
 - Python 3.12+, `uv`, FastAPI, Pydantic v2, Ruff, Pyright, and pytest.
-- Use a modular monolith under `backend/src/docksight/`.
-- Group code by responsibility: runtime, providers, diagnostics, widgets,
-  actions, HTTP API, and shared configuration.
-- Each module exposes its supported cross-module interface through `public.py`.
-  Export small DTOs, protocols, and use cases; keep concrete adapters internal.
-  The composition root may import concrete adapters to wire dependencies.
+- Use a hexagonal architecture under `backend/src/docksight/`: `domain`,
+  `application`, and inbound/outbound `adapters`, with explicit bootstrap wiring.
+- Domain code uses the standard library only. Application code imports domain
+  values and owns outbound ports; it never imports adapters, HTTP frameworks,
+  SDKs, HTTP clients, or settings. Only the composition root selects adapters.
+- Use cases and their commands/results form the inbound boundary. Outbound
+  adapters implement application-owned protocols and return owned types.
+- Apply DDD where rules require it: immutable values and PreparedAction
+  lifecycle invariants. Treat Docker inventory as an external read model.
 - Keep HTTP handlers thin. Keep FastAPI objects out of application contracts.
-- Domain values use standard-library types. Keep Pydantic transport and widget
-  schemas outside domain models. Avoid layers that contain only forwarding code.
+- Keep Pydantic transport and widget schemas outside domain models.
+  Application DTOs may use Pydantic. Keep HTTP schemas and SSE encoding in the
+  inbound adapter. Avoid forwarding-only layers.
 - Keep provider-specific requests, responses, and schema conversions inside
   provider adapters. Application code must not depend on a model name or SDK.
 - Do not add a database, queue, cache server, or agent framework without a
@@ -53,6 +58,9 @@ select from approved tools and widgets.
 
 - Use explicit types; run Pyright in strict mode. Prefer small functions,
   early returns, and composition over deep inheritance.
+- Aim for 100-250 lines per source file; review cohesion above 300. Leaf
+  packages usually need 3-7 source files. These are review guidelines, not hard
+  limits. Group related types; do not create one file per class or empty facades.
 - Use timezone-aware UTC timestamps and annotate module constants with `Final`.
 - Use bounded Pydantic fields and forbid unexpected fields in external contracts.
 - Use descriptive input names. Reserve `request` for an HTTP request object.
@@ -94,6 +102,7 @@ select from approved tools and widgets.
 - Isolate Docker integration fixtures with labels and unique names. Cleanup
   must address only resources created by that fixture; never use global prune.
 - Run Ruff, Pyright, and relevant tests before committing implementation work.
-  Keep required CI checks reproducible locally through `uv`.
+  Enforce architecture boundaries with import-linter. Keep required CI checks
+  reproducible locally through `uv`.
 - Start the backend at `0.1.0`. Before releases, decide whether behavior warrants
   a version and changelog update. Documentation-only changes need neither.

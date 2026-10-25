@@ -3,6 +3,9 @@
 Build a runnable Docker diagnostic API that returns validated UI cards and
 executes confirmed actions. Keep the frontend for the next iteration.
 
+Use the hexagonal boundaries and selective DDD rules in
+[Backend architecture](architecture.md).
+
 ## Repository
 
 ```text
@@ -10,28 +13,28 @@ backend/
   pyproject.toml
   uv.lock
   src/docksight/
-    main.py          # App factory and dependency wiring
-    core/            # Settings, errors, logging, lifecycle
-    api/             # Versioned HTTP routes, authentication, SSE
-    runtime/         # Runtime contracts, Docker adapter, host connections
-    providers/       # Model contract and provider adapters
-    diagnostics/     # Tool loop, evidence, prompts, sanitization
-    widgets/         # Card schemas, registry, server-side assembly
-    actions/         # Preparation, confirmation, execution, audit
+    main.py          # HTTP application factory
+    bootstrap.py     # Settings, dependency wiring, lifecycle
+    domain/          # Values, evidence, action invariants
+    application/     # Use cases, owned ports, events, widget contracts
+    adapters/
+      inbound/http/  # Routes, authentication, HTTP schemas, SSE
+      outbound/      # Docker, model providers, state stores, audit
   tests/{unit,integration}/
 examples/            # Demo Compose stack, client, provider configurations
 docs/                # Architecture, API contracts, development notes
 .github/workflows/   # Backend checks
 ```
 
-Add `frontend/` in the next iteration. Each application module exposes its
-cross-module contracts through `public.py`. Keep pure runtime values separate
-from Pydantic API schemas. Use explicit ports for Docker and model access.
+Add `frontend/` in the next iteration. The application owns the runtime, model,
+state, and audit ports. Adapters implement those ports; only the composition
+root selects concrete implementations. Keep widgets and Pydantic schemas out
+of the domain. Group related behavior without repeating a hexagon per feature.
 
 ## Decisions
 
 - Use Python 3.12+, FastAPI, Pydantic v2, `pydantic-settings`, `uv`, Ruff,
-  Pyright strict, pytest, pytest-asyncio, and HTTPX.
+  Pyright strict, import-linter, pytest, pytest-asyncio, and HTTPX.
 - Use Docker SDK for Python, with bounded worker-thread calls. Support local
   Unix sockets, Windows named pipes, SSH through the system client, and mTLS.
 - Implement native Ollama, OpenAI Responses, and Anthropic Messages adapters,
@@ -53,16 +56,19 @@ docstrings concise and in English.
 
 1. **Foundation.** Add package configuration, locked dependencies, app factory,
    settings, structured logging, error responses, health endpoints, `.gitignore`,
-   `.gitattributes`, `.env.example`, and CI. Provide direct `uv` commands for
-   Windows and Linux. Done when the API starts and invalid configuration fails
-   with an actionable error.
+   `.gitattributes`, `.env.example`, and CI. Enforce inward import dependencies
+   with import-linter. Provide direct `uv` commands for Windows and Linux. Done
+   when the API starts, invalid settings fail clearly, and forbidden dependency
+   fixtures fail the architecture checks.
 
-2. **Contracts.** Define hosts, container snapshots, logs, metrics, evidence IDs,
-   provider messages, tool calls, and versioned response/event schemas. Add
+2. **Contracts.** Define domain values and PreparedAction state rules, then
+   application-owned ports, provider messages, tool calls, and response/events.
+   Use separate runtime read/mutation ports and owned store/audit contracts. Add
    `container_status`, `log_anomalies`, `compose_stack`, and read-only
-   `env_inspector` cards. Keep OOM evidence separate from container state;
-   represent unavailable metrics explicitly. Done when contracts reject unknown
-   widgets, invalid references, and unexpected fields.
+   `env_inspector` application view contracts. Keep HTTP schemas in the inbound
+   adapter, OOM evidence separate from container state, and missing metrics
+   explicit. Done when domain transitions and contract validation
+   reject invalid actions, widgets, references, and unexpected fields.
 
 3. **Docker access.** Implement configured host resolution, listing, inspect,
    bounded logs, stats, and Compose grouping. Add Swarm service summaries on
@@ -91,7 +97,8 @@ docstrings concise and in English.
    service. The server prepares caller-bound action IDs with a five-minute
    expiry; execution requires confirmation and an idempotency key. Recheck the
    exact container ID and relevant state, serialize mutations per target, and
-   record outcomes. Return an indeterminate outcome after an ambiguous Docker
+   record outcomes through the audit port. Track started mutations even if their
+   client disconnects. Return an indeterminate outcome after an ambiguous Docker
    timeout; do not retry it. Done when duplicate, expired, unconfirmed, and stale
    actions cannot cause an unintended mutation. Models receive no write tools.
 
@@ -115,6 +122,8 @@ docstrings concise and in English.
 
 ## Acceptance cases
 
+- Domain rules and use cases run against fake ports without FastAPI, Docker,
+  provider SDKs, or network access. CI rejects imports that cross core boundaries.
 - A healthy container, a crash loop, OOM evidence, a failed dependency, and
   missing/truncated logs produce valid responses grounded in collected evidence.
 - Instructions embedded in logs cannot introduce tools, hosts, or actions.
