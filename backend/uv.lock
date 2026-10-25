@@ -462,6 +462,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "httpx2" },
     { name = "import-linter" },
     { name = "pyright" },
     { name = "pytest" },
@@ -487,6 +488,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "httpx2", specifier = ">=2.16" },
     { name = "import-linter", specifier = ">=2.3" },
     { name = "pyright", specifier = ">=1.1.400" },
     { name = "pytest", specifier = ">=8.3" },

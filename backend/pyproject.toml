@@ -25,6 +25,7 @@ packages = ["src/docksight"]
 
 [dependency-groups]
 dev = [
+  "httpx2>=2.16",
   "import-linter>=2.3",
   "pyright>=1.1.400",
   "pytest>=8.3",
@@ -63,10 +64,10 @@ include_external_packages = true
 name = "Domain remains independent"
 type = "forbidden"
 source_modules = ["docksight.domain"]
-forbidden_modules = ["docksight.application", "docksight.adapters", "docksight.bootstrap", "pydantic", "pydantic_settings", "fastapi", "docker", "httpx", "openai", "anthropic", "yaml", "anyio"]
+forbidden_modules = ["docksight.application", "docksight.adapters", "docksight.bootstrap", "pydantic", "pydantic_settings", "fastapi", "docker", "httpx", "httpx2", "openai", "anthropic", "yaml", "anyio"]
 
 [[tool.importlinter.contracts]]
 name = "Application owns its ports"
 type = "forbidden"
 source_modules = ["docksight.application"]
-forbidden_modules = ["docksight.adapters", "docksight.bootstrap", "fastapi", "docker", "httpx", "openai", "anthropic", "pydantic_settings", "yaml"]
+forbidden_modules = ["docksight.adapters", "docksight.bootstrap", "fastapi", "docker", "httpx", "httpx2", "openai", "anthropic", "pydantic_settings", "yaml"]
