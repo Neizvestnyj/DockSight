@@ -1,0 +1,22 @@
+name: Backend
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - run: uv sync --project backend --locked
+      - run: uv run --project backend ruff check backend examples
+      - run: uv run --project backend ruff format --check backend examples
+      - run: uv run --project backend pyright --project backend
+      - run: uv run --project backend lint-imports --config backend/pyproject.toml
+      - run: uv run --project backend pytest backend/tests
+      - run: uv run --project backend pytest backend/tests/integration -m docker
+        env:
+          DOCKSIGHT_TEST_DOCKER: "1"
