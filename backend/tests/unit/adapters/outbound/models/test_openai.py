@@ -2,6 +2,8 @@ import json
 
 import httpx2
 from openai import AsyncOpenAI
+from openai.types.responses import ResponseFunctionToolCallParam
+from pydantic import TypeAdapter
 
 from docksight.adapters.outbound.models.openai import OpenAIModel
 from docksight.application.ports.models import ModelMessage, ToolSpec
@@ -18,6 +20,8 @@ async def test_responses_preserves_native_reasoning_and_call_ids() -> None:
             "name": "inspect_container",
             "arguments": '{"container_id":"abc"}',
             "status": "completed",
+            "async": False,
+            "namespace": None,
         },
     ]
 
@@ -44,7 +48,16 @@ async def test_responses_preserves_native_reasoning_and_call_ids() -> None:
         ),
     ) as client:
         model = OpenAIModel(client, "gpt-test")
-        tool = ToolSpec("inspect_container", "Inspect", {"type": "object", "properties": {}})
+        tool = ToolSpec(
+            "inspect_container",
+            "Inspect",
+            {
+                "type": "object",
+                "properties": {"container_id": {"type": "string"}},
+                "required": ["container_id"],
+                "additionalProperties": False,
+            },
+        )
         result = await model.complete([ModelMessage("user", "Inspect")], [tool])
         assert result.tool_calls[0].id == "call_1"
         assert result.tool_calls[0].arguments == {"container_id": "abc"}
@@ -59,3 +72,7 @@ async def test_responses_preserves_native_reasoning_and_call_ids() -> None:
     assert requests[0]["store"] is False
     assert requests[1]["input"][1]["encrypted_content"] == "opaque-state"
     assert requests[1]["input"][-1]["call_id"] == "call_1"
+    replayed = next(item for item in requests[1]["input"] if item.get("type") == "function_call")
+    TypeAdapter(ResponseFunctionToolCallParam).validate_python(replayed)
+    assert "async_" not in replayed
+    assert replayed["async"] is False

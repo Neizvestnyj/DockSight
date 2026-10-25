@@ -3,23 +3,24 @@
 Base path: `/api/v1`. All API routes require `Authorization: Bearer TOKEN`.
 `/health/live`, `/health/ready`, `/docs`, and `/openapi.json` are public.
 
-| Method | Path | Result |
-| --- | --- | --- |
-| GET | `/hosts` | Configured host IDs and display names |
-| GET | `/hosts/{host}/containers` | Up to 200 inspected containers |
-| GET | `/hosts/{host}/containers/{id}` | Sanitized snapshot |
-| GET | `/hosts/{host}/containers/{id}/logs?lines=200` | Bounded timestamped logs |
-| GET | `/hosts/{host}/containers/{id}/stats` | CPU/memory observations; unavailable values are null |
-| GET | `/hosts/{host}/stacks?kind=compose` | Compose groups; `swarm` requires a manager |
-| GET | `/widgets/schema` | Versioned JSON Schema for response cards |
-| POST | `/chat/turns` | Diagnostic SSE stream |
-| POST | `/actions` | Prepare an action without executing it |
-| GET | `/actions/{id}` | Current action outcome |
-| POST | `/actions/{id}/execute` | Explicitly confirmed execution |
+| Method | Path                                           | Result                                               |
+|--------|------------------------------------------------|------------------------------------------------------|
+| GET    | `/hosts`                                       | Configured host IDs and display names                |
+| GET    | `/hosts/{host}/containers`                     | Up to 200 inspected containers                       |
+| GET    | `/hosts/{host}/containers/{id}`                | Sanitized snapshot                                   |
+| GET    | `/hosts/{host}/containers/{id}/logs?lines=200` | Bounded timestamped logs                             |
+| GET    | `/hosts/{host}/containers/{id}/stats`          | CPU/memory observations; unavailable values are null |
+| GET    | `/hosts/{host}/stacks?kind=compose`            | Compose groups; `swarm` requires a manager           |
+| GET    | `/widgets/schema`                              | Versioned JSON Schema for response cards             |
+| POST   | `/chat/turns`                                  | Diagnostic SSE stream                                |
+| POST   | `/actions`                                     | Prepare an action without executing it               |
+| GET    | `/actions/{id}`                                | Current action outcome                               |
+| POST   | `/actions/{id}/execute`                        | Explicitly confirmed execution                       |
 
 Errors contain `code`, `message`, and a request ID where available. Validation
 errors omit submitted values. Request bodies are limited to 16 KiB. Host IDs
 resolve through server configuration; callers cannot submit connection URLs.
+At the byte limit, logs omit the incomplete trailing line before redaction.
 
 ## Diagnostic stream
 

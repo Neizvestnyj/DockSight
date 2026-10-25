@@ -92,9 +92,13 @@ def map_metrics(raw: Mapping[str, Any]) -> ResourceMetrics:
 
 
 def parse_logs(raw: bytes, redactor: Redactor, max_bytes: int, lines: int) -> LogBatch:
+    truncated = len(raw) > max_bytes
+    if truncated:
+        raw = raw[:max_bytes]
+        raw = raw[: raw.rfind(b"\n") + 1]
     text = redactor.text(raw.decode("utf-8", errors="replace"))
     encoded = text.encode()
-    truncated = len(raw) > max_bytes or len(encoded) > max_bytes
+    truncated = truncated or len(encoded) > max_bytes
     text = encoded[:max_bytes].decode("utf-8", errors="ignore")
     rows = text.splitlines()
     truncated = truncated or len(rows) > lines

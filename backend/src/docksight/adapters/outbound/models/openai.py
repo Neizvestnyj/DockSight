@@ -79,7 +79,10 @@ class OpenAIModel:
             return ModelReply(
                 response.output_text,
                 tuple(calls),
-                tuple(parse_object(item.model_dump(mode="json")) for item in response.output),
+                tuple(
+                    parse_object(item.model_dump(mode="json", by_alias=True, exclude_none=True))
+                    for item in response.output
+                ),
                 response.usage.input_tokens if response.usage else 0,
                 response.usage.output_tokens if response.usage else 0,
             )

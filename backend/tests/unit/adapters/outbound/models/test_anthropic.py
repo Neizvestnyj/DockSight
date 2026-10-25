@@ -3,6 +3,8 @@ import json
 import httpx2
 import pytest
 from anthropic import AsyncAnthropic
+from anthropic.types import ToolUseBlockParam
+from pydantic import TypeAdapter
 
 from docksight.adapters.outbound.models.anthropic import AnthropicModel
 from docksight.application.ports.models import ModelMessage, ToolSpec
@@ -26,7 +28,8 @@ async def test_anthropic_tool_results_use_native_message_blocks() -> None:
                         "type": "tool_use",
                         "id": "tool_1",
                         "name": "inspect_container",
-                        "input": {"container_id": "abc"},
+                        "input": {"container_id": "abc", "optional": None},
+                        "caller": None,
                     }
                 ],
                 "stop_reason": "tool_use",
@@ -43,7 +46,19 @@ async def test_anthropic_tool_results_use_native_message_blocks() -> None:
         ),
     ) as client:
         model = AnthropicModel(client, "claude-test")
-        tool = ToolSpec("inspect_container", "Inspect", {"type": "object", "properties": {}})
+        tool = ToolSpec(
+            "inspect_container",
+            "Inspect",
+            {
+                "type": "object",
+                "properties": {
+                    "container_id": {"type": "string"},
+                    "optional": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+                },
+                "required": ["container_id", "optional"],
+                "additionalProperties": False,
+            },
+        )
         result = await model.complete(
             [ModelMessage("system", "Read only"), ModelMessage("user", "Inspect")], [tool]
         )
@@ -57,6 +72,9 @@ async def test_anthropic_tool_results_use_native_message_blocks() -> None:
         )
     assert requests[0]["system"] == "Read only"
     assert requests[1]["messages"][-1]["content"][0]["tool_use_id"] == "tool_1"
+    replayed = requests[1]["messages"][0]["content"][0]
+    TypeAdapter(ToolUseBlockParam).validate_python(replayed)
+    assert replayed["input"]["optional"] is None
 
 
 async def test_rate_limit_is_reported_without_automatic_retries() -> None:

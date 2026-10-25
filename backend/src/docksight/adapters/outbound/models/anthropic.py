@@ -82,7 +82,10 @@ class AnthropicModel:
             return ModelReply(
                 content,
                 calls,
-                tuple(parse_object(block.model_dump(mode="json")) for block in response.content),
+                tuple(
+                    parse_object(block.model_dump(mode="json", by_alias=True, exclude_none=True))
+                    for block in response.content
+                ),
                 response.usage.input_tokens,
                 response.usage.output_tokens,
             )

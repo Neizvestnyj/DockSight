@@ -61,4 +61,15 @@ def test_log_redaction_handles_known_values_urls_and_private_keys() -> None:
 def test_log_response_is_bounded_after_redaction() -> None:
     result = parse_logs(b"x" * 5000, Redactor(), 1024, 2)
     assert result.truncated
-    assert len(result.entries[0].message.encode()) <= 1024
+    assert result.entries == ()
+
+
+def test_truncated_line_does_not_expose_a_known_environment_secret_prefix() -> None:
+    secret = "private-sensitive-boundary-" + "A" * 104
+    redactor = Redactor().with_environment([f"DB_PASSWORD={secret}"])
+    raw = b"benign\n" + b"x" * 953 + secret.encode()
+    result = parse_logs(raw[:1025], redactor, 1024, 200)
+    text = "\n".join(entry.message for entry in result.entries)
+    assert "private-sensitive" not in text
+    assert text == "benign"
+    assert result.truncated
