@@ -14,8 +14,9 @@ actions. Models provide explanations and select from approved tools and widgets.
 - Use patch-based edits. Keep files UTF-8 without BOM, with LF line endings.
 - For structural code exploration, use the installed `codebase-memory` skill. Check index coverage for files used as
   evidence; read uncovered source directly.
-- Make local commits only. Do not push, publish, squash, or rewrite history unless the user requests that action. The
-  user will publish the initial commit.
+- Make local commits only. The user normally pushes branches and opens PRs/MRs. Ask before doing either unless the
+  user has explicitly authorized that action. Preparing PR/MR text does not authorize pushing or opening one.
+- Do not publish, squash, or rewrite history unless the user requests that action.
 - Preserve unrelated edits and existing staging. Stage only the files owned by the current task; never reset the index
   to prepare a commit.
 - Use English Conventional Commit headers, at most 72 characters. Check the header length before committing. Use the
@@ -26,6 +27,8 @@ actions. Models provide explanations and select from approved tools and widgets.
 - Write documentation, comments, docstrings, API descriptions, and runtime messages in English.
 - Keep Markdown brief and factual. Document decisions, contracts, and commands. Omit promotional language, repeated
   summaries, and obvious explanations.
+- PR/MR descriptions and changelog entries focus on changes and relevant limitations. Omit test counts, verification
+  checklists, and statements that tests, linters, or CI passed.
 - Production classes, functions, and methods require English docstrings, including private, nested, and protocol
   definitions. Test fixtures, helpers, and classes also require docstrings. A descriptive `test_*` function needs a
   docstring only for context that its name does not express. Describe purpose, behavior, or constraints briefly;
