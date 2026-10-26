@@ -1,3 +1,4 @@
+import json
 from dataclasses import replace
 from typing import Final, Literal, cast
 
@@ -9,7 +10,7 @@ from docksight.application.ports.runtime import RuntimeReadPort
 from docksight.application.views.schemas import Contract
 from docksight.domain.diagnostics import JsonObject, JsonValue
 from docksight.domain.errors import DockSightError
-from docksight.domain.runtime import ContainerSnapshot, LogBatch, StackSummary
+from docksight.domain.runtime import ContainerSnapshot, LogBatch, LogEntry, StackSummary
 
 
 class NoArgs(Contract):
@@ -44,6 +45,37 @@ _TOOLS: Final[dict[str, tuple[type[Contract], str]]] = {
 _SNAPSHOT: Final = TypeAdapter(ContainerSnapshot)
 _LOGS: Final = TypeAdapter(LogBatch)
 _STACKS: Final = TypeAdapter(tuple[StackSummary, ...])
+
+
+def _log_data(logs: LogBatch) -> JsonObject:
+    """Serialize sanitized log evidence using the same representation as its byte budget."""
+    return cast(JsonObject, _LOGS.dump_python(logs, mode="json"))
+
+
+def _log_prefix(logs: LogBatch, characters: int) -> LogBatch:
+    """Retain a prefix of messages, counting empty entries toward the bound."""
+    entries: list[LogEntry] = []
+    for entry in logs.entries:
+        if characters <= 0:
+            break
+        entries.append(replace(entry, message=entry.message[: characters - 1]))
+        characters -= len(entry.message) + 1
+    return LogBatch(tuple(entries), truncated=True)
+
+
+def _fit_logs(logs: LogBatch, budget: int) -> LogBatch:
+    """Fit useful log content to the remaining JSON bytes, including escaping and metadata."""
+    if len(json.dumps(_log_data(logs), ensure_ascii=False).encode()) <= budget:
+        return logs
+    low, high = 0, sum(len(entry.message) + 1 for entry in logs.entries)
+    while low < high:
+        middle = (low + high + 1) // 2
+        candidate = _log_prefix(logs, middle)
+        if len(json.dumps(_log_data(candidate), ensure_ascii=False).encode()) <= budget:
+            low = middle
+        else:
+            high = middle - 1
+    return _log_prefix(logs, low)
 
 
 def tool_specs() -> tuple[ToolSpec, ...]:
@@ -128,10 +160,11 @@ class DiagnosticTools:
         elif tool == "get_container_logs":
             container = self.context.record("container", self.host, data, snapshot)
             logs = await self.runtime.logs(self.host, snapshot.id, self.log_lines, self.log_bytes)
+            logs = _fit_logs(logs, self.context.remaining_bytes)
             item = self.context.record(
                 "logs",
                 self.host,
-                cast(JsonObject, _LOGS.dump_python(logs, mode="json")),
+                _log_data(logs),
                 snapshot,
                 logs,
             )

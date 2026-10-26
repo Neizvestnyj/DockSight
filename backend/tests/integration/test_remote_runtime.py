@@ -16,7 +16,6 @@ pytestmark = [
 
 
 async def test_configured_ssh_or_mtls_host_supports_bounded_reads() -> None:
-    """Verify configured ssh or mtls host supports bounded reads."""
     configs = load_hosts(os.environ["DOCKSIGHT_HOSTS_FILE"])
     host_id = os.environ["DOCKSIGHT_TEST_HOST"]
     host = next(item for item in configs if item.id == host_id)

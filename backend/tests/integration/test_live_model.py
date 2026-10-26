@@ -24,7 +24,6 @@ pytestmark = [
     ids=lambda case: case["name"],
 )
 async def test_configured_model_produces_an_evidence_linked_card(case: dict) -> None:
-    """Verify configured model produces an evidence linked card."""
     settings = Settings()
     runtime = FakeRuntime()
     runtime.item = replace(

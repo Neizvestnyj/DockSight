@@ -1,4 +1,5 @@
 import json
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
@@ -36,7 +37,6 @@ def client() -> TestClient:
 
 
 def test_http_authentication_hosts_and_unknown_host() -> None:
-    """Verify http authentication hosts and unknown host."""
     with client() as api:
         assert api.get("/api/v1/hosts").status_code == 401
         response = api.get("/api/v1/hosts", headers=HEADERS)
@@ -46,7 +46,6 @@ def test_http_authentication_hosts_and_unknown_host() -> None:
 
 
 def test_streamed_diagnosis_contains_validated_cards_and_terminal_event() -> None:
-    """Verify streamed diagnosis contains validated cards and terminal event."""
     with client() as api:
         response = api.post("/api/v1/chat/turns", headers=HEADERS, json={"host": "local", "query": "Inspect worker"})
         assert response.status_code == 200
@@ -61,7 +60,6 @@ def test_streamed_diagnosis_contains_validated_cards_and_terminal_event() -> Non
 
 
 def test_action_endpoint_requires_confirmation_and_deduplicates_execution() -> None:
-    """Verify action endpoint requires confirmation and deduplicates execution."""
     with client() as api:
         prepared = api.post(
             "/api/v1/actions",
@@ -80,7 +78,6 @@ def test_action_endpoint_requires_confirmation_and_deduplicates_execution() -> N
 
 
 def test_cors_preflight_does_not_require_a_token_and_foreign_origin_is_rejected() -> None:
-    """Verify cors preflight does not require a token and foreign origin is rejected."""
     with client() as api:
         response = api.options(
             "/api/v1/chat/turns",
@@ -96,7 +93,6 @@ def test_cors_preflight_does_not_require_a_token_and_foreign_origin_is_rejected(
 
 
 def test_invalid_and_oversized_requests_do_not_echo_sensitive_input() -> None:
-    """Verify invalid and oversized requests do not echo sensitive input."""
     with client() as api:
         response = api.post(
             "/api/v1/chat/turns",
@@ -107,10 +103,11 @@ def test_invalid_and_oversized_requests_do_not_echo_sensitive_input() -> None:
         assert "private-sentinel" not in response.text
         response = api.post("/api/v1/chat/turns", headers=HEADERS, content=b"x" * 20000)
         assert response.status_code == 413
+        assert response.json()["code"] == "request_too_large"
+        assert response.json()["request_id"] == response.headers["x-request-id"]
 
 
 def test_chunked_requests_are_limited_without_content_length() -> None:
-    """Verify chunked requests are limited without content length."""
     with client() as api:
         response = api.post(
             "/api/v1/chat/turns",
@@ -118,10 +115,19 @@ def test_chunked_requests_are_limited_without_content_length() -> None:
             content=iter([b"x" * 10000, b"y" * 10000]),
         )
         assert response.status_code == 413
+        assert response.json()["code"] == "request_too_large"
+        assert response.json()["message"] == "Request body exceeds 16 KiB"
+        assert response.json()["request_id"] == response.headers["x-request-id"]
+
+
+def test_application_version_comes_from_installed_distribution() -> None:
+    with patch("importlib.metadata.version", return_value="9.8.7") as lookup, client() as api:
+        assert api.get("/health/live").json()["version"] == "9.8.7"
+        assert api.get("/openapi.json").json()["info"]["version"] == "9.8.7"
+        lookup.assert_called_with("docksight")
 
 
 def test_openapi_describes_authentication_and_sse() -> None:
-    """Verify openapi describes authentication and sse."""
     with client() as api:
         document = api.get("/openapi.json").json()
         chat = document["paths"]["/api/v1/chat/turns"]["post"]

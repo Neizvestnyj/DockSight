@@ -1,6 +1,8 @@
 from starlette.exceptions import HTTPException
-from starlette.responses import JSONResponse
+from starlette.requests import Request
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
+
+from docksight.adapters.inbound.http.errors import error_response
 
 
 class BodyLimit:
@@ -22,10 +24,9 @@ class BodyLimit:
         except ValueError:
             length = self.limit + 1
         if length > self.limit:
-            await JSONResponse(
-                {"code": "request_too_large", "message": "Request body exceeds 16 KiB"},
-                status_code=413,
-            )(scope, receive, send)
+            await error_response(Request(scope), "request_too_large", "Request body exceeds 16 KiB", 413)(
+                scope, receive, send
+            )
             return
         received = 0
 

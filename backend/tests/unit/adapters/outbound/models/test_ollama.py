@@ -9,7 +9,6 @@ from docksight.domain.errors import DockSightError
 
 
 async def test_ollama_parses_tools_and_sends_native_schema() -> None:
-    """Verify ollama parses tools and sends native schema."""
     requests: list[dict] = []
 
     def reply(request: httpx.Request) -> httpx.Response:
@@ -52,7 +51,6 @@ async def test_ollama_parses_tools_and_sends_native_schema() -> None:
 
 @pytest.mark.parametrize("status", [400, 429, 500])
 async def test_provider_errors_do_not_expose_response_bodies(status: int) -> None:
-    """Verify provider errors do not expose response bodies."""
     async with httpx.AsyncClient(
         transport=httpx.MockTransport(lambda _: httpx.Response(status, text="api_key=private-sentinel")),
         base_url="http://ollama",
@@ -61,3 +59,28 @@ async def test_provider_errors_do_not_expose_response_bodies(status: int) -> Non
             await OllamaModel(client, "test").complete([ModelMessage("user", "Hello")])
         assert "private-sentinel" not in str(error.value)
         assert error.value.status == (429 if status == 429 else 422 if status == 400 else 503)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        [],
+        None,
+        3,
+        {"message": []},
+        {"message": None},
+        {"message": {"content": []}},
+        {"message": {"tool_calls": {"function": {}}}},
+        {"message": {"tool_calls": [[]]}},
+        {"message": {"tool_calls": [{"function": []}]}},
+        {"message": {"tool_calls": [{"function": {"name": [], "arguments": {}}}]}},
+        {"message": {}, "eval_count": []},
+    ],
+)
+async def test_malformed_json_shapes_raise_typed_provider_error(payload: object) -> None:
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda _: httpx.Response(200, json=payload)), base_url="http://ollama"
+    ) as client:
+        with pytest.raises(DockSightError) as error:
+            await OllamaModel(client, "test").complete([ModelMessage("user", "Hello")])
+        assert error.value.code == "invalid_model_response"

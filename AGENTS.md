@@ -26,9 +26,10 @@ actions. Models provide explanations and select from approved tools and widgets.
 - Write documentation, comments, docstrings, API descriptions, and runtime messages in English.
 - Keep Markdown brief and factual. Document decisions, contracts, and commands. Omit promotional language, repeated
   summaries, and obvious explanations.
-- Every class, function, and method must have an English docstring, including private, nested, protocol, and test
-  definitions. Describe purpose, behavior, or constraints in a short sentence. Do not repeat types, annotate every field
-  in prose, or use `:rtype:`.
+- Production classes, functions, and methods require English docstrings, including private, nested, and protocol
+  definitions. Test fixtures, helpers, and classes also require docstrings. A descriptive `test_*` function needs a
+  docstring only for context that its name does not express. Describe purpose, behavior, or constraints briefly;
+  do not repeat names or types, annotate every field in prose, or use `:rtype:`.
 - Use a 120-character line limit for Python and Markdown prose. Leave long Markdown tables, URLs, and executable code
   blocks intact when wrapping would hurt readability.
 - Keep durable decisions and contracts in documentation; remove completed implementation plans.
@@ -90,7 +91,7 @@ actions. Models provide explanations and select from approved tools and widgets.
 
 ## Verification and releases
 
-- Run tests through `rtk proxy uv run --project backend pytest`.
+- From the repository root, run tests through `rtk proxy uv run --project backend pytest backend/tests`.
 - Mirror source ownership in unit tests: `docksight/<path>/<name>.py` maps to
   `backend/tests/unit/<path>/test_<name>.py`. Group integration tests by contract.
 - Test behavior and failure boundaries. Do not test empty packages, forwarding code, or details solely to raise

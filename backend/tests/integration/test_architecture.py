@@ -8,7 +8,6 @@ import pytest
 
 @pytest.mark.parametrize("forbidden", ["httpx", "docksight.application"])
 def test_domain_contract_rejects_outward_imports(tmp_path: Path, forbidden: str) -> None:
-    """Verify domain contract rejects outward imports."""
     config = Path(__file__).parents[2] / "pyproject.toml"
     for package in ["docksight", "docksight/domain", "docksight/application", "docksight/adapters"]:
         directory = tmp_path / package

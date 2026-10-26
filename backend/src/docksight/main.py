@@ -1,6 +1,7 @@
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from hmac import compare_digest
+from importlib import metadata
 from uuid import uuid4
 
 from fastapi import FastAPI, Request
@@ -26,7 +27,8 @@ def create_app(settings: Settings | None = None, components: Components | None =
         finally:
             await services.close()
 
-    app = FastAPI(title="DockSight", version="0.1.0", lifespan=lifespan)
+    version = metadata.version("docksight")
+    app = FastAPI(title="DockSight", version=version, lifespan=lifespan)
     app.add_middleware(BodyLimit)
     install_errors(app)
     app.include_router(build_router(services.queries, services.diagnostics, services.actions))
@@ -59,7 +61,7 @@ def create_app(settings: Settings | None = None, components: Components | None =
     @app.get("/health/live", tags=["Health"])
     async def live() -> dict[str, str]:
         """Report process liveness without contacting Docker or a model provider."""
-        return {"status": "ok", "version": "0.1.0"}
+        return {"status": "ok", "version": version}
 
     @app.get("/health/ready", tags=["Health"])
     async def ready() -> dict[str, str]:

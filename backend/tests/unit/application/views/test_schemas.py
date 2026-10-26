@@ -5,7 +5,6 @@ from docksight.application.views.schemas import DiagnosisProposal
 
 
 def test_model_cannot_supply_endpoints_or_runtime_metrics() -> None:
-    """Verify model cannot supply endpoints or runtime metrics."""
     with pytest.raises(ValidationError):
         DiagnosisProposal.model_validate(
             {
@@ -25,7 +24,6 @@ def test_model_cannot_supply_endpoints_or_runtime_metrics() -> None:
 
 
 def test_widget_registry_rejects_unknown_types() -> None:
-    """Verify widget registry rejects unknown types."""
     with pytest.raises(ValidationError):
         DiagnosisProposal.model_validate(
             {
@@ -38,7 +36,6 @@ def test_widget_registry_rejects_unknown_types() -> None:
 
 
 def test_empty_evidence_is_allowed_only_for_uncertain_diagnosis() -> None:
-    """Verify empty evidence is allowed only for uncertain diagnosis."""
     with pytest.raises(ValidationError):
         DiagnosisProposal.model_validate(
             {

@@ -75,6 +75,7 @@ ignore-private = false
 ignore-semiprivate = false
 ignore-nested-functions = false
 ignore-nested-classes = false
+ignore-regex = ["^test_[a-z0-9_]+$"]
 
 [tool.complexipy]
 max-complexity-allowed = 10

@@ -5,6 +5,7 @@ import traceback
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException
 
 from docksight.domain.errors import DockSightError
 
@@ -19,17 +20,32 @@ def safe_stack(exc: Exception) -> list[dict[str, str | int]]:
 
 def error_response(request: Request, code: str, message: str, status: int) -> JSONResponse:
     """Build a stable error envelope with its request identifier."""
-    request_id: str = request.state.request_id
+    request_id: str | None = getattr(request.state, "request_id", None)
+    body = {"code": code, "message": message}
+    headers: dict[str, str] = {}
+    if request_id is not None:
+        body["request_id"] = request_id
+        headers["X-Request-ID"] = request_id
 
     return JSONResponse(
-        {"code": code, "message": message, "request_id": request_id},
+        body,
         status_code=status,
-        headers={"X-Request-ID": request_id},
+        headers=headers,
     )
 
 
 def install_errors(app: FastAPI) -> None:
     """Register safe handlers for domain, validation, and unexpected failures."""
+
+    @app.exception_handler(HTTPException)
+    async def http_error(request: Request, exc: HTTPException) -> JSONResponse:
+        """Normalize HTTP failures while preserving protocol-required response headers."""
+        if exc.status_code == 413:
+            response = error_response(request, "request_too_large", "Request body exceeds 16 KiB", 413)
+        else:
+            response = error_response(request, "http_error", str(exc.detail), exc.status_code)
+        response.headers.update(exc.headers or {})
+        return response
 
     @app.exception_handler(DockSightError)
     async def domain_error(request: Request, exc: DockSightError) -> JSONResponse:

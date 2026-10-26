@@ -12,7 +12,6 @@ from docksight.domain.errors import DockSightError
 
 
 async def test_anthropic_tool_results_use_native_message_blocks() -> None:
-    """Verify anthropic tool results use native message blocks."""
     requests: list[dict] = []
 
     def reply(request: httpx2.Request) -> httpx2.Response:
@@ -78,7 +77,6 @@ async def test_anthropic_tool_results_use_native_message_blocks() -> None:
 
 
 async def test_rate_limit_is_reported_without_automatic_retries() -> None:
-    """Verify rate limit is reported without automatic retries."""
     requests: list[str] = []
 
     def reply(request: httpx2.Request) -> httpx2.Response:

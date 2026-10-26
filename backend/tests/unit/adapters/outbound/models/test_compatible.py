@@ -8,7 +8,6 @@ from docksight.application.ports.models import ModelMessage
 
 
 async def test_compatible_endpoint_can_return_schema_through_a_forced_tool() -> None:
-    """Verify compatible endpoint can return schema through a forced tool."""
     requests: list[dict] = []
 
     def reply(request: httpx2.Request) -> httpx2.Response:

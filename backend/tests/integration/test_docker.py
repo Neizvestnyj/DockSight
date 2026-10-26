@@ -24,7 +24,6 @@ pytestmark = [
 
 
 async def test_real_container_reads_redaction_and_mutations() -> None:
-    """Verify real container reads redaction and mutations."""
     owner = str(uuid4())
     client = docker.from_env()
     container = client.containers.run(
@@ -64,7 +63,6 @@ async def test_real_container_reads_redaction_and_mutations() -> None:
 
 
 def test_real_docker_http_diagnosis_and_confirmed_restart() -> None:
-    """Verify real docker http diagnosis and confirmed restart."""
     owner = str(uuid4())
     client = docker.from_env()
     program = "\n".join(

@@ -1,11 +1,13 @@
 import json
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Literal
+from typing import Final, Literal
 
 from docksight.domain.diagnostics import EvidenceRef, JsonObject
 from docksight.domain.errors import DockSightError
 from docksight.domain.runtime import ContainerSnapshot, LogBatch, StackSummary
+
+EVIDENCE_BYTES: Final = 65536
 
 
 @dataclass
@@ -18,6 +20,11 @@ class EvidenceContext:
     stacks: dict[str, tuple[StackSummary, ...]] = field(default_factory=dict[str, tuple[StackSummary, ...]])
     used_bytes: int = 0
 
+    @property
+    def remaining_bytes(self) -> int:
+        """Report remaining serialized data capacity for this turn."""
+        return EVIDENCE_BYTES - self.used_bytes
+
     def record(
         self,
         kind: Literal["container", "logs", "stats", "stack", "env"],
@@ -29,7 +36,7 @@ class EvidenceContext:
     ) -> EvidenceRef:
         """Assign an evidence ID and retain its typed data within turn limits."""
         size = len(json.dumps(data, ensure_ascii=False).encode())
-        if len(self.evidence) >= 64 or self.used_bytes + size > 65536:
+        if len(self.evidence) >= 64 or size > self.remaining_bytes:
             raise DockSightError("evidence_limit", "Evidence budget reached; finalize with collected evidence", 409)
         evidence_id = f"e{len(self.evidence) + 1}"
         item = EvidenceRef(evidence_id, kind, host, snapshot.id if snapshot else None, datetime.now(UTC), data)

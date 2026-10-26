@@ -20,7 +20,6 @@ def proposal(evidence_id: str = "e1") -> str:
 
 
 async def test_diagnosis_uses_real_snapshots_and_never_exposes_write_tools() -> None:
-    """Verify diagnosis uses real snapshots and never exposes write tools."""
     runtime = FakeRuntime()
     model = ScriptedModel(
         [
@@ -38,7 +37,6 @@ async def test_diagnosis_uses_real_snapshots_and_never_exposes_write_tools() -> 
 
 
 async def test_unknown_evidence_gets_one_repair_attempt() -> None:
-    """Verify unknown evidence gets one repair attempt."""
     model = ScriptedModel([ModelReply("Ready"), ModelReply(proposal("invented")), ModelReply(proposal("invented"))])
     events = [
         event
@@ -52,7 +50,6 @@ async def test_unknown_evidence_gets_one_repair_attempt() -> None:
 
 
 async def test_model_cannot_switch_hosts_through_tool_arguments() -> None:
-    """Verify model cannot switch hosts through tool arguments."""
     model = ScriptedModel(
         [
             ModelReply(
@@ -77,7 +74,6 @@ async def test_model_cannot_switch_hosts_through_tool_arguments() -> None:
 
 
 async def test_exploration_and_repairs_share_the_model_budget() -> None:
-    """Verify exploration and repairs share the model budget."""
     replies = [ModelReply("", (ToolCall(f"c{i}", "list_containers", {}),)) for i in range(4)]
     model = ScriptedModel([*replies, ModelReply("invalid"), ModelReply("invalid")])
     service = Diagnostics(FakeRuntime(), model, MemorySessions(), Redactor(), max_model_calls=6)
@@ -87,7 +83,6 @@ async def test_exploration_and_repairs_share_the_model_budget() -> None:
 
 
 async def test_write_tool_injected_by_a_model_is_rejected() -> None:
-    """Verify write tool injected by a model is rejected."""
     runtime = FakeRuntime()
     model = ScriptedModel(
         [

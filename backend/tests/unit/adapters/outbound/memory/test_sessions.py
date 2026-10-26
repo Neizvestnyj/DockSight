@@ -5,7 +5,6 @@ from docksight.domain.errors import DockSightError
 
 
 async def test_session_ownership_and_host_scope_cannot_be_changed() -> None:
-    """Verify session ownership and host scope cannot be changed."""
     store = MemorySessions()
     async with store.lease(None, "alice", "local") as session:
         session_id = session.id
@@ -18,7 +17,6 @@ async def test_session_ownership_and_host_scope_cannot_be_changed() -> None:
 
 
 async def test_busy_session_cannot_be_evicted_or_mutated_concurrently() -> None:
-    """Verify busy session cannot be evicted or mutated concurrently."""
     store = MemorySessions(capacity=1)
     async with store.lease(None, "alice", "local") as session:
         with pytest.raises(DockSightError):

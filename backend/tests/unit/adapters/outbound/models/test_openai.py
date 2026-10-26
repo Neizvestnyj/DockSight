@@ -10,7 +10,6 @@ from docksight.application.ports.models import ModelMessage, ToolSpec
 
 
 async def test_responses_preserves_native_reasoning_and_call_ids() -> None:
-    """Verify responses preserves native reasoning and call ids."""
     requests: list[dict] = []
     output = [
         {"type": "reasoning", "id": "rs_1", "summary": [], "encrypted_content": "opaque-state"},

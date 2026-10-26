@@ -14,7 +14,6 @@ from tests.fakes import FakeRuntime
 
 
 async def test_unexpected_source_failure_emits_one_safe_terminal_event() -> None:
-    """Verify unexpected source failure emits one safe terminal event."""
 
     async def source() -> AsyncGenerator[JsonObject]:
         """Yield controlled events to exercise stream failure or cancellation cleanup."""
@@ -28,7 +27,6 @@ async def test_unexpected_source_failure_emits_one_safe_terminal_event() -> None
 
 
 async def test_closing_heartbeat_stream_cancels_pending_work() -> None:
-    """Verify closing heartbeat stream cancels pending work."""
     closed = asyncio.Event()
 
     async def source() -> AsyncGenerator[JsonObject]:
@@ -47,7 +45,6 @@ async def test_closing_heartbeat_stream_cancels_pending_work() -> None:
 
 @pytest.mark.parametrize("stage", ["model", "tool", "final"])
 async def test_turn_deadline_survives_sse_task_boundaries(stage: str) -> None:
-    """Verify turn deadline survives sse task boundaries."""
 
     class SlowRuntime(FakeRuntime):
         """Delay runtime reads or mutations to exercise timeout handling."""

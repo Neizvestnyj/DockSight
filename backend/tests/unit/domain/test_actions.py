@@ -14,7 +14,6 @@ def action() -> PreparedAction:
 
 
 def test_action_can_only_be_claimed_once() -> None:
-    """Verify action can only be claimed once."""
     item = action()
     assert item.claim("operator", "request-1", True, NOW) is True
     assert item.state == ActionState.RUNNING
@@ -32,7 +31,6 @@ def test_action_can_only_be_claimed_once() -> None:
     ],
 )
 def test_invalid_claim_has_no_execution_side_effect(actor: str, confirmed: bool, time: datetime) -> None:
-    """Verify invalid claim has no execution side effect."""
     item = action()
     with pytest.raises(DockSightError):
         item.claim(actor, "request-1", confirmed, time)
@@ -40,7 +38,6 @@ def test_invalid_claim_has_no_execution_side_effect(actor: str, confirmed: bool,
 
 
 def test_completed_action_cannot_be_finished_again() -> None:
-    """Verify completed action cannot be finished again."""
     item = action()
     item.claim("operator", "request-1", True, NOW)
     item.finish(ActionState.SUCCEEDED, "Container restarted")

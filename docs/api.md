@@ -23,10 +23,8 @@ Errors contain `code`, `message`, and a request ID where available. Validation e
 bodies are limited to 16 KiB. Host IDs resolve through server configuration; callers cannot submit connection URLs. At
 the byte limit, logs omit the incomplete trailing line before redaction.
 
-Container and stack GET requests follow this read path. The Docker adapter applies field allowlists and redaction
-before returning owned values; the HTTP adapter serializes them as JSON.
-
-![Runtime read requests, sanitized observations, and JSON responses](diagrams/runtime-reads.png)
+Container and stack GET requests pass through HTTP routes, `RuntimeQueries`, and the Docker adapter. The Docker adapter
+applies field allowlists and redaction before returning owned values; the HTTP adapter serializes them as JSON.
 
 `GET /hosts` reads configured host metadata without contacting Docker. Diagnostic requests use the model loop below.
 

@@ -3,6 +3,31 @@
 DockSight explains Docker container problems using runtime state, logs, and metrics. It can restart or stop a container
 after explicit user confirmation. This repository contains the backend and an HTTP demo client.
 
+## Run locally
+
+Requires Python 3.12+, uv, Docker Engine/Desktop, and a tool-capable model server. Development and the backend image use
+Python 3.14. CI also tests 3.12 and 3.13. Python 3.11 cannot parse the project's type aliases and generic function
+syntax. Run commands from the repository root.
+
+```powershell
+uv sync --project backend --locked
+Copy-Item .env.example .env
+uv run --project backend python -c "import secrets; print(secrets.token_urlsafe(32))"
+```
+
+Replace `DOCKSIGHT_API_TOKEN` in `.env` with the generated value. Start Ollama and ensure `qwen3.5:9b` is available, or
+use a configuration from `examples/providers/`. OpenAI and Anthropic also accept their standard API-key environment
+variables. Choose a model that supports tools and structured output.
+
+```powershell
+uv run --project backend uvicorn docksight.main:create_app --factory --host 127.0.0.1 --port 8000 --workers 1
+```
+
+Open [API documentation](http://127.0.0.1:8000/docs) and enter the token through Authorize. Health endpoints check
+application readiness without contacting Docker or a model. Provider requests happen only during diagnostic turns.
+
+On Linux/macOS, use `cp .env.example .env` instead of `Copy-Item`.
+
 ## System overview
 
 This view follows a diagnostic question. The backend collects Docker facts, asks a model to explain them, and checks
@@ -32,31 +57,6 @@ run in the same process as the core.
 
 [Edit backend diagrams](docs/diagrams/backend.drawio) · [Dependency rules](docs/architecture.md#dependencies)
 
-## Run locally
-
-Requires Python 3.12+, uv, Docker Engine/Desktop, and a tool-capable model server. Development and the backend image use
-Python 3.14. CI also tests 3.12 and 3.13. Python 3.11 cannot parse the project's type aliases and generic function
-syntax. Run commands from the repository root.
-
-```powershell
-uv sync --project backend --locked
-Copy-Item .env.example .env
-uv run --project backend python -c "import secrets; print(secrets.token_urlsafe(32))"
-```
-
-Replace `DOCKSIGHT_API_TOKEN` in `.env` with the generated value. Start Ollama and ensure `qwen3.5:9b` is available, or
-use a configuration from `examples/providers/`. OpenAI and Anthropic also accept their standard API-key environment
-variables. Choose a model that supports tools and structured output.
-
-```powershell
-uv run --project backend uvicorn docksight.main:create_app --factory --host 127.0.0.1 --port 8000 --workers 1
-```
-
-Open [API documentation](http://127.0.0.1:8000/docs) and enter the token through Authorize. Health endpoints check
-application readiness without contacting Docker or a model. Provider requests happen only during diagnostic turns.
-
-On Linux/macOS, use `cp .env.example .env` instead of `Copy-Item`.
-
 ## Working example
 
 The demo worker exits on its first start and runs after a confirmed restart. Its retry marker is stored in a dedicated
@@ -83,22 +83,25 @@ examples/compose.yaml down -v` removes only this demo stack and its state volume
 Settings use the `DOCKSIGHT_` prefix and can be loaded from the root `.env`. Array settings use JSON, for example
 `DOCKSIGHT_ENV_ALLOWLIST=["APP_ENV"]`.
 
-| Setting                              | Default                  | Purpose                                             |
-|--------------------------------------|--------------------------|-----------------------------------------------------|
-| `PROVIDER` / `MODEL`                 | `ollama` / `qwen3.5:9b`  | Independent provider and model selection            |
-| `MODEL_BASE_URL` / `MODEL_API_KEY`   | Provider default / unset | Server endpoint and credentials                     |
-| `MODEL_STRUCTURED_OUTPUT`            | `native`                 | Compatible adapter also supports `tool`             |
+| Setting                              | Default                  | Purpose                                               |
+|--------------------------------------|--------------------------|-------------------------------------------------------|
+| `PROVIDER` / `MODEL`                 | `ollama` / `qwen3.5:9b`  | Independent provider and model selection              |
+| `MODEL_BASE_URL` / `MODEL_API_KEY`   | Provider default / unset | Server endpoint and credentials                       |
+| `MODEL_STRUCTURED_OUTPUT`            | `native`                 | Compatible adapter also supports `tool`               |
 | `OLLAMA_CONTEXT_LENGTH`              | `16384` tokens           | Native Ollama context for prompts, tools, and replies |
-| `HOSTS_FILE`                         | unset                    | Configured hosts; see `examples/hosts.yaml`         |
-| `ENV_ALLOWLIST` / `CORS_ORIGINS`     | `[]` / `[]`              | Explicit environment fields and browser origins     |
-| `MAX_MODEL_CALLS` / `MAX_TOOL_CALLS` | `6` / `12`               | Per-turn budgets, including finalization and repair |
-| `MODEL_TIMEOUT` / `TURN_TIMEOUT`     | `60` / `180` seconds     | Request and total turn deadlines                    |
-| `LOG_LINES` / `LOG_BYTES`            | `200` / `65536`          | Log response bounds                                 |
+| `HOSTS_FILE`                         | unset                    | Configured hosts; see `examples/hosts.yaml`           |
+| `ENV_ALLOWLIST` / `CORS_ORIGINS`     | `[]` / `[]`              | Explicit environment fields and browser origins       |
+| `MAX_MODEL_CALLS` / `MAX_TOOL_CALLS` | `6` / `12`               | Per-turn budgets, including finalization and repair   |
+| `MODEL_TIMEOUT` / `TURN_TIMEOUT`     | `60` / `180` seconds     | Request and total turn deadlines                      |
+| `LOG_LINES` / `LOG_BYTES`            | `200` / `65536`          | Log response bounds                                   |
 
 Local Docker follows the current context and Docker environment variables. SSH uses the Docker SDK's Paramiko transport,
 SSH agent/config, and verified `~/.ssh/known_hosts`. Use `ProxyCommand` for jump hosts. TCP hosts require mTLS. Inspect
 and environment fields are allowlisted; log redaction is best effort. Cloud providers receive the sanitized evidence
 selected by the diagnostic loop.
+
+SSH connection, banner, authentication, and channel waits use bounded timeouts. DNS resolution, SSH agent operations,
+and external `ProxyCommand` processes also depend on system-level limits.
 
 Native Ollama requests set an explicit context window. A small server default can truncate the original query and tool
 results. Increase `DOCKSIGHT_OLLAMA_CONTEXT_LENGTH` for larger inventories or logs; larger contexts need more memory.
@@ -112,8 +115,8 @@ uv run --project backend pre-commit run --all-files
 
 The installed hooks check files, Markdown, Dockerfile, secrets, Python quality, architecture, docstrings, cognitive
 complexity, tests, and Conventional Commit messages. Initial setup downloads the hook environments; subsequent runs
-reuse them. `uv` is required on the Git process's PATH. Python and Markdown prose use a 120-character line limit. Every
-function, method, and class has a short English docstring; cognitive complexity is limited to 10.
+reuse them. `uv` is required on the Git process's PATH. Python and Markdown prose use a 120-character line limit;
+cognitive complexity is limited to 10. Descriptive test names need docstrings only when extra context is useful.
 
 Run individual backend checks with:
 

@@ -93,7 +93,7 @@ def _stack_card(refs: list[str], context: EvidenceContext) -> ComposeStackCard:
 
 def _container_snapshot(refs: list[str], context: EvidenceContext) -> ContainerSnapshot:
     """Resolve card references to one exact container and use its latest snapshot."""
-    snapshots = [context.snapshots[ref] for ref in refs if ref in context.snapshots]
+    snapshots = [row for ref, row in context.snapshots.items() if ref in refs]
     if not snapshots or len({(row.host, row.id) for row in snapshots}) != 1:
         raise DockSightError("invalid_evidence", "Card requires evidence for one exact container", 502)
-    return snapshots[-1]
+    return max(enumerate(snapshots), key=lambda item: (item[1].observed_at, item[0]))[1]

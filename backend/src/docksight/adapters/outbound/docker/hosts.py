@@ -1,14 +1,87 @@
 from pathlib import Path
-from typing import Self
+from typing import Any, Self
 from urllib.parse import ParseResult, urlparse
 
-import docker
 import yaml
 from docker import DockerClient
+from docker.api.client import APIClient
+from docker.constants import DEFAULT_DOCKER_API_VERSION, MINIMUM_DOCKER_API_VERSION
+from docker.errors import DockerException
 from docker.tls import TLSConfig
+from docker.transport.sshconn import SSHHTTPAdapter
+from docker.utils import version_lt
+from paramiko import ProxyCommand, SSHException
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from docksight.domain.errors import DockSightError
+
+
+class _BoundedSSHAdapter(SSHHTTPAdapter):
+    """Keep SDK SSH configuration and host verification with bounded handshake waits."""
+
+    ssh_params: dict[str, Any]
+
+    def __init__(self, base_url: str, timeout: float) -> None:
+        """Set handshake limits before the SDK initiates its Paramiko connection."""
+        self.connection_timeout = timeout
+        super().__init__(base_url, timeout=max(1, int(timeout)))
+
+    def _connect(self) -> None:
+        """Bound TCP, banner, authentication, and channel waits without disabling agents."""
+        if self.ssh_client is None:
+            return
+        params = dict(self.ssh_params)
+        params.update(
+            timeout=self.connection_timeout,
+            banner_timeout=self.connection_timeout,
+            auth_timeout=self.connection_timeout,
+            channel_timeout=self.connection_timeout,
+        )
+        try:
+            self.ssh_client.connect(**params)
+        except (SSHException, OSError):
+            transport = self.ssh_client.get_transport()
+            self.ssh_client.close()
+            proxy = params.get("sock")
+            if transport is None and isinstance(proxy, ProxyCommand):
+                proxy.close()
+            raise
+
+
+class _SSHAPIClient(APIClient):
+    """Replace the dormant SDK SSH transport before negotiating the server API version."""
+
+    _custom_adapter: SSHHTTPAdapter
+    _version: str
+
+    def __init__(self, url: str, timeout: float) -> None:
+        """Install a verified bounded transport before making any engine request."""
+        super().__init__(
+            base_url=url, timeout=max(1, int(timeout)), version=DEFAULT_DOCKER_API_VERSION, use_ssh_client=True
+        )
+        try:
+            adapter = _BoundedSSHAdapter(url, timeout)
+            self._custom_adapter.close()
+            self.mount("http+docker://ssh", adapter)
+            self._custom_adapter = adapter
+            version = self.version(api_version=False).get("ApiVersion")
+            if not isinstance(version, str) or version_lt(version, MINIMUM_DOCKER_API_VERSION):
+                raise DockerException("Docker server returned an unsupported API version")
+            self._version = version
+        except BaseException:
+            self.close()
+            raise
+
+
+class _ConfiguredClient(DockerClient):
+    """Keep SDK environment/context resolution while bounding any selected SSH transport."""
+
+    def __init__(self, base_url: str | None = None, timeout: float = 60, **kwargs: Any) -> None:
+        """Select bounded SSH or delegate local sockets and TLS to the standard SDK client."""
+        if base_url is not None and base_url.startswith("ssh://"):
+            self.api = _SSHAPIClient(base_url, timeout)
+        else:
+            super().__init__(base_url=base_url, timeout=max(1, int(timeout)), **kwargs)
 
 
 class HostConfig(BaseModel):
@@ -76,12 +149,14 @@ def load_hosts(path: str | None) -> tuple[HostConfig, ...]:
 def connect(host: HostConfig, timeout: float) -> DockerClient:
     """Create an SDK client with verified SSH or mTLS for remote hosts."""
     if host.url is None:
-        client = docker.from_env(timeout=max(1, int(timeout)))
+        client = _ConfiguredClient.from_env(timeout=max(1, int(timeout)))
         if client.api.base_url.startswith("http://"):
             client.close()
             raise DockSightError("insecure_transport", "Docker TCP connections require mTLS", 500)
 
         return client
+    if host.url.startswith("ssh://"):
+        return _ConfiguredClient(base_url=host.url, timeout=timeout)
     tls: bool | TLSConfig = False
     if host.url.startswith("tcp://"):
         assert host.client_cert and host.client_key and host.ca_cert

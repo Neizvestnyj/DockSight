@@ -3,11 +3,46 @@ from typing import Any
 from uuid import uuid4
 
 import httpx
+from pydantic import BaseModel, ConfigDict, Field
 
 from docksight.adapters.outbound.models.common import parse_object, provider_error
 from docksight.application.ports.models import ModelMessage, ModelReply, ToolCall, ToolSpec
 from docksight.domain.diagnostics import JsonObject
 from docksight.domain.errors import DockSightError
+
+
+class _Function(BaseModel):
+    """Validate the native tool function before reading its fields."""
+
+    model_config = ConfigDict(strict=True)
+    name: str = Field(min_length=1, max_length=128)
+    arguments: JsonObject | str
+
+
+class _Call(BaseModel):
+    """Validate one provider tool call and optional identifier."""
+
+    model_config = ConfigDict(strict=True)
+    id: str | None = Field(default=None, max_length=256)
+    function: _Function
+
+
+class _Message(BaseModel):
+    """Validate assistant text and the native tool-call collection."""
+
+    model_config = ConfigDict(strict=True)
+    content: str = Field(default="", max_length=1048576)
+    tool_calls: list[_Call] = Field(default_factory=list[_Call], max_length=64)
+
+
+class _Response(BaseModel):
+    """Validate external reply shapes and usage counters before parsing."""
+
+    model_config = ConfigDict(strict=True)
+    message: _Message
+    done_reason: str | None = None
+    prompt_eval_count: int = Field(default=0, ge=0)
+    eval_count: int = Field(default=0, ge=0)
 
 
 def _messages(messages: Sequence[ModelMessage]) -> list[dict[str, Any]]:
@@ -25,23 +60,20 @@ def _messages(messages: Sequence[ModelMessage]) -> list[dict[str, Any]]:
     return rows
 
 
-def _reply(data: dict[str, Any]) -> ModelReply:
+def _reply(data: object) -> ModelReply:
     """Parse a native reply and generate IDs when Ollama omits them."""
-    if data.get("done_reason") == "length":
+    validated = _Response.model_validate(data)
+    if validated.done_reason == "length":
         raise DockSightError("model_truncated", "Model output exceeded its token limit", 502)
-    message: dict[str, Any] = data["message"]
-    raw_calls: list[dict[str, Any]] = message.get("tool_calls") or []
     calls = tuple(
-        ToolCall(
-            raw.get("id") or f"call_{uuid4().hex}", raw["function"]["name"], parse_object(raw["function"]["arguments"])
-        )
-        for raw in raw_calls
+        ToolCall(raw.id or f"call_{uuid4().hex}", raw.function.name, parse_object(raw.function.arguments))
+        for raw in validated.message.tool_calls
     )
     return ModelReply(
-        str(message.get("content") or ""),
+        validated.message.content,
         calls,
-        input_tokens=int(data.get("prompt_eval_count", 0)),
-        output_tokens=int(data.get("eval_count", 0)),
+        input_tokens=validated.prompt_eval_count,
+        output_tokens=validated.eval_count,
     )
 
 

@@ -7,10 +7,8 @@ Diagram source: [backend.drawio](diagrams/backend.drawio).
 Use one hexagonal application, deployed as a monolith. Group related behavior inside its domain and application
 packages. Keep external technologies in adapters and construct dependencies in one composition root.
 
-Two layouts were considered. A complete hexagon per feature gives stronger feature isolation but repeats ports, wiring,
-and directories. A single hexagon provides the required dependency boundaries with fewer files and is the proposed
-layout for this backend. Split a feature into its own context only when its language, rules, or ownership require that
-separation.
+A single hexagon keeps dependency boundaries explicit without repeating ports and wiring for each feature. Split a
+feature into its own context when its language, rules, or ownership require that separation.
 
 ## Dependencies
 
@@ -65,9 +63,6 @@ backend/src/docksight/
       audit.py           # Structured action audit output
 ```
 
-This is an ownership map. Create files when their behavior is implemented; do not scaffold unused packages. Adapters
-enter through use cases and implement application-owned ports. Core code does not reach into adapters.
-
 ## DDD elements
 
 - Use a consistent vocabulary: Host, ContainerSnapshot, EvidenceRef, DiagnosticTurn, PreparedAction, and ActionOutcome.
@@ -113,16 +108,8 @@ target for the backend process lifetime. See the [execution sequence](api.md#act
 - Inject a clock callable for time-based rules. Use small fake ports in core tests; Docker and model SDKs are
   unnecessary for those tests.
 
-## File size and verification
+## Verification
 
-- Aim for roughly 100-250 lines per source file; review responsibility and cohesion when a file exceeds 300. These are
-  review triggers, not hard limits.
-- A leaf package will usually need 3-7 source files. Reconsider its ownership when it grows; do not split merely to meet
-  a count or line target.
-- Keep related DTOs, enums, and small helpers together. Avoid one file per class, empty facades, generic base services,
-  and pass-through layers.
-- Add a subpackage when code has a separate responsibility or reason to change. Keep HTTP endpoints grouped by resource
-  and provider adapters by provider.
 - Enforce import direction in CI with `import-linter`. Verify that application imports no adapters, FastAPI, Docker SDK,
   HTTPX, provider SDKs, or settings; verify that domain imports no application, adapter, or third-party package.
 - Test domain rules and use cases through fake ports. Test adapter mappings separately, then verify HTTP contracts and

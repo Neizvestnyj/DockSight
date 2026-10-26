@@ -8,9 +8,13 @@ _PRIVATE_KEY: Final = re.compile(
     r"-----BEGIN (?:[A-Z ]*PRIVATE KEY)-----.*?(?:-----END [A-Z ]*PRIVATE KEY-----|\Z)",
     re.S,
 )
+_QUOTED: Final = r"\"(?:\\[^\r\n]|[^\"\\\r\n])*\"|'(?:\\[^\r\n]|[^'\\\r\n])*'"
 _ASSIGNMENT: Final = re.compile(
-    r"(?i)((?:password|passwd|secret|token|api[_-]?key|authorization)[\"']?\s*[=:]\s*)"
-    r"(\"[^\"]*\"|'[^']*'|Bearer\s+[^\s,;]+|[^\s,;]+)",
+    r"(?i)((?:password|passwd|secret|token|api[_-]?key)[\"']?[ \t]*[=:][ \t]*)"
+    rf"({_QUOTED}|Bearer[ \t]+[^\s,;]+|[^\s,;]+)",
+)
+_AUTHORIZATION: Final = re.compile(
+    r"(?i)(authorization[\"']?[ \t]*[=:][ \t]*)" rf"({_QUOTED}|[^\r\n]+)",
 )
 _URL_AUTH: Final = re.compile(r"(\w+://)[^\s/@:]+:[^\s/@]+@")
 _TOKEN: Final = re.compile(
@@ -55,6 +59,7 @@ class Redactor:
         """Redact credentials, private keys, connection passwords, and control sequences."""
         value = _PRIVATE_KEY.sub("[REDACTED]", value)
         value = _URL_AUTH.sub(r"\1[REDACTED]@", value)
+        value = _AUTHORIZATION.sub(_mask_assignment, value)
         value = _ASSIGNMENT.sub(_mask_assignment, value)
         value = _TOKEN.sub("[REDACTED]", value)
         for secret in self.secrets:

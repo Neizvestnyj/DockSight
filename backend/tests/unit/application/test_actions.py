@@ -11,7 +11,6 @@ from tests.fakes import FakeAudit, FakeRuntime
 
 
 async def test_confirmed_action_is_executed_once_for_concurrent_duplicates() -> None:
-    """Verify confirmed action is executed once for concurrent duplicates."""
     runtime, audit = FakeRuntime(), FakeAudit()
     service = Actions(runtime, runtime, MemoryActions(), audit)
     prepared = await service.prepare("alice", "local", runtime.item.id, "restart")
@@ -22,7 +21,6 @@ async def test_confirmed_action_is_executed_once_for_concurrent_duplicates() -> 
 
 
 async def test_stale_snapshot_prevents_mutation() -> None:
-    """Verify stale snapshot prevents mutation."""
     runtime = FakeRuntime()
     service = Actions(runtime, runtime, MemoryActions(), FakeAudit())
     prepared = await service.prepare("alice", "local", runtime.item.id, "restart")
@@ -33,7 +31,6 @@ async def test_stale_snapshot_prevents_mutation() -> None:
 
 
 async def test_expired_and_unconfirmed_actions_cannot_execute() -> None:
-    """Verify expired and unconfirmed actions cannot execute."""
     runtime = FakeRuntime()
     now = datetime.now(UTC)
     service = Actions(runtime, runtime, MemoryActions(), FakeAudit(), clock=lambda: now)
@@ -47,7 +44,6 @@ async def test_expired_and_unconfirmed_actions_cannot_execute() -> None:
 
 
 async def test_ambiguous_timeout_blocks_new_mutations_for_the_target() -> None:
-    """Verify ambiguous timeout blocks new mutations for the target."""
 
     class SlowRuntime(FakeRuntime):
         """Delay runtime reads or mutations to exercise timeout handling."""
@@ -70,7 +66,6 @@ async def test_ambiguous_timeout_blocks_new_mutations_for_the_target() -> None:
 
 
 async def test_restart_loop_can_be_stopped() -> None:
-    """Verify restart loop can be stopped."""
     runtime = FakeRuntime()
     runtime.item = replace(runtime.item, state="restarting")
     service = Actions(runtime, runtime, MemoryActions(), FakeAudit())
@@ -81,7 +76,6 @@ async def test_restart_loop_can_be_stopped() -> None:
 
 
 async def test_caller_cancellation_does_not_cancel_started_mutation() -> None:
-    """Verify caller cancellation does not cancel started mutation."""
     started, release = asyncio.Event(), asyncio.Event()
 
     class WaitingRuntime(FakeRuntime):
@@ -109,7 +103,6 @@ async def test_caller_cancellation_does_not_cancel_started_mutation() -> None:
 
 
 async def test_failed_initial_audit_prevents_mutation() -> None:
-    """Verify failed initial audit prevents mutation."""
 
     class FailingAudit(FakeAudit):
         """Simulate audit output failure before a runtime mutation starts."""

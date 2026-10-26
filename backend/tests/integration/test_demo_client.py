@@ -4,7 +4,6 @@ from pathlib import Path
 
 
 def test_demo_client_refuses_execution_without_confirmation() -> None:
-    """Verify demo client refuses execution without confirmation."""
     script = Path(__file__).parents[3] / "examples/demo.py"
     result = subprocess.run(
         [sys.executable, str(script), "execute", "00000000-0000-0000-0000-000000000000"],
