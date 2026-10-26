@@ -1,0 +1,98 @@
+[project]
+name = "docksight"
+version = "0.1.0"
+description = "Docker diagnostics with typed UI responses and confirmed actions"
+requires-python = ">=3.12"
+dependencies = [
+  "anyio>=4.8",
+  "anthropic>=0.80",
+  "docker[ssh]>=7.1",
+  "fastapi>=0.115",
+  "httpx>=0.28",
+  "openai>=2.0",
+  "paramiko>=3.5,<6",
+  "pydantic>=2.8,<3",
+  "pydantic-settings>=2.8",
+  "python-dotenv>=1.0",
+  "pyyaml>=6.0",
+  "pywin32>=308; sys_platform == 'win32'",
+  "requests>=2.32,<3",
+  "starlette>=0.40,<2",
+  "uvicorn>=0.34",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/docksight"]
+
+[dependency-groups]
+dev = [
+  "complexipy>=6.1,<7",
+  "hadolint-py>=2.15.1.2,<3",
+  "httpx2>=2.16",
+  "import-linter>=2.3",
+  "interrogate>=1.7,<2",
+  "pre-commit>=4.5,<5",
+  "pyright>=1.1.400",
+  "pytest>=8.3",
+  "pytest-asyncio>=0.25",
+  "pytest-deadfixtures>=3.1,<4",
+  "ruff>=0.11",
+  "types-docker>=7.1",
+  "types-pyyaml>=6.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "."]
+asyncio_mode = "auto"
+addopts = "-ra --import-mode=importlib"
+markers = ["docker: opt-in real Docker tests", "live: opt-in configured model tests", "remote: opt-in configured SSH or mTLS host tests"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC", "RUF"]
+
+[tool.pyright]
+include = ["src"]
+typeCheckingMode = "strict"
+pythonVersion = "3.12"
+venvPath = "."
+venv = ".venv"
+
+[tool.interrogate]
+fail-under = 100
+ignore-module = true
+ignore-init-method = false
+ignore-magic = false
+ignore-private = false
+ignore-semiprivate = false
+ignore-nested-functions = false
+ignore-nested-classes = false
+ignore-regex = ["^test_[a-z0-9_]+$"]
+
+[tool.complexipy]
+max-complexity-allowed = 10
+cache-dir = ".complexipy_cache"
+
+[tool.importlinter]
+root_package = "docksight"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Domain remains independent"
+type = "forbidden"
+source_modules = ["docksight.domain"]
+forbidden_modules = ["docksight.application", "docksight.adapters", "docksight.bootstrap", "pydantic", "pydantic_settings", "fastapi", "docker", "httpx", "httpx2", "openai", "anthropic", "yaml", "anyio"]
+
+[[tool.importlinter.contracts]]
+name = "Application owns its ports"
+type = "forbidden"
+source_modules = ["docksight.application"]
+forbidden_modules = ["docksight.adapters", "docksight.bootstrap", "fastapi", "docker", "httpx", "httpx2", "openai", "anthropic", "pydantic_settings", "yaml"]

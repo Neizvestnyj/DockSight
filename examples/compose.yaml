@@ -1,0 +1,21 @@
+name: docksight-demo
+services:
+  worker:
+    image: python:3.12-alpine@sha256:b658b05ce9c4eb97ec6fc19424818a1f31993659c2b505a532f470e83807815d
+    command: [python, -u, /app/worker.py]
+    restart: "no"
+    environment:
+      APP_ENV: demo
+      DEMO_SECRET: local-demo-secret-9281
+    volumes:
+      - ./worker.py:/app/worker.py:ro
+      - worker-state:/state
+    labels:
+      com.docksight.demo: "true"
+    healthcheck:
+      test: [CMD, python, -c, "from pathlib import Path; assert Path('/state/healthy').exists()"]
+      interval: 5s
+      timeout: 2s
+      retries: 3
+volumes:
+  worker-state:

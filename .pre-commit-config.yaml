@@ -1,0 +1,98 @@
+minimum_pre_commit_version: "4.5.0"
+default_stages: [pre-commit]
+default_install_hook_types: [pre-commit, commit-msg]
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: check-added-large-files
+
+  - repo: https://github.com/DavidAnson/markdownlint-cli2
+    rev: v0.24.0
+    hooks:
+      - id: markdownlint-cli2
+
+  - repo: https://github.com/alessandrojcm/commitlint-pre-commit-hook
+    rev: v9.27.0
+    hooks:
+      - id: commitlint
+        stages: [commit-msg]
+        pass_filenames: true
+        additional_dependencies: ["@commitlint/config-conventional"]
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+
+  - repo: local
+    hooks:
+      - id: hadolint
+        name: Lint Dockerfile
+        entry: uv run --project backend hadolint
+        language: system
+        files: (^|/)Dockerfile$
+
+      - id: ruff-check
+        name: Lint Python
+        entry: uv run --project backend ruff check backend examples
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: ruff-format
+        name: Check Python formatting
+        entry: uv run --project backend ruff format --check backend examples
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: pyright
+        name: Check Python types
+        entry: uv run --project backend pyright --project backend
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: architecture
+        name: Check hexagonal boundaries
+        entry: uv run --project backend lint-imports --config backend/pyproject.toml
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: docstrings
+        name: Check function and class docstrings
+        entry: uv run --project backend interrogate -c backend/pyproject.toml backend/src backend/tests examples
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: complexity
+        name: Check cognitive complexity
+        entry: uv run --directory backend complexipy src tests ../examples --plain --failed
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: pytest
+        name: Run backend tests and report duplicate fixtures
+        entry: uv run --project backend pytest backend/tests -q --dup-fixtures
+        language: system
+        pass_filenames: false
+        always_run: true
+        verbose: true
+
+      - id: dead-fixtures
+        name: Check unused pytest fixtures
+        entry: uv run --project backend pytest backend/tests --dead-fixtures -q
+        language: system
+        pass_filenames: false
+        always_run: true

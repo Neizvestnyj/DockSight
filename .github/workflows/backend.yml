@@ -1,0 +1,42 @@
+name: Backend
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+permissions:
+  contents: read
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - run: uv sync --project backend --locked
+      - run: uv run --project backend pre-commit run --all-files
+      - run: uv run --project backend pytest backend/tests/integration -m docker
+        env:
+          DOCKSIGHT_TEST_DOCKER: "1"
+      - run: docker build -f backend/Dockerfile -t docksight-backend:ci .
+      - run: uv run --project backend pytest backend/tests/integration/test_image.py
+        env:
+          DOCKSIGHT_TEST_DOCKER: "1"
+          DOCKSIGHT_TEST_BACKEND_IMAGE: docksight-backend:ci
+
+  compatibility:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: ${{ matrix.python }}
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - run: uv sync --project backend --locked --python ${{ matrix.python }}
+      - run: uv run --project backend --python ${{ matrix.python }} pytest backend/tests
