@@ -1,7 +1,37 @@
 # DockSight
 
-Docker diagnostics with evidence-linked UI cards and confirmed restart/stop actions. This repository currently contains
-the backend and an HTTP demo client.
+DockSight explains Docker container problems using runtime state, logs, and metrics. It can restart or stop a container
+after explicit user confirmation. This repository contains the backend and an HTTP demo client.
+
+## System overview
+
+This view follows a diagnostic question. The backend collects Docker facts, asks a model to explain them, and checks
+the response before returning it to the user.
+
+```mermaid
+flowchart LR
+    client["User via HTTP client"]
+    backend["DockSight Backend"]
+    docker["Docker Engine"]
+    model["Model: Ollama or cloud provider"]
+
+    client -->|"Diagnostic question"| backend
+    backend -->|"Diagnosis and container data"| client
+    backend -->|"Read state, logs, and metrics"| docker
+    docker -->|"Actual state, logs, and metrics"| backend
+    backend -->|"Question and sanitized Docker data"| model
+    model -->|"Proposed explanation"| backend
+```
+
+**Restart/stop follows a separate path:** user confirms a prepared command, the backend rechecks the target, and Docker
+executes the operation. The model has read-only tools.
+
+Responses contain an explanation and structured data for container status, logs, environment values, or stack summaries.
+A UI can display this data as cards. Available commands have server-issued action IDs and require a separate
+confirmation request.
+
+Read the [code dependency map](docs/architecture.md#dependencies),
+[diagnostic sequence](docs/api.md#diagnostic-stream), and [confirmed action sequence](docs/api.md#actions).
 
 ## Run locally
 

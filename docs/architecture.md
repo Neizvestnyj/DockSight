@@ -12,13 +12,33 @@ separation.
 
 ## Dependencies
 
-These are allowed source-code dependencies, not the direction of runtime calls:
+Arrows show allowed source-code dependencies. Outbound adapters implement application-owned ports; `bootstrap.py`
+selects the concrete implementations and injects them into use cases.
 
-```text
-inbound adapters  -> application -> domain
-outbound adapters -> application ports + domain
-bootstrap         -> application + adapters
+```mermaid
+flowchart LR
+    http["Inbound HTTP adapter"]
+    bootstrap["bootstrap.py: wire dependencies"]
+    outbound["Adapters: Docker, models, memory, audit"]
+    subgraph application["application"]
+        useCases["RuntimeQueries, Diagnostics, Actions"]
+        ports["Ports: runtime, model, and state interfaces"]
+    end
+    domain["domain: snapshots and action rules"]
+
+    http --> useCases
+    useCases --> ports
+    useCases --> domain
+    ports --> domain
+    outbound --> ports
+    outbound --> domain
+    bootstrap --> useCases
+    bootstrap --> outbound
 ```
+
+`RuntimeQueries` serves Docker reads, `Diagnostics` coordinates model-assisted diagnosis, and `Actions` prepares and
+executes confirmed commands. `Diagnostics` uses `ViewAssembler` to build typed responses. Ports are interfaces owned by
+the application and implemented by outbound adapters.
 
 - `domain` uses the standard library only. It owns values and business rules.
 - `application` owns use cases, ports, tool orchestration, and output contracts. Pydantic may validate application DTOs
@@ -80,6 +100,29 @@ enter through use cases and implement application-owned ports. Core code does no
   cannot be confirmed.
 - Add repositories only for stored state actually used by a workflow. Domain events, a generic unit of work, CQRS
   infrastructure, and an event bus are not required for this release.
+
+### Prepared action lifecycle
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    state "indeterminate (outcome unknown)" as indeterminate
+    [*] --> prepared: prepare
+    prepared --> running: confirmed request before expiry
+    prepared --> expired: execution requested at or after expiry
+    running --> succeeded: completion confirmed
+    running --> failed: rejection or known failure
+    running --> indeterminate: started operation result unknown
+    succeeded --> [*]
+    failed --> [*]
+    indeterminate --> [*]
+    expired --> [*]
+```
+
+`prepared` means awaiting confirmation; `running` means the execution request has been accepted. Expiry is recorded
+when the first execution request arrives at or after the deadline. The same idempotency key reuses an existing
+execution or retained outcome without another transition. An `indeterminate` outcome blocks further commands for that
+target for the backend process lifetime. See the [execution sequence](api.md#actions).
 
 ## Boundaries that matter
 
