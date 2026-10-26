@@ -39,6 +39,7 @@ dev = [
   "pyright>=1.1.400",
   "pytest>=8.3",
   "pytest-asyncio>=0.25",
+  "pytest-deadfixtures>=3.1,<4",
   "ruff>=0.11",
   "types-docker>=7.1",
   "types-pyyaml>=6.0",

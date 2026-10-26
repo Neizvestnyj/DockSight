@@ -93,6 +93,8 @@ actions. Models provide explanations and select from approved tools and widgets.
   `backend/tests/unit/<path>/test_<name>.py`. Group integration tests by contract.
 - Test behavior and failure boundaries. Do not test empty packages, forwarding code, or details solely to raise
   coverage.
+- Reject unused fixtures with `pytest --dead-fixtures`. Report potential duplicates during test execution with
+  `pytest --dup-fixtures`; duplicate return values are review hints, not proof that fixtures have the same purpose.
 - Mock provider HTTP calls in automated tests. Live model calls are opt-in; cloud smoke tests require supplied
   credentials and explicit authorization.
 - Isolate Docker integration fixtures with labels and unique names. Cleanup must address only resources created by that

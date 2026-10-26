@@ -83,8 +83,16 @@ repos:
         always_run: true
 
       - id: pytest
-        name: Run backend tests
-        entry: uv run --project backend pytest backend/tests -q
+        name: Run backend tests and report duplicate fixtures
+        entry: uv run --project backend pytest backend/tests -q --dup-fixtures
+        language: system
+        pass_filenames: false
+        always_run: true
+        verbose: true
+
+      - id: dead-fixtures
+        name: Check unused pytest fixtures
+        entry: uv run --project backend pytest backend/tests --dead-fixtures -q
         language: system
         pass_filenames: false
         always_run: true
