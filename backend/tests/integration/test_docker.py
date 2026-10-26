@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 from uuid import uuid4
@@ -24,6 +25,7 @@ pytestmark = [
 
 
 async def test_real_container_reads_redaction_and_mutations() -> None:
+    """Exercise Docker reads and mutations when startup logs are delayed."""
     owner = str(uuid4())
     client = docker.from_env()
     container = client.containers.run(
@@ -32,7 +34,7 @@ async def test_real_container_reads_redaction_and_mutations() -> None:
             "python",
             "-u",
             "-c",
-            "import time; print('password=test-sentinel-9281'); time.sleep(300)",
+            "import time; time.sleep(1); print('password=test-sentinel-9281'); time.sleep(300)",
         ],
         detach=True,
         name=f"docksight-test-{owner}",
@@ -45,7 +47,12 @@ async def test_real_container_reads_redaction_and_mutations() -> None:
         assert item.id == container.id
         assert item.state == "running"
         assert item.environment == (("APP_ENV", "test"),)
-        logs = await runtime.logs("local", container.id, 20, 2048)
+        async with asyncio.timeout(10):
+            while True:
+                logs = await runtime.logs("local", container.id, 20, 2048)
+                if logs.entries:
+                    break
+                await asyncio.sleep(0.05)
         assert logs.entries
         assert "test-sentinel-9281" not in str(logs)
         stats = await runtime.stats("local", container.id)
