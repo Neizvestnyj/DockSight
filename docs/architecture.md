@@ -1,5 +1,7 @@
 # Backend architecture
 
+Diagram source: [backend.drawio](diagrams/backend.drawio).
+
 ## Decision
 
 Use one hexagonal application, deployed as a monolith. Group related behavior inside its domain and application
@@ -15,26 +17,7 @@ separation.
 Arrows show allowed source-code dependencies. Outbound adapters implement application-owned ports; `bootstrap.py`
 selects the concrete implementations and injects them into use cases.
 
-```mermaid
-flowchart LR
-    http["Inbound HTTP adapter"]
-    bootstrap["bootstrap.py: wire dependencies"]
-    outbound["Adapters: Docker, models, memory, audit"]
-    subgraph application["application"]
-        useCases["RuntimeQueries, Diagnostics, Actions"]
-        ports["Ports: runtime, model, and state interfaces"]
-    end
-    domain["domain: snapshots and action rules"]
-
-    http --> useCases
-    useCases --> ports
-    useCases --> domain
-    ports --> domain
-    outbound --> ports
-    outbound --> domain
-    bootstrap --> useCases
-    bootstrap --> outbound
-```
+![Allowed source-code dependencies and application-owned ports](diagrams/code-dependencies.png)
 
 `RuntimeQueries` serves Docker reads, `Diagnostics` coordinates model-assisted diagnosis, and `Actions` prepares and
 executes confirmed commands. `Diagnostics` uses `ViewAssembler` to build typed responses. Ports are interfaces owned by
@@ -103,21 +86,7 @@ enter through use cases and implement application-owned ports. Core code does no
 
 ### Prepared action lifecycle
 
-```mermaid
-stateDiagram-v2
-    direction LR
-    state "indeterminate (outcome unknown)" as indeterminate
-    [*] --> prepared: prepare
-    prepared --> running: confirmed request before expiry
-    prepared --> expired: execution requested at or after expiry
-    running --> succeeded: completion confirmed
-    running --> failed: rejection or known failure
-    running --> indeterminate: started operation result unknown
-    succeeded --> [*]
-    failed --> [*]
-    indeterminate --> [*]
-    expired --> [*]
-```
+![Prepared action states and permitted transitions](diagrams/action-lifecycle.png)
 
 `prepared` means awaiting confirmation; `running` means the execution request has been accepted. Expiry is recorded
 when the first execution request arrives at or after the deadline. The same idempotency key reuses an existing

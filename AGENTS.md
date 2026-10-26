@@ -32,6 +32,8 @@ actions. Models provide explanations and select from approved tools and widgets.
 - Use a 120-character line limit for Python and Markdown prose. Leave long Markdown tables, URLs, and executable code
   blocks intact when wrapping would hurt readability.
 - Keep durable decisions and contracts in documentation; remove completed implementation plans.
+- Keep backend diagrams as named pages in `docs/diagrams/backend.drawio`, using the shared hand-drawn style. Update
+  their PNG previews and documentation links together with the source.
 
 ## Stack and boundaries
 

@@ -8,20 +8,7 @@ after explicit user confirmation. This repository contains the backend and an HT
 This view follows a diagnostic question. The backend collects Docker facts, asks a model to explain them, and checks
 the response before returning it to the user.
 
-```mermaid
-flowchart LR
-    client["User via HTTP client"]
-    backend["DockSight Backend"]
-    docker["Docker Engine"]
-    model["Model: Ollama or cloud provider"]
-
-    client -->|"Diagnostic question"| backend
-    backend -->|"Diagnosis and container data"| client
-    backend -->|"Read state, logs, and metrics"| docker
-    docker -->|"Actual state, logs, and metrics"| backend
-    backend -->|"Question and sanitized Docker data"| model
-    model -->|"Proposed explanation"| backend
-```
+![Diagnostic data flow between the client, backend, Docker, and model](docs/diagrams/system-overview.png)
 
 **Restart/stop follows a separate path:** user confirms a prepared command, the backend rechecks the target, and Docker
 executes the operation. The model has read-only tools.
@@ -43,7 +30,7 @@ by the application. `bootstrap.py` selects and connects the implementations.
 Arrows show runtime calls. Source-code dependencies point inward: the core does not import adapters. Memory adapters
 run in the same process as the core.
 
-[Edit in Draw.io](docs/diagrams/hexagonal-architecture.drawio) · [Dependency rules](docs/architecture.md#dependencies)
+[Edit backend diagrams](docs/diagrams/backend.drawio) · [Dependency rules](docs/architecture.md#dependencies)
 
 ## Run locally
 
