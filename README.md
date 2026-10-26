@@ -33,6 +33,18 @@ confirmation request.
 Read the [code dependency map](docs/architecture.md#dependencies),
 [diagnostic sequence](docs/api.md#diagnostic-stream), and [confirmed action sequence](docs/api.md#actions).
 
+## Backend architecture
+
+Use cases and domain rules form the core. Inbound adapters call use cases; outbound adapters implement the ports owned
+by the application. `bootstrap.py` selects and connects the implementations.
+
+![Hexagonal backend with core-owned ports and technology adapters](docs/diagrams/hexagonal-architecture.png)
+
+Arrows show runtime calls. Source-code dependencies point inward: the core does not import adapters. Memory adapters
+run in the same process as the core.
+
+[Edit in Draw.io](docs/diagrams/hexagonal-architecture.drawio) · [Dependency rules](docs/architecture.md#dependencies)
+
 ## Run locally
 
 Requires Python 3.12+, uv, Docker Engine/Desktop, and a tool-capable model server. Development and the backend image use
