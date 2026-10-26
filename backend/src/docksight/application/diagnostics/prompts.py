@@ -18,7 +18,9 @@ Previous turn summaries are context only; collect fresh evidence for this turn.
 FINAL_PROMPT: Final = """Return the final diagnosis using the supplied JSON schema.
 Use only evidence IDs collected in this turn. Keep the summary short and state
 what the evidence supports. Set uncertain=true if the cause is not established.
-Include widgets requested by the user whenever their required evidence exists.
-For a requested container_status card, a collected container snapshot is enough;
-missing metrics or an uncertain cause must not remove that card from widgets.
+Include every widget type requested by the user when matching evidence exists:
+container_status uses a container snapshot; log_anomalies uses log evidence;
+compose_stack uses stack evidence; env_inspector uses container/env evidence.
+An uncertain cause or missing metrics must not remove supported requested cards.
+Only container_status may propose an action; set action=null on every other widget.
 Use no cards when no relevant evidence is available. Return JSON only."""

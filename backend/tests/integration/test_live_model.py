@@ -42,7 +42,10 @@ async def test_configured_model_produces_an_evidence_linked_card(case: dict) -> 
             async for event in components.diagnostics.stream(
                 "operator",
                 "local",
-                "Inspect worker and include its container_status card. Explain only what the evidence supports.",
+                case.get(
+                    "query",
+                    "Inspect worker and include its container_status card. Explain only what the evidence supports.",
+                ),
             )
         ]
         assert events[-1]["type"] == "turn.completed", events[-1]
@@ -55,5 +58,7 @@ async def test_configured_model_produces_an_evidence_linked_card(case: dict) -> 
         assert card["snapshot"]["exit_code"] == case["exit_code"]
         if case.get("requires_uncertainty"):
             assert answer["uncertain"] is True
+        kinds = {card["widget_type"] for card in answer["widgets"]}
+        assert set(case.get("required_widgets", ["container_status"])) <= kinds
     finally:
         await components.close()

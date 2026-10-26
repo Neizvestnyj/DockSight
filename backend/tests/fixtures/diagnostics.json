@@ -4,5 +4,6 @@
   {"name": "oom", "state": "exited", "exit_code": 137, "oom_killed": true, "restart_count": 0, "log": "", "truncated": false},
   {"name": "unconfirmed_sigkill", "state": "exited", "exit_code": 137, "oom_killed": false, "restart_count": 0, "log": "", "truncated": false, "requires_uncertainty": true},
   {"name": "dependency", "state": "exited", "exit_code": 1, "oom_killed": false, "restart_count": 0, "log": "ConnectionRefusedError: database unavailable", "truncated": false},
-  {"name": "truncated_logs", "state": "exited", "exit_code": 1, "oom_killed": false, "restart_count": 0, "log": "Startup began; remaining logs unavailable", "truncated": true, "requires_uncertainty": true}
+  {"name": "truncated_logs", "state": "exited", "exit_code": 1, "oom_killed": false, "restart_count": 0, "log": "Startup began; remaining logs unavailable", "truncated": true, "requires_uncertainty": true},
+  {"name": "status_and_logs", "state": "exited", "exit_code": 1, "oom_killed": false, "restart_count": 0, "log": "DemoInitializationError: first startup attempt failed", "truncated": false, "query": "Inspect worker and read its logs to explain the exit. Include both container_status and log_anomalies cards.", "required_widgets": ["container_status", "log_anomalies"]}
 ]
