@@ -55,7 +55,8 @@ rtk proxy npm --prefix frontend run preview -- --port 4173
 rtk proxy npm --prefix frontend run test:browser
 ```
 
-Browser checks use an installed Chrome. Frontend checks are run locally; this branch does not add a frontend CI job.
+Browser checks use an installed Chrome. The Frontend workflow runs checks, tests, a production build, and browser
+scenarios on pull requests to `master`, pushes to `master`, and manual dispatches.
 See [frontend design and operation](docs/frontend.md) for contracts, deployment, and limitations.
 
 ## System overview

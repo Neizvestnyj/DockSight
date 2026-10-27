@@ -63,6 +63,10 @@ rtk proxy npm --prefix frontend run test:browser
 ```
 
 Browser tests use installed Chrome and mocked HTTP responses. They do not contact Docker or model providers.
+Build first; Playwright starts the production preview or reuses an existing local preview. Set `PLAYWRIGHT_PORT`
+to use another port. In CI, Playwright always owns its preview server, rejects focused tests, and produces an HTML report.
+The Frontend GitHub Actions workflow uses Node.js 24 and `npm ci`, installs Chrome with its system dependencies,
+and retains browser reports, screenshots, and failure traces for seven days.
 The production build self-hosts IBM Plex fonts. For deployment, serve `frontend/dist/` and reverse-proxy `/api` to
 DockSight, or enter a separately hosted HTTPS API base. Vite's proxy is for local development and preview only.
 
