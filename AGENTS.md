@@ -111,3 +111,17 @@ actions. Models provide explanations and select from approved tools and widgets.
   same checks through `uv`.
 - Start the backend at `0.1.0`. Before releases, decide whether behavior warrants a version and changelog update.
   Documentation-only changes need neither.
+
+## Frontend
+
+- Keep the React, strict TypeScript, and Vite client in `frontend/`. Use `feature/frontend` for frontend implementation.
+- Treat the backend widget schemas, runtime values, SSE events, and action lifecycle as the client contracts.
+  Validate API data at the transport boundary; render logs and environment values as text.
+- Keep API credentials in browser memory. Never put tokens in source, browser storage, URLs, or `VITE_*` variables.
+- Keep demo transport visibly separate from API transport. Derive demo inventory totals from fixture rows.
+- Keep diagnosis sessions scoped to one host. Do not imply durable conversation history or replayable streams.
+- Keep one idempotency key per action execution. Recover lost responses by reading the existing action.
+  Never retry a Docker mutation automatically. Require separate confirmation of the exact server-prepared target.
+- Run `rtk proxy npm --prefix frontend run check`, `rtk proxy npm --prefix frontend test`, and
+  `rtk proxy npm --prefix frontend run build`. Run browser checks against the production preview with
+  `rtk proxy npm --prefix frontend run test:browser` when changing layout or user flows.

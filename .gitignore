@@ -19,3 +19,10 @@ dist/
 .idea/
 .superpowers/
 *.log
+node_modules/
+.npm-cache/
+.taste-skill/inspect/
+frontend/test-results/
+frontend/playwright-report/
+*.tsbuildinfo
+frontend/lint-results.json

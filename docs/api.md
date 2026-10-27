@@ -28,6 +28,13 @@ applies field allowlists and redaction before returning owned values; the HTTP a
 
 `GET /hosts` reads configured host metadata without contacting Docker. Diagnostic requests use the model loop below.
 
+## Browser client
+
+The React client in `frontend/` implements this API through streaming `fetch` and keeps its bearer token in memory.
+Its separate, labeled Demo transport does not contact the API. Local Vite development and preview proxy `/api` to port
+8000; a deployed static build needs a reverse proxy or an HTTPS API base with explicitly configured CORS.
+See [frontend operation and limitations](frontend.md).
+
 ## Diagnostic stream
 
 POST a JSON body containing `host`, `query` (1-4000 characters), and optionally `session_id`. Sessions are bound to the
