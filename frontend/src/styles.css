@@ -251,17 +251,15 @@ textarea {
 }
 .brand {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
   padding: 0 6px;
-  font-size: 21px;
-  font-weight: 600;
-  letter-spacing: -0.7px;
 }
-.brand-mark {
-  width: 32px;
-  height: 32px;
-  color: var(--accent);
+.brand-logo {
+  display: block;
+  width: 180px;
+  height: auto;
 }
 .brand-sub {
   display: block;
@@ -269,7 +267,7 @@ textarea {
   font-size: 11px;
   letter-spacing: 0;
   font-weight: 400;
-  margin-top: 1px;
+  margin-left: 46px;
 }
 .host-switch {
   margin-top: 30px;
@@ -1382,9 +1380,8 @@ textarea {
     font-weight: 500;
     font-size: 15px;
   }
-  .mobile-brand .brand-mark {
-    width: 24px;
-    height: 24px;
+  .mobile-brand .brand-logo {
+    width: 130px;
   }
   .app-shell {
     display: block;
@@ -1517,9 +1514,8 @@ textarea {
     font-size: 14px;
     gap: 5px;
   }
-  .mobile-brand .brand-mark {
-    width: 21px;
-    height: 21px;
+  .mobile-brand .brand-logo {
+    width: 108px;
   }
   .workspace-trigger > span,
   .workspace-trigger > .breadcrumb-divider {

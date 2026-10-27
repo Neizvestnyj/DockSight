@@ -8,7 +8,7 @@ import { DemoControls } from './DemoControls';
 import { isMessageKey } from './messages';
 import { Connection } from './Connection';
 import { Investigation } from './Investigation';
-import { Mark, Modal } from './ui';
+import { Logo, Modal } from './ui';
 import { Sidebar } from './Sidebar';
 import { HostPicker } from './HostPicker';
 import { utc } from './format';
@@ -305,8 +305,7 @@ function Workspace({
           <Menu size={19} />
         </button>
         <span className="mobile-brand">
-          <Mark />
-          DockSight
+          <Logo />
         </span>
         <div className="breadcrumb">
           <button

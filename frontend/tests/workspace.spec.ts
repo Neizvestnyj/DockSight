@@ -148,6 +148,11 @@ test('shows refresh progress and completion and retains the received list after 
 });
 
 test('shows the product, all widgets, and accessible evidence navigation', async ({ page }, info) => {
+  const logo = page.getByRole('img', { name: 'DockSight', exact: true });
+  await expect(logo).toBeVisible();
+  await expect
+    .poll(() => logo.evaluate((element: HTMLImageElement) => element.complete && element.naturalWidth > 0))
+    .toBe(true);
   await expect(page.getByRole('heading', { name: 'Container investigation' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Container status', exact: true })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Container logs', exact: true })).toBeVisible();

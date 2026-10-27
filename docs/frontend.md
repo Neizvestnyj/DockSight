@@ -10,6 +10,10 @@ The cold grey frame, IBM Plex Sans, and a container-shaped sight mark identify D
 for code and identifiers. Color describes runtime state, uncertainty, and operation outcomes. There are no time-series
 charts because the backend provides observations rather than history.
 
+The supplied Recraft logo lives in `frontend/public/brand/docksight.svg`. Its viewBox trims the export's empty canvas;
+paths, letterforms, and colors remain unchanged. The sidebar and responsive header use the full wordmark. The favicon,
+`docksight-mark.svg`, reuses the five symbol paths without the lettering.
+
 The signature is a functional evidence chain: explanation references select a widget and an evidence observation.
 The backend returns response-level evidence, without per-sentence citations. The UI must not invent those citations.
 The evidence inspector shows the original source kind, host, container, UTC time, and sanitized data.

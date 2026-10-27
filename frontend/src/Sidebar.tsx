@@ -13,7 +13,7 @@ import {
   Server,
 } from 'lucide-react';
 import type { Container, Host } from './contracts';
-import { Mark, Status } from './ui';
+import { Logo, Status } from './ui';
 import { utc } from './format';
 
 interface Props {
@@ -65,10 +65,8 @@ export function Sidebar({
   return (
     <>
       <div className="brand">
-        <Mark />
-        <span>
-          DockSight<span className="brand-sub">{t('Docker diagnostics')}</span>
-        </span>
+        <Logo />
+        <span className="brand-sub">{t('Docker diagnostics')}</span>
       </div>
       <div className="host-switch">
         <label htmlFor={hostSelectId}>

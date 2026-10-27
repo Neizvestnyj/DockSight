@@ -87,16 +87,7 @@ export function Modal({
   );
 }
 
-/** Draw DockSight's container and observation crosshair as one product mark. */
-export function Mark() {
-  return (
-    <svg className="brand-mark" viewBox="0 0 32 32" fill="none" aria-hidden="true">
-      <path
-        d="m16 3 12 7v12l-12 7L4 22V10Zm0 0v13m12-6-12 6L4 10m12 6v13M10 16h12M16 10v12"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
+/** Display the supplied vector wordmark with its original letterforms and colors. */
+export function Logo() {
+  return <img className="brand-logo" src="/brand/docksight.svg" alt="DockSight" width="968" height="238" />;
 }
