@@ -242,23 +242,25 @@ export function Investigation({ investigation, client, demo, containers, draft, 
             {host || t('Select a host')}
             <span className="composer-hint">{t(' · Read-only diagnosis')}</span>
           </span>
-          {running ? (
-            <button type="button" className="primary" onClick={stop}>
-              <Square size={12} />
-              {t('Stop diagnosis')}
-            </button>
-          ) : (
-            <button className="primary" type="submit" disabled={!draft.trim() || !host}>
-              {t('Investigate')}
-              <ArrowRight size={15} />
-            </button>
-          )}
+          <div className="composer-actions">
+            <span className="query-limit">
+              {draft.length
+                ? `${draft.length.toLocaleString(locale)} / ${Number(4000).toLocaleString(locale)}`
+                : t('Ctrl / ⌘ + Enter to send')}
+            </span>
+            {running ? (
+              <button type="button" className="primary" onClick={stop}>
+                <Square size={12} />
+                {t('Stop diagnosis')}
+              </button>
+            ) : (
+              <button className="primary" type="submit" disabled={!draft.trim() || !host}>
+                {t('Investigate')}
+                <ArrowRight size={15} />
+              </button>
+            )}
+          </div>
         </div>
-        <span className="query-limit">
-          {draft.length
-            ? `${draft.length.toLocaleString(locale)} / ${Number(4000).toLocaleString(locale)}`
-            : t('Ctrl / ⌘ + Enter to send')}
-        </span>
       </form>
       {review && (
         <ActionReview
