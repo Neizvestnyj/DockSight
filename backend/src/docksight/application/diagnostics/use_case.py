@@ -16,7 +16,7 @@ from docksight.application.ports.state import SessionStore
 from docksight.application.redaction import Redactor
 from docksight.application.views.assembler import ViewAssembler
 from docksight.application.views.registry import proposal_schema
-from docksight.application.views.schemas import DiagnosisProposal, DiagnosisResponse
+from docksight.application.views.schemas import DiagnosisProposal, DiagnosisResponse, WidgetProposal
 from docksight.domain.diagnostics import JsonObject
 from docksight.domain.errors import DockSightError
 
@@ -27,6 +27,41 @@ async def _before_deadline[T](deadline: float, operation: Callable[[], Awaitable
         raise TimeoutError
     async with asyncio.timeout_at(deadline):
         return await operation()
+
+
+def _schema_issues(error: ValidationError) -> list[dict[str, object]]:
+    """Keep bounded error codes and known schema paths without submitted names or values."""
+    fields = DiagnosisProposal.model_fields.keys() | WidgetProposal.model_fields.keys()
+    return [
+        {
+            "type": issue["type"],
+            "loc": [part if isinstance(part, int) or part in fields else "<extra_field>" for part in issue["loc"]],
+        }
+        for issue in error.errors(include_url=False, include_input=False, include_context=False)[:8]
+    ]
+
+
+def _repair_feedback(error: ValidationError | DockSightError, context: EvidenceContext) -> str:
+    """Explain validation failures with field locations and trusted evidence groups, without raw values."""
+    failure: dict[str, object]
+    if isinstance(error, ValidationError):
+        failure = {"code": "invalid_schema", "issues": _schema_issues(error)}
+    else:
+        failure = {"code": error.code, "message": error.message}
+    groups: dict[tuple[str, str], list[str]] = {}
+    for ref, snapshot in context.snapshots.items():
+        groups.setdefault((snapshot.host, snapshot.id), []).append(ref)
+    return json.dumps(
+        {
+            "instruction": FINAL_PROMPT
+            + "\nCorrect the reported error. Each container evidence group is one container.",
+            "error": failure,
+            "evidence_ids": list(context.evidence),
+            "container_evidence_groups": list(groups.values()),
+            "log_evidence_ids": list(context.logs),
+            "stack_evidence_ids": list(context.stacks),
+        }
+    )
 
 
 class Diagnostics:
@@ -173,11 +208,7 @@ class Diagnostics:
                 messages.extend(
                     [
                         ModelMessage("assistant", reply.content),
-                        ModelMessage(
-                            "user",
-                            "Invalid schema or evidence references. Return a corrected JSON "
-                            "diagnosis using collected evidence only.",
-                        ),
+                        ModelMessage("user", _repair_feedback(exc, context)),
                     ]
                 )
         raise AssertionError("Unreachable finalization state")

@@ -58,6 +58,11 @@ Each requested tool emits its own progress events. Model and tool budgets bound 
 schema or evidence repair attempt. Container status cards prepare allowed actions through an internal `Actions.prepare`
 call. Executing those actions requires the separate confirmation flow below.
 
+Container status, log, and environment cards each reference exactly one container. A question about several containers
+uses separate cards, with at most eight cards per response. Repair feedback includes the validation failure, valid
+evidence IDs grouped by exact container, and available log/stack references. Schema errors omit submitted values and
+replace unknown field names with a fixed marker.
+
 </details>
 
 Events carry `schema_version: 1`, `request_id`, and `turn_id`:

@@ -7,8 +7,11 @@ actions. Models provide explanations and select from approved tools and widgets.
 
 - Keep backend and future frontend code in this repository.
 - Follow `docs/architecture.md` and keep `docs/api.md` aligned with the implementation.
-- Use `master` as the base branch and `feature/<lowercase-kebab-case>` for features. Implement the backend on
-  `feature/backend`.
+- Stay on the current branch unless the user explicitly approves a branch switch. Never run `git switch`,
+  `git checkout`, or any equivalent branch-changing operation without that approval. Backend or frontend ownership
+  does not authorize switching branches. Commit task changes on the current branch unless the user directs otherwise.
+- Use `master` as the base branch and `feature/<lowercase-kebab-case>` for new features when the user approves creating
+  or switching to a branch.
 - Run shell commands through `rtk`. On Windows, prefer `rtk read`, `rtk rg`, and `rtk proxy` for commands that need
   their original arguments.
 - Use patch-based edits. Keep files UTF-8 without BOM, with LF line endings.
@@ -115,7 +118,7 @@ actions. Models provide explanations and select from approved tools and widgets.
 
 ## Frontend
 
-- Keep the React, strict TypeScript, and Vite client in `frontend/`. Use `feature/frontend` for frontend implementation.
+- Keep the React, strict TypeScript, and Vite client in `frontend/`. Branch changes require explicit user approval.
 - Treat the backend widget schemas, runtime values, SSE events, and action lifecycle as the client contracts.
   Validate API data at the transport boundary; render logs and environment values as text.
 - Keep API credentials in browser memory. Never put tokens in source, browser storage, URLs, or `VITE_*` variables.
