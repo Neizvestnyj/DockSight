@@ -12,6 +12,7 @@ async function connectApi(page: Page) {
   await expect(page.getByRole('dialog', { name: 'Connect to DockSight' })).toBeVisible();
   await page.getByLabel('Bearer token').fill('browser-test-token');
   await page.getByRole('button', { name: 'Connect', exact: true }).click();
+  await expect(page.locator('.composer-foot')).toContainText('test-host');
 }
 
 /** Frame test data exactly as the backend's SSE encoder does. */

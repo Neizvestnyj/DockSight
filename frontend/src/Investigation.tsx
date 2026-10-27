@@ -1,3 +1,5 @@
+import { isMessageKey, stateLabel, type MessageKey } from './messages';
+import { useLocale } from './locale';
 import { useState } from 'react';
 import {
   ArrowDown,
@@ -14,7 +16,9 @@ import { ActionReview } from './ActionReview';
 import { EvidenceInspector, WidgetCard } from './Widgets';
 import type { useInvestigation } from './useInvestigation';
 
-const toolNames: Record<string, string> = {
+const evidenceNames = { container: 'State', logs: 'Logs', env: 'Env', stats: 'Metrics', stack: 'Stack' } as const;
+
+const toolNames: Record<string, MessageKey> = {
   list_containers: 'Reading container inventory',
   inspect_container: 'Inspecting container state',
   get_container_logs: 'Reading container logs',
@@ -34,6 +38,7 @@ interface Props {
 
 /** Compose conclusions, typed observations, and an always-available follow-up query. */
 export function Investigation({ investigation, client, demo, containers, draft, setDraft, host }: Props) {
+  const { t, locale } = useLocale();
   const { turns, running, run, stop } = investigation;
   const [viewId, setViewId] = useState<string | null>(null);
   const turn = turns.find((row) => row.id === viewId) ?? turns.at(-1);
@@ -42,6 +47,10 @@ export function Investigation({ investigation, client, demo, containers, draft, 
   const [outcomes, setOutcomes] = useState<Record<string, Action>>({});
   const [keys] = useState(() => new Map<string, string>());
   const answer = turn?.answer;
+  const localError = turn?.errorSource === 'client' && turn.error;
+  const errorMessage = localError
+    ? t(isMessageKey(localError) ? localError : 'Connection failed. Retry manually.')
+    : turn?.error;
   const selected = answer?.evidence.find((row) => row.id === reference) ?? answer?.evidence[0];
 
   /** Move keyboard focus with the selected source so the evidence chain works without a pointer. */
@@ -64,12 +73,12 @@ export function Investigation({ investigation, client, demo, containers, draft, 
       <div className="investigation-content">
         {turns.length > 1 && (
           <details className="session-turns">
-            <summary>{turns.length} turns in this tab session</summary>
+            <summary>{t('{count} turns in this tab session', { count: turns.length })}</summary>
             <div>
               {turns.map((row) => (
                 <button className="history-row" key={row.id} onClick={() => setViewId(row.id)}>
                   <span>{row.query}</span>
-                  <span className="muted">{row.state}</span>
+                  <span className="muted">{stateLabel(row.state, t, true)}</span>
                 </button>
               ))}
             </div>
@@ -82,10 +91,10 @@ export function Investigation({ investigation, client, demo, containers, draft, 
                 ↳
               </span>
               <h2>{turn.query}</h2>
-              <span className="muted query-author">Operator</span>
+              <span className="muted query-author">{t('Operator')}</span>
             </div>
             {turn.progress.length > 0 && (
-              <div className="progress" role="status" aria-label="Diagnostic progress">
+              <div className="progress" role="status" aria-label={t('Diagnostic progress')}>
                 {turn.progress.map((row, index) => (
                   <span key={index} className={row.state === 'failed' ? 'warning-text' : ''}>
                     {row.state === 'running' ? (
@@ -95,8 +104,8 @@ export function Investigation({ investigation, client, demo, containers, draft, 
                     ) : (
                       <Check size={13} />
                     )}
-                    {toolNames[row.tool] ?? `Read tool: ${row.tool}`}
-                    {demo && row.state === 'running' ? ' · simulated' : ''}
+                    {toolNames[row.tool] ? t(toolNames[row.tool]!) : t('Read tool: {tool}', { tool: row.tool })}
+                    {demo && row.state === 'running' ? t(' · simulated') : ''}
                   </span>
                 ))}
               </div>
@@ -105,27 +114,29 @@ export function Investigation({ investigation, client, demo, containers, draft, 
               <div className="collecting">
                 <LoaderCircle className="spin" size={19} />
                 <div>
-                  <strong>Following the evidence</strong>
-                  <p>Collecting read-only Docker observations. Cards arrive with the validated answer.</p>
+                  <strong>{t('Following the evidence')}</strong>
+                  <p>{t('Collecting read-only Docker observations. Cards arrive with the validated answer.')}</p>
                 </div>
               </div>
             )}
             {answer && (
               <>
-                <section className="conclusion" aria-label="Model explanation">
+                <section className="conclusion" aria-label={t('Model explanation')}>
                   <div className="conclusion-label">
                     <span className="sight-line" aria-hidden="true" />
-                    <h2>Diagnostic conclusion</h2>
+                    <h2>{t('Diagnostic conclusion')}</h2>
                     <span className={answer.uncertain ? 'uncertainty' : 'model-label'}>
-                      {answer.uncertain ? 'Cause uncertain' : 'Model explanation'}
+                      {t(answer.uncertain ? 'Cause uncertain' : 'Model explanation')}
                     </span>
                   </div>
                   <p>{answer.summary}</p>
                   {answer.uncertain && (
-                    <p className="uncertain-note">The collected observations do not establish a definitive cause.</p>
+                    <p className="uncertain-note">
+                      {t('The collected observations do not establish a definitive cause.')}
+                    </p>
                   )}
                   <div className="evidence-chain">
-                    <span>Trace the evidence</span>
+                    <span>{t('Trace the evidence')}</span>
                     <ArrowRight size={13} />
                     {answer.evidence
                       .filter((row) => row.kind === 'container' || row.kind === 'logs')
@@ -134,14 +145,14 @@ export function Investigation({ investigation, client, demo, containers, draft, 
                         <button
                           className="evidence-link"
                           key={row.id}
-                          aria-label={`View ${row.kind === 'logs' ? 'log' : 'container'} evidence`}
+                          aria-label={t(row.kind === 'logs' ? 'View log evidence' : 'View container evidence')}
                           onClick={() => inspect(row.id)}
                         >
-                          {row.kind === 'logs' ? 'Log evidence' : 'Container evidence'}
+                          {t(row.kind === 'logs' ? 'Log evidence' : 'Container evidence')}
                           <ArrowUpRight size={13} />
                         </button>
                       ))}
-                    {!answer.evidence.length && <span>No supporting evidence returned</span>}
+                    {!answer.evidence.length && <span>{t('No supporting evidence returned')}</span>}
                   </div>
                 </section>
                 <AnswerGrid
@@ -155,21 +166,27 @@ export function Investigation({ investigation, client, demo, containers, draft, 
               </>
             )}
             {(turn.state === 'failed' || turn.state === 'stopped') && (
-              <section className="turn-error" aria-label="Diagnostic interruption">
+              <section className="turn-error" aria-label={t('Diagnostic interruption')}>
                 <TriangleAlert size={18} />
                 <div>
-                  <h3>{turn.state === 'stopped' ? 'Diagnosis stopped' : 'Diagnosis could not finish'}</h3>
+                  <h3>{t(turn.state === 'stopped' ? 'Diagnosis stopped' : 'Diagnosis could not finish')}</h3>
                   <p role={turn.state === 'failed' ? 'alert' : undefined}>
-                    {turn.error ?? 'Collection was cancelled. Submit again when you are ready.'}
+                    {errorMessage ?? t('Collection was cancelled. Submit again when you are ready.')}
                   </p>
                   {turn.code && (
                     <p className="section-note">
                       {turn.code}
-                      {turn.requestId ? ` · Request ${turn.requestId}` : ''}
+                      {turn.requestId ? t(' · Request {id}', { id: turn.requestId }) : ''}
                     </p>
                   )}
+                  {localError && !isMessageKey(localError) && (
+                    <details>
+                      <summary>{t('Technical details')}</summary>
+                      <p>{localError}</p>
+                    </details>
+                  )}
                   <button className="secondary" disabled={running} onClick={() => submit(turn.query)}>
-                    Retry diagnosis
+                    {t('Retry diagnosis')}
                     <ArrowRight size={14} />
                   </button>
                 </div>
@@ -181,13 +198,14 @@ export function Investigation({ investigation, client, demo, containers, draft, 
             <div className="first-run-mark">
               <Terminal size={26} />
             </div>
-            <h2>Start an investigation</h2>
+            <h2>{t('Start an investigation')}</h2>
             <p>
-              Ask what happened on {host || 'a configured host'}. DockSight will gather observations before explaining
-              them.
+              {t('Ask what happened on {host}. DockSight will gather observations before explaining them.', {
+                host: host || t('a configured host'),
+              })}
             </p>
-            <button className="secondary" onClick={() => setDraft('Which containers need attention, and why?')}>
-              Check this host
+            <button className="secondary" onClick={() => setDraft(t('Which containers need attention, and why?'))}>
+              {t('Check this host')}
               <ArrowDown size={14} />
             </button>
           </section>
@@ -200,14 +218,14 @@ export function Investigation({ investigation, client, demo, containers, draft, 
           submit(draft);
         }}
       >
-        <label htmlFor="query">{turn ? 'Continue the investigation' : 'Ask DockSight'}</label>
+        <label htmlFor="query">{t(turn ? 'Continue the investigation' : 'Ask DockSight')}</label>
         <textarea
           id="query"
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           maxLength={4000}
           rows={2}
-          placeholder={turn ? 'What else should we check?' : 'Why did this container exit?'}
+          placeholder={t(turn ? 'What else should we check?' : 'Why did this container exit?')}
           onKeyDown={(event) => {
             if ((event.metaKey || event.ctrlKey) && event.key === 'Enter' && !running && draft.trim() && host) {
               event.preventDefault();
@@ -218,23 +236,25 @@ export function Investigation({ investigation, client, demo, containers, draft, 
         <div className="composer-foot">
           <span>
             <span className="scope-dot" />
-            {host || 'Select a host'}
-            <span className="composer-hint"> · Read-only diagnosis</span>
+            {host || t('Select a host')}
+            <span className="composer-hint">{t(' · Read-only diagnosis')}</span>
           </span>
           {running ? (
             <button type="button" className="primary" onClick={stop}>
               <Square size={12} />
-              Stop diagnosis
+              {t('Stop diagnosis')}
             </button>
           ) : (
             <button className="primary" type="submit" disabled={!draft.trim() || !host}>
-              Investigate
+              {t('Investigate')}
               <ArrowRight size={15} />
             </button>
           )}
         </div>
         <span className="query-limit">
-          {draft.length ? `${draft.length.toLocaleString()} / 4,000` : 'Ctrl / ⌘ + Enter to send'}
+          {draft.length
+            ? `${draft.length.toLocaleString(locale)} / ${Number(4000).toLocaleString(locale)}`
+            : t('Ctrl / ⌘ + Enter to send')}
         </span>
       </form>
       {review && (
@@ -269,6 +289,7 @@ function AnswerGrid({
   outcomes: Record<string, Action>;
   containers: Container[];
 }) {
+  const { t } = useLocale();
   const evidence = answer.evidence.find((row) => row.id === selected);
   const card = (widget: Answer['widgets'][number], index: number) => (
     <WidgetCard
@@ -285,18 +306,18 @@ function AnswerGrid({
     <div className="answer-grid">
       <div className="facts-column">
         <div className="column-label">
-          <h2>Runtime evidence</h2>
-          <span>Server observations</span>
+          <h2>{t('Runtime evidence')}</h2>
+          <span>{t('Server observations')}</span>
         </div>
         {answer.widgets
           .filter((row) => row.widget_type === 'container_status' || row.widget_type === 'log_anomalies')
           .map(card)}
-        {!answer.widgets.length && <p className="empty-note">No UI cards were returned for this answer.</p>}
+        {!answer.widgets.length && <p className="empty-note">{t('No UI cards were returned for this answer.')}</p>}
       </div>
-      <aside className="context-column" aria-label="Evidence and context">
+      <aside className="context-column" aria-label={t('Evidence and context')}>
         <div className="column-label">
-          <h2>Evidence trail</h2>
-          <span>{answer.evidence.length} references</span>
+          <h2>{t('Evidence trail')}</h2>
+          <span>{t('{count} references', { count: answer.evidence.length })}</span>
         </div>
         <div className="evidence-picker">
           {answer.evidence.map((row, index) => (
@@ -305,17 +326,12 @@ function AnswerGrid({
               onClick={() => inspect(row.id)}
               className={selected === row.id ? 'selected' : ''}
               aria-pressed={selected === row.id}
-              aria-label={`Inspect ${row.kind === 'container' ? 'State' : row.kind === 'stats' ? 'Metrics' : row.kind} observation ${index + 1}`}
+              aria-label={t('Inspect {kind} observation {count}', {
+                kind: t(evidenceNames[row.kind]),
+                count: index + 1,
+              })}
             >
-              {row.kind === 'container'
-                ? 'State'
-                : row.kind === 'logs'
-                  ? 'Logs'
-                  : row.kind === 'env'
-                    ? 'Env'
-                    : row.kind === 'stats'
-                      ? 'Metrics'
-                      : 'Stack'}
+              {t(evidenceNames[row.kind])}
             </button>
           ))}
         </div>

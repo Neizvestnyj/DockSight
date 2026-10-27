@@ -5,6 +5,20 @@ import { useInvestigation } from './useInvestigation';
 import type { TurnEvent, TurnInput } from './contracts';
 
 describe('host-scoped diagnostic session', () => {
+  it('distinguishes local transport errors from identical server-authored messages', async () => {
+    const client = new DemoClient();
+    const message = 'Connection ended before the diagnostic turn completed. Retry manually.';
+    client.diagnose = async () => {
+      throw new Error(message);
+    };
+    const { result } = renderHook(() => useInvestigation(client, 'local'));
+    await act(() => result.current.run('First'));
+    expect(result.current.turns[0]).toMatchObject({ errorSource: 'client', error: message });
+    client.diagnose = async (_input, receive) =>
+      receive({ schema_version: 1, request_id: 'r', turn_id: 't', type: 'turn.failed', code: 'upstream', message });
+    await act(() => result.current.run('Retry'));
+    expect(result.current.turns[1]).toMatchObject({ errorSource: 'server', error: message });
+  });
   it('drops an expired session and reuses only the replacement session on subsequent turns', async () => {
     const inputs: TurnInput[] = [];
     const client = new DemoClient();

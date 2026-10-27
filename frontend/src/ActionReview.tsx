@@ -1,3 +1,5 @@
+import { useLocale } from './locale';
+import type { MessageKey } from './messages';
 import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, ArrowRight, Check, RefreshCw } from 'lucide-react';
 import { executeOnce } from './api';
@@ -16,9 +18,10 @@ interface Props {
 
 /** Keep confirmation, execution delivery, and authoritative Docker outcome separate. */
 export function ActionReview({ action, client, demo, name, close, update, keys }: Props) {
+  const { t } = useLocale();
   const [current, setCurrent] = useState(action);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState<MessageKey | ''>('');
   const [now, setNow] = useState(Date.now);
   const sent = useRef(false);
   const [submitted, setSubmitted] = useState(false);
@@ -52,9 +55,9 @@ export function ActionReview({ action, client, demo, name, close, update, keys }
     keys.set(current.id, key);
     try {
       publish(await executeOnce(client, current.id, key));
-    } catch (failure) {
+    } catch {
       setError(
-        failure instanceof Error ? failure.message : 'Execution response unavailable. Check the existing action.',
+        'Execution response unavailable. The Docker result is unconfirmed. Check this existing action before retrying.',
       );
     } finally {
       setBusy(false);
@@ -78,40 +81,42 @@ export function ActionReview({ action, client, demo, name, close, update, keys }
 
   return (
     <Modal
-      title={current.state === 'prepared' && !submitted ? `Review ${current.operation}` : 'Action outcome'}
+      title={current.state === 'prepared' && !submitted ? t(`Review ${current.operation}`) : t('Action outcome')}
       close={close}
     >
-      {demo && <p className="demo-notice">Demo operation · no Docker mutation</p>}
+      {demo && <p className="demo-notice">{t('Demo operation · no Docker mutation')}</p>}
       <div className="action-operation">
-        <span>{current.operation === 'stop' ? 'Stop container' : 'Restart container'}</span>
-        <Status state={state} />
+        <span>{t(current.operation === 'stop' ? 'Stop container' : 'Restart container')}</span>
+        <Status state={state} action />
       </div>
       <p>
-        {current.operation === 'stop'
-          ? 'The container will stop serving its workload.'
-          : 'The container will be interrupted and started again.'}
+        {t(
+          current.operation === 'stop'
+            ? 'The container will stop serving its workload.'
+            : 'The container will be interrupted and started again.',
+        )}
       </p>
       <dl className="confirmation-facts">
         <div>
-          <dt>Host</dt>
+          <dt>{t('Host')}</dt>
           <dd>{current.host}</dd>
         </div>
         <div>
-          <dt>Container</dt>
-          <dd>{name ?? 'Exact target below'}</dd>
+          <dt>{t('Container')}</dt>
+          <dd>{name ?? t('Exact target below')}</dd>
         </div>
         <div>
-          <dt>Exact container ID</dt>
+          <dt>{t('Exact container ID')}</dt>
           <dd>
             <code>{current.container_id}</code>
           </dd>
         </div>
         <div>
-          <dt>Expires</dt>
+          <dt>{t('Expires')}</dt>
           <dd>{new Date(current.expires_at).toISOString().replace('T', ' ').replace('.000Z', ' UTC')}</dd>
         </div>
         <div>
-          <dt>Prepared action ID</dt>
+          <dt>{t('Prepared action ID')}</dt>
           <dd>
             <code>{current.id}</code>
           </dd>
@@ -126,44 +131,45 @@ export function ActionReview({ action, client, demo, name, close, update, keys }
       {state === 'indeterminate' && (
         <p className="inline-warning">
           <AlertTriangle size={17} />
-          The Docker result is not confirmed. Inspect Docker directly. This mutation cannot be repeated automatically;
-          the target is fenced by the backend.
+          {t(
+            'The Docker result is not confirmed. Inspect Docker directly. This mutation cannot be repeated automatically; the target is fenced by the backend.',
+          )}
         </p>
       )}
       {state === 'succeeded' && (
         <p className="section-note">
-          These cards remain historical observations. Run a new diagnosis to observe the current container state.
+          {t('These cards remain historical observations. Run a new diagnosis to observe the current container state.')}
         </p>
       )}
       {state === 'expired' && (
         <p className="inline-warning">
-          This action has expired. Run a new diagnosis to obtain a fresh server-prepared action.
+          {t('This action has expired. Run a new diagnosis to obtain a fresh server-prepared action.')}
         </p>
       )}
       {error && (
         <p role="alert" className="inline-error">
-          {error}
+          {t(error)}
         </p>
       )}
       <footer className="modal-actions">
         <button className="secondary" onClick={close}>
-          {state === 'prepared' ? 'Cancel' : 'Close'}
+          {t(state === 'prepared' ? 'Cancel' : 'Close')}
         </button>
         {(submitted || keys.has(current.id) || current.state !== 'prepared') && (
           <button className="secondary" disabled={busy} onClick={() => void check()}>
             <RefreshCw size={14} />
-            Check existing action
+            {t('Check existing action')}
           </button>
         )}
         {state === 'prepared' && !submitted && (!keys.has(current.id) || checkedPrepared) && (
           <button className="primary" disabled={busy} onClick={() => void confirm()}>
-            {keys.has(current.id) ? 'Retry confirmed' : 'Confirm'} {current.operation}
+            {keys.has(current.id) ? t(`Retry confirmed ${current.operation}`) : t(`Confirm ${current.operation}`)}
             <ArrowRight size={15} />
           </button>
         )}
         {busy && (
           <span role="status" className="muted">
-            Checking delivery…
+            {t('Checking delivery…')}
           </span>
         )}
       </footer>

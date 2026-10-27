@@ -15,8 +15,8 @@ server action. The screen asks: what happened to the container, what supports th
 | --- | --- |
 | TypeScript, ESLint, Prettier | Passed |
 | Production Vite build | Passed |
-| Unit and component tests | Passed |
-| Chrome browser tests | 27 scenarios passed across 1440, 768, and 390 px |
+| Unit and component tests | 27 passed |
+| Chrome browser tests | 36 scenarios passed across 1440, 768, and 390 px |
 | Axe on workspace and action dialog | No violations in tested states |
 | Design skill inspector | 0 FAIL, 0 WARN at all three widths |
 | Existing pre-commit checks | Passed; backend suite: 111 passed, 11 opt-in tests skipped |
@@ -27,6 +27,12 @@ host changes, retained demo settings, manual retry, cancellation, HTTP-200 termi
 POST SSE, lost execution response recovery by GET, long identifiers, and hostile-looking text in logs and environment.
 Unit checks also cover split UTF-8/CRLF SSE frames, heartbeats, early EOF, unsupported versions, session expiry,
 late events after cancellation, running action reads, and retaining the execution key after checking prepared state.
+
+Localization checks cover automatic browser-language resolution, explicit English/Russian selection, returning to
+System, reload persistence, invalid/blocked storage, languagechange events, Russian plural forms, Cyrillic font loading,
+and preserving questions, drafts, evidence, action IDs, and verbatim logs/env/API text. Local transport errors are
+localized; identical text authored by the API stays verbatim. Russian workspace and confirmation dialogs were checked
+at all three widths with no Axe violations or page overflow.
 
 ## Final app critique
 
@@ -55,9 +61,14 @@ Independent review reproduced two issues: demo controls diverged from retained t
 and mobile connection settings opened above an existing navigation modal with a duplicate title ID. Both were fixed
 and covered by regressions. There are no deferred code-review findings.
 
+Localization review found an English-only path for frontend-authored stream errors. Error provenance now distinguishes
+local errors from server messages; unit and browser regressions verify both origins, including identical text.
+
 Frontend CI was not added: automatic approval review could not authorize the workflow-file change because its service
 reported a usage limit. Existing CI configuration is unchanged. Local verification remains reproducible with the
 commands in [frontend operation](frontend.md).
 
 Screenshots: [desktop](screenshots/frontend-desktop.jpg), [tablet](screenshots/frontend-tablet.jpg),
 [mobile](screenshots/frontend-mobile.jpg), and [indeterminate action](screenshots/frontend-action.png).
+Russian UI: [desktop](screenshots/frontend-russian-desktop.png), [tablet](screenshots/frontend-russian-tablet.png),
+[mobile](screenshots/frontend-russian-mobile.png), and [confirmation](screenshots/frontend-russian-action.png).

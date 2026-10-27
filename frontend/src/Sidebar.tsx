@@ -1,3 +1,4 @@
+import { useLocale } from './locale';
 import { useId } from 'react';
 import { Activity, ArrowRight, ArrowUpRight, Box, Cable, CircleHelp, Plus, RefreshCw, Server } from 'lucide-react';
 import type { Container, Host } from './contracts';
@@ -43,53 +44,54 @@ export function Sidebar({
   connect,
   returnDemo,
 }: Props) {
+  const { t } = useLocale();
   const hostSelectId = useId();
   return (
     <>
       <div className="brand">
         <Mark />
         <span>
-          DockSight<span className="brand-sub">Docker diagnostics</span>
+          DockSight<span className="brand-sub">{t('Docker diagnostics')}</span>
         </span>
       </div>
       <div className="host-switch">
         <label htmlFor={hostSelectId}>
           <Server size={14} />
-          Configured host
+          {t('Configured host')}
         </label>
         <select
           id={hostSelectId}
-          aria-label="Configured host"
+          aria-label={t('Configured host')}
           value={host}
           onChange={(event) => {
             changeHost(event.target.value);
           }}
           disabled={hostLoading || !hosts.length}
         >
-          {!hosts.length && <option value="">{hostLoading ? 'Loading hosts…' : 'No configured hosts'}</option>}
+          {!hosts.length && <option value="">{t(hostLoading ? 'Loading hosts…' : 'No configured hosts')}</option>}
           {hosts.map((row) => (
             <option value={row.id} key={row.id}>
               {row.name}
             </option>
           ))}
         </select>
-        <span className="host-id">{host || 'Connect a backend to begin'}</span>
+        <span className="host-id">{host || t('Connect a backend to begin')}</span>
       </div>
       {hostError && (
         <div className="sidebar-error" role="alert">
           <p>{hostError}</p>
           <button className="text-button" onClick={retryHosts}>
-            Retry hosts
+            {t('Retry hosts')}
           </button>
         </div>
       )}
       <div className="workspace-nav">
         <Activity size={16} />
-        <span>Investigations</span>
+        <span>{t('Investigations')}</span>
         <button
           className="icon-button"
-          aria-label="New investigation"
-          title="New investigation"
+          aria-label={t('New investigation')}
+          title={t('New investigation')}
           onClick={() => {
             newInvestigation();
           }}
@@ -99,11 +101,11 @@ export function Sidebar({
       </div>
       <section className="inventory">
         <header>
-          <h2>Containers</h2>
+          <h2>{t('Containers')}</h2>
           <span>{inventory.length}</span>
           <button
             className={`icon-button${loading ? ' refreshing' : ''}`}
-            aria-label="Refresh container inventory"
+            aria-label={t('Refresh container inventory')}
             onClick={refresh}
             disabled={loading || !host}
           >
@@ -112,14 +114,15 @@ export function Sidebar({
         </header>
         {inventoryError ? (
           <div className="sidebar-error">
+            <p>{t('Could not read Docker inventory.')}</p>
             <p role="alert">{inventoryError}</p>
             <button className="text-button" onClick={refresh}>
-              Retry inventory
+              {t('Retry inventory')}
             </button>
           </div>
         ) : loading && host ? (
           <div className="inventory-loading" role="status">
-            Reading Docker inventory…
+            {t('Reading Docker inventory…')}
             <div />
             <div />
             <div />
@@ -143,23 +146,23 @@ export function Sidebar({
             ))}
           </div>
         ) : (
-          <p className="empty-note">No containers on this host.</p>
+          <p className="empty-note">{t('No containers on this host.')}</p>
         )}
       </section>
       <div className="sidebar-bottom">
         <p>
-          Sessions live in this tab.
+          {t('Sessions live in this tab.')}
           <br />
-          Backend state is temporary.
+          {t('Backend state is temporary.')}
         </p>
         <button className="text-button" onClick={about}>
           <CircleHelp size={15} />
-          About this workspace
+          {t('About this workspace')}
           <ArrowRight size={14} />
         </button>
         <button className="connection-button" onClick={demo ? connect : returnDemo}>
           <Cable size={16} />
-          {demo ? 'Connect your API' : 'Return to demo'}
+          {t(demo ? 'Connect your API' : 'Return to demo')}
           <ArrowUpRight size={14} />
         </button>
       </div>

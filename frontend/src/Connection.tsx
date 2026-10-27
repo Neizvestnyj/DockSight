@@ -1,16 +1,19 @@
+import { useLocale } from './locale';
 import { useState } from 'react';
 import { ArrowRight, PlugZap } from 'lucide-react';
 import { ApiClient } from './api';
 import { Modal } from './ui';
+import { isMessageKey, type MessageKey } from './messages';
 
 /** Accept a browser API endpoint, never a Docker daemon URL or a compiled credential. */
 export function Connection({ close, connect }: { close: () => void; connect: (client: ApiClient) => void }) {
+  const { t } = useLocale();
   const [endpoint, setEndpoint] = useState('/api/v1');
   const [token, setToken] = useState('');
-  const [error, setError] = useState('');
+  const [error, setError] = useState<MessageKey | ''>('');
   return (
-    <Modal title="Connect to DockSight" close={close}>
-      <p>Use your DockSight backend and its configured Docker hosts.</p>
+    <Modal title={t('Connect to DockSight')} close={close}>
+      <p>{t('Use your DockSight backend and its configured Docker hosts.')}</p>
       <form
         onSubmit={(event) => {
           event.preventDefault();
@@ -25,12 +28,13 @@ export function Connection({ close, connect }: { close: () => void; connect: (cl
             if (!token.trim()) throw new Error('Enter a bearer token.');
             connect(new ApiClient(base, token.trim()));
           } catch (failure) {
-            setError(failure instanceof Error ? failure.message : 'Check the API endpoint.');
+            const message = failure instanceof Error ? failure.message : '';
+            setError(isMessageKey(message) ? message : 'Check the API endpoint.');
           }
         }}
       >
         <label className="field">
-          API base URL
+          {t('API base URL')}
           <input
             required
             value={endpoint}
@@ -39,11 +43,12 @@ export function Connection({ close, connect }: { close: () => void; connect: (cl
           />
         </label>
         <p id="api-help" className="section-note">
-          The local Vite proxy forwards /api to 127.0.0.1:8000. A remote API must allow this browser origin through
-          CORS.
+          {t(
+            'The local Vite proxy forwards /api to 127.0.0.1:8000. A remote API must allow this browser origin through CORS.',
+          )}
         </p>
         <label className="field">
-          Bearer token
+          {t('Bearer token')}
           <input
             type="password"
             autoComplete="off"
@@ -54,20 +59,20 @@ export function Connection({ close, connect }: { close: () => void; connect: (cl
           />
         </label>
         <p id="token-help" className="section-note">
-          Kept only in this tab's memory. Refreshing disconnects the API and returns to demo.
+          {t("Kept only in this tab's memory. Refreshing disconnects the API and returns to demo.")}
         </p>
         {error && (
           <p className="inline-error" role="alert">
-            {error}
+            {t(error)}
           </p>
         )}
         <footer className="modal-actions">
           <button type="button" className="secondary" onClick={close}>
-            Cancel
+            {t('Cancel')}
           </button>
           <button type="submit" className="primary">
             <PlugZap size={15} />
-            Connect
+            {t('Connect')}
             <ArrowRight size={15} />
           </button>
         </footer>

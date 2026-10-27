@@ -13,6 +13,7 @@ export interface Turn {
   progress: ToolProgress[];
   answer?: Answer;
   error?: string;
+  errorSource?: 'server' | 'client';
   code?: string;
   requestId?: string;
 }
@@ -89,7 +90,7 @@ export function useInvestigation(client: Transport, host: string, initial?: Answ
           case 'turn.completed':
             return { ...common, state: 'completed' };
           case 'turn.failed':
-            return { ...common, state: 'failed', error: event.message, code: event.code };
+            return { ...common, state: 'failed', error: event.message, errorSource: 'server', code: event.code };
           default:
             return common;
         }
@@ -127,6 +128,7 @@ export function useInvestigation(client: Transport, host: string, initial?: Answ
                 state: 'failed',
                 code,
                 error: error instanceof Error ? error.message : 'Connection failed. Retry manually.',
+                errorSource: error instanceof ApiError ? error.source : 'client',
               }
             : turn,
         ),

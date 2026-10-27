@@ -16,6 +16,7 @@ export class ApiError extends Error {
     message: string,
     public readonly code: string,
     public readonly requestId?: string,
+    public readonly source: 'server' | 'client' = 'server',
   ) {
     super(message);
     this.name = 'ApiError';
@@ -28,7 +29,7 @@ async function rejectResponse(response: Response): Promise<never> {
     .object({ code: z.string(), message: z.string(), request_id: z.string().optional() })
     .safeParse(await response.json().catch(() => null));
   if (result.success) throw new ApiError(result.data.message, result.data.code, result.data.request_id);
-  throw new ApiError(`API request failed (HTTP ${response.status}).`, 'http_error');
+  throw new ApiError(`API request failed (HTTP ${response.status}).`, 'http_error', undefined, 'client');
 }
 
 /** Authenticate bounded requests; never store credentials or retry mutations. */

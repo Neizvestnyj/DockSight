@@ -61,6 +61,22 @@ DockSight, or enter a separately hosted HTTPS API base. Vite's proxy is for loca
 Keyboard: Tab follows reading order, Enter activates controls, Escape closes dialogs, and Ctrl/Cmd+Enter submits a query.
 **Ask DockSight** focuses the composer without covering evidence. Source links move focus to the selected observation.
 
+## Language
+
+The language control beside Ask DockSight offers System, English, and Русский. System resolves the first supported
+language from `navigator.languages`, falling back to English; it follows browser `languagechange` events. Browsers
+provide language preferences rather than direct access to operating-system settings.
+
+Only the preference is stored under `docksight.locale` in localStorage. Invalid preferences or unavailable storage
+fall back to System; a manual selection still works in memory if storage is blocked. The root document language and
+tab title follow the selected locale. Switching preserves connections, host sessions, questions, drafts, evidence,
+server-issued action IDs, and execution keys.
+
+Typed UI copy, status labels, accessibility names, counts, and numeric formatting are localized. Raw API/model text,
+container/image/host identities, log messages and timestamps, environment keys/values, and observation JSON remain
+verbatim. The demo's example questions and explanations also retain their original text. Self-hosted Latin/Cyrillic
+font subsets use distinct unicode ranges. Code, comments, documentation, and transport contracts remain in English.
+
 ## Limitations
 
 All initial example names, images, log messages, and observations in `frontend/src/demo.ts` are simulated; fixture state

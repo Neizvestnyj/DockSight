@@ -1,3 +1,5 @@
+import { LocaleProvider, LanguageSwitch } from './LocaleProvider';
+import { useLocale } from './locale';
 import { useEffect, useState } from 'react';
 import { ArrowRight, ChevronRight, FlaskConical, Menu, MessageSquarePlus } from 'lucide-react';
 import type { Container, Host, Transport } from './contracts';
@@ -17,6 +19,16 @@ interface ConnectionState {
 
 /** Own the connection lifetime; a new backend or host gets a separate transient workspace. */
 export default function App() {
+  return (
+    <LocaleProvider>
+      <ConnectedApp />
+    </LocaleProvider>
+  );
+}
+
+/** Keep the active connection stable while presentation language changes. */
+function ConnectedApp() {
+  const { t } = useLocale();
   const [connection, setConnection] = useState<ConnectionState>(() => ({
     client: new DemoClient(),
     demo: true,
@@ -73,7 +85,9 @@ export default function App() {
           setShowExample(false);
         }}
         showExample={showExample}
-        hostError={hostError}
+        hostError={
+          hostError ? t('Could not load configured hosts. Check the API endpoint, bearer token, and CORS.') : ''
+        }
         hostLoading={hostLoading}
         retryHosts={() => {
           setHostLoading(true);
@@ -115,6 +129,7 @@ function Workspace({
   returnDemo,
   showExample,
 }: WorkspaceProps) {
+  const { t } = useLocale();
   const { client, demo } = connection;
   const demoClient = client instanceof DemoClient ? client : null;
   const [initial] = useState(() =>
@@ -176,7 +191,12 @@ function Workspace({
   /** Offer a scoped question without sending it until the operator submits. */
   function chooseContainer(container: Container) {
     setSelected(container.id);
-    setDraft(`Investigate ${container.name} (${container.id}). What happened, and what evidence supports it?`);
+    setDraft(
+      t('Investigate {name} ({id}). What happened, and what evidence supports it?', {
+        name: container.name,
+        id: container.id,
+      }),
+    );
     setMenu(false);
     const matched = scenarios.find((row) => row.container === container.name);
     if (demoClient && matched) {
@@ -220,13 +240,17 @@ function Workspace({
   return (
     <div className="app-shell">
       <a className="skip-link" href="#main">
-        Skip to investigation
+        {t('Skip to investigation')}
       </a>
-      <aside className="sidebar" aria-label="Host and container inventory">
+      <aside className="sidebar" aria-label={t('Host and container inventory')}>
         <Sidebar {...sidebarProps} />
       </aside>
       <header className="topbar">
-        <button className="icon-button mobile-menu" aria-label="Open host and containers" onClick={() => setMenu(true)}>
+        <button
+          className="icon-button mobile-menu"
+          aria-label={t('Open host and containers')}
+          onClick={() => setMenu(true)}
+        >
           <Menu size={19} />
         </button>
         <span className="mobile-brand">
@@ -234,15 +258,15 @@ function Workspace({
           DockSight
         </span>
         <div className="breadcrumb">
-          <span>Workspace</span>
+          <span>{t('Workspace')}</span>
           <ChevronRight size={13} />
-          <strong>{name || 'Docker hosts'}</strong>
+          <strong>{name || t('Docker hosts')}</strong>
         </div>
         <div className="connection-state">
           <span className={`scope-dot${demo ? ' demo-dot' : ''}`} />
-          {demo ? 'Demo' : 'API mode'}
+          {t(demo ? 'Demo' : 'API mode')}
           <button className="text-button" onClick={connect}>
-            {demo ? 'Connect API' : 'Change connection'}
+            {t(demo ? 'Connect API' : 'Change connection')}
             <ArrowRight size={13} />
           </button>
         </div>
@@ -250,40 +274,43 @@ function Workspace({
       <main id="main" className="sheet">
         <div className="page-heading">
           <div>
-            <h1>Container investigation</h1>
+            <h1>{t('Container investigation')}</h1>
             <p>
               {inventory[0]
-                ? `Inventory observed ${utc(inventory[0].observed_at)} · snapshots, not a live feed`
-                : 'Docker diagnostics · host-scoped sessions'}
+                ? t('Inventory observed {time} · snapshots, not a live feed', { time: utc(inventory[0].observed_at) })
+                : t('Docker diagnostics · host-scoped sessions')}
             </p>
           </div>
-          <button
-            className="secondary"
-            aria-label="Ask DockSight"
-            onClick={() => document.getElementById('query')?.focus()}
-          >
-            <MessageSquarePlus size={15} />
-            Ask DockSight
-          </button>
+          <div className="heading-actions">
+            <LanguageSwitch />
+            <button
+              className="secondary"
+              aria-label={t('Ask DockSight')}
+              onClick={() => document.getElementById('query')?.focus()}
+            >
+              <MessageSquarePlus size={15} />
+              {t('Ask DockSight')}
+            </button>
+          </div>
         </div>
         {demo && (
           <div className="demo-bar">
             <div>
               <FlaskConical size={15} />
-              <strong>Demo</strong>
-              <span>Simulated observations · no Docker changes</span>
+              <strong>{t('Demo')}</strong>
+              <span>{t('Simulated observations · no Docker changes')}</span>
             </div>
             <label>
-              Scenario
+              {t('Scenario')}
               <select
-                aria-label="Demo scenario"
+                aria-label={t('Demo scenario')}
                 value={scenario}
                 onChange={(event) => chooseScenario(event.target.value as ScenarioId)}
                 disabled={investigation.running}
               >
                 {scenarios.map((item) => (
                   <option key={item.id} value={item.id}>
-                    {item.name}
+                    {t(item.name)}
                   </option>
                 ))}
               </select>
@@ -292,37 +319,37 @@ function Workspace({
         )}
         {demoClient && (
           <details className="demo-controls">
-            <summary>Demo controls</summary>
+            <summary>{t('Demo controls')}</summary>
             <div>
               <label>
-                Connection behavior
+                {t('Connection behavior')}
                 <select
-                  aria-label="Demo connection behavior"
+                  aria-label={t('Demo connection behavior')}
                   defaultValue={demoClient.fault}
                   onChange={(event) => {
                     demoClient.setFault(event.target.value as DemoFault);
                     refresh();
                   }}
                 >
-                  <option value="none">Normal</option>
-                  <option value="stream">Turn fails after collection</option>
-                  <option value="offline">Connection unavailable</option>
-                  <option value="empty">Empty inventory</option>
+                  <option value="none">{t('Normal')}</option>
+                  <option value="stream">{t('Turn fails after collection')}</option>
+                  <option value="offline">{t('Connection unavailable')}</option>
+                  <option value="empty">{t('Empty inventory')}</option>
                 </select>
               </label>
               <label>
-                Action outcome
+                {t('Action outcome')}
                 <select
-                  aria-label="Demo action outcome"
+                  aria-label={t('Demo action outcome')}
                   defaultValue={demoClient.outcome}
                   onChange={(event) => {
                     demoClient.setOutcome(event.target.value as DemoClient['outcome']);
                   }}
                 >
-                  <option value="succeeded">Succeeded</option>
-                  <option value="failed">Failed</option>
-                  <option value="indeterminate">Indeterminate</option>
-                  <option value="expired">Expired</option>
+                  <option value="succeeded">{t('Succeeded')}</option>
+                  <option value="failed">{t('Failed')}</option>
+                  <option value="indeterminate">{t('Indeterminate')}</option>
+                  <option value="expired">{t('Expired')}</option>
                 </select>
               </label>
               <label className="checkbox-label">
@@ -334,7 +361,7 @@ function Workspace({
                     chooseScenario(scenario);
                   }}
                 />
-                200 log lines
+                {t('200 log lines')}
               </label>
             </div>
           </details>
@@ -343,7 +370,7 @@ function Workspace({
           <div className="turn-error">
             <p role="alert">{hostError}</p>
             <button className="secondary" onClick={retryHosts}>
-              Retry connection
+              {t('Retry connection')}
             </button>
           </div>
         )}
@@ -358,30 +385,35 @@ function Workspace({
         />
       </main>
       {menu && (
-        <Modal title="Host & containers" close={() => setMenu(false)}>
+        <Modal title={t('Host & containers')} close={() => setMenu(false)}>
           <div className="mobile-sidebar">
             <Sidebar {...sidebarProps} />
           </div>
         </Modal>
       )}
       {help && (
-        <Modal title="About this workspace" close={() => setHelp(false)}>
+        <Modal title={t('About this workspace')} close={() => setHelp(false)}>
           <p>
-            DockSight gathers read-only Docker observations and returns a model explanation with typed cards. The
-            backend decides permitted operations.
+            {t(
+              'DockSight gathers read-only Docker observations and returns a model explanation with typed cards. The backend decides permitted operations.',
+            )}
           </p>
           <p>
-            Conclusions are interpretations. Cards and the evidence trail show the observed facts and their UTC
-            timestamps.
+            {t(
+              'Conclusions are interpretations. Cards and the evidence trail show the observed facts and their UTC timestamps.',
+            )}
           </p>
           <p>
-            Changing hosts starts a separate session. Conversations are held in this tab's memory; the API has no
-            past-dialogue listing. Backend sessions and actions disappear after a restart or expiry.
+            {t(
+              "Changing hosts starts a separate session. Conversations are held in this tab's memory; the API has no past-dialogue listing. Backend sessions and actions disappear after a restart or expiry.",
+            )}
           </p>
           <p>
             {demo
-              ? 'All current observations are fixture-based examples. Connect an API for real Docker evidence.'
-              : 'Your bearer token is held only in this tab’s memory and is discarded when you disconnect or reload.'}
+              ? t('All current observations are fixture-based examples. Connect an API for real Docker evidence.')
+              : t(
+                  'Your bearer token is held only in this tab’s memory and is discarded when you disconnect or reload.',
+                )}
           </p>
         </Modal>
       )}

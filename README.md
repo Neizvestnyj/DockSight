@@ -44,6 +44,9 @@ For real observations, start the backend above, choose **Connect API**, keep `/a
 token. Vite forwards `/api` to `http://127.0.0.1:8000` in development and local preview. A remote API base must use HTTPS
 and allow the frontend origin in `DOCKSIGHT_CORS_ORIGINS`. The browser keeps the token only in memory.
 
+The language selector follows the browser's language preferences by default and supports English and Russian overrides.
+It remembers only the language preference. Logs, environment values, resource names, and API/model text stay verbatim.
+
 ```powershell
 rtk proxy npm --prefix frontend run check
 rtk proxy npm --prefix frontend test

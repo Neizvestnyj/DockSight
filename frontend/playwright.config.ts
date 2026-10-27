@@ -8,6 +8,7 @@ export default defineConfig({
   use: {
     baseURL: 'http://127.0.0.1:4173',
     channel: 'chrome',
+    locale: 'en-US',
     trace: 'retain-on-failure',
   },
   projects: [
