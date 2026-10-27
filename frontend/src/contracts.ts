@@ -30,7 +30,7 @@ export const actionSchema = z.object({
   message: z.string(),
   confirmation_required: z.literal(true),
 });
-const logSchema = z.object({
+export const logSchema = z.object({
   entries: z.array(z.object({ message: z.string(), timestamp: z.string().nullable() })),
   truncated: z.boolean(),
 });
@@ -99,6 +99,8 @@ export const eventSchema = z.discriminatedUnion('type', [
 export const hostsSchema = z.array(z.object({ id: z.string(), name: z.string() }));
 export type Host = z.infer<typeof hostsSchema>[number];
 export type Container = z.infer<typeof containerSchema>;
+export type Metrics = z.infer<typeof metricsSchema>;
+export type LogBatch = z.infer<typeof logSchema>;
 export type Action = z.infer<typeof actionSchema>;
 export type Widget = z.infer<typeof widgetSchema>;
 export type Evidence = z.infer<typeof evidenceSchema>;
@@ -112,6 +114,9 @@ export interface TurnInput {
 export interface Transport {
   hosts(signal: AbortSignal): Promise<Host[]>;
   containers(host: string, signal: AbortSignal): Promise<Container[]>;
+  container(host: string, id: string, signal: AbortSignal): Promise<Container>;
+  logs(host: string, id: string, signal: AbortSignal): Promise<LogBatch>;
+  stats(host: string, id: string, signal: AbortSignal): Promise<Metrics>;
   diagnose(input: TurnInput, receive: (event: TurnEvent) => void, signal: AbortSignal): Promise<void>;
   action(id: string): Promise<Action>;
   execute(id: string, key: string): Promise<Action>;

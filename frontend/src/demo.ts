@@ -5,6 +5,7 @@ import {
   type Answer,
   type Container,
   type Host,
+  type LogBatch,
   type Transport,
   type TurnInput,
   type TurnEvent,
@@ -89,6 +90,28 @@ export function demoContainer(index: number, host: string, observedAt: string): 
   };
 }
 
+/** Share fixture log text between direct reads and diagnostics without preparing any actions. */
+function demoLogs(scenarioId: ScenarioId, observedAt: string): LogBatch {
+  const fixture = fixtures.find((row) => row.name === scenarioId)!;
+  const messages = fixture.log
+    ? [
+        'Starting application bootstrap',
+        'Loading runtime configuration from environment',
+        fixture.log,
+        ...(scenarioId === 'crash_loop'
+          ? ['  at validateConfig (/app/config.py:42)', 'Application startup failed; process exiting with code 1']
+          : []),
+      ]
+    : [];
+  return {
+    entries: messages.map((message, i) => ({
+      timestamp: new Date(Date.parse(observedAt) - (messages.length - i) * 1000).toISOString(),
+      message,
+    })),
+    truncated: fixture.truncated,
+  };
+}
+
 /** Produce all four supported widgets using only fields in the backend contracts. */
 export function demoAnswer(scenarioId: ScenarioId, host = 'demo-eu'): Answer {
   const index = scenarios.findIndex((row) => row.id === scenarioId);
@@ -109,21 +132,7 @@ export function demoAnswer(scenarioId: ScenarioId, host = 'demo-eu'): Answer {
     running:
       'redis is running in this observation. Current CPU usage is 0.0% and memory usage is 8.0 MiB of 128.0 MiB. No restarts or OOM kill are reported. These values are a single measurement, not a historical health guarantee.',
   };
-  const messages = fixture.log
-    ? [
-        'Starting application bootstrap',
-        'Loading runtime configuration from environment',
-        fixture.log,
-        ...(scenarioId === 'crash_loop'
-          ? ['  at validateConfig (/app/config.py:42)', 'Application startup failed; process exiting with code 1']
-          : []),
-      ]
-    : [];
-  const entries = messages.map((message, i) => ({
-    timestamp: new Date(Date.parse(now) - (messages.length - i) * 1000).toISOString(),
-    message,
-  }));
-  const logs = { entries, truncated: fixture.truncated };
+  const logs = demoLogs(scenarioId, now);
   const operation = snapshot.state === 'restarting' ? 'stop' : 'restart';
   const action: Action = {
     id: crypto.randomUUID(),
@@ -262,6 +271,26 @@ export class DemoClient implements Transport {
     if (this.fault === 'empty' || host === 'demo-empty') return [];
     const now = new Date().toISOString();
     return scenarios.map((_, i) => demoContainer(i, host, now));
+  }
+
+  /** Inspect a fixture by exact identity; reading never prepares an action or calls a model. */
+  async container(host: string, id: string, signal: AbortSignal): Promise<Container> {
+    await delay(signal);
+    const snapshot = (await this.containers(host)).find((row) => row.id === id);
+    if (!snapshot) throw new Error('Demo: container not found.');
+    return snapshot;
+  }
+
+  /** Return the selected fixture's original bounded logs, independent of the scenario control. */
+  async logs(host: string, id: string, signal: AbortSignal): Promise<LogBatch> {
+    const snapshot = await this.container(host, id, signal);
+    const scenario = scenarios.find((row) => row.container === snapshot.name)!;
+    return demoLogs(scenario.id, snapshot.observed_at);
+  }
+
+  /** Return a single fixture measurement without generating a time series. */
+  async stats(host: string, id: string, signal: AbortSignal) {
+    return (await this.container(host, id, signal)).metrics;
   }
 
   /** Emit the same six event types as the streaming backend. */

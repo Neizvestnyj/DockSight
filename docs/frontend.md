@@ -81,6 +81,22 @@ success with a check for two seconds, and retains its receipt timestamp. This ti
 Docker observation. Refresh failures retain the previous list and offer a manual retry. Diagnostic cards remain
 historical observations until a new diagnosis is run.
 
+## Container reads
+
+Selecting a container opens its read-only overview without calling the model or preparing actions. The client requests
+the exact container snapshot, `/stats`, and `/logs?lines=200` independently. The snapshot includes the allowlisted
+environment. No direct restart or stop controls are exposed here.
+
+**Refresh data** manually rereads these sources; no polling runs. A failed source retains its last successful values and
+timestamp while other sources remain usable. State and environment show the server's `observed_at`. Metrics and log
+batches have no server observation timestamp, so their footers show browser receipt time as **Received**. Log entries
+retain their individual Docker timestamps. These separate requests are not an atomic snapshot.
+
+**Diagnose** starts a new model session with the selected host and exact container ID in the question. It retains prior
+answers in this tab; follow-up questions use the new session. Returning to the investigation preserves its draft,
+evidence, prepared action IDs, and execution keys. Direct refresh never replaces diagnostic card data. Host or connection
+changes cancel outstanding reads and discard the previous workspace.
+
 ## Language
 
 The language control beside Ask DockSight offers System, English, and Русский. System resolves the first supported
@@ -106,4 +122,5 @@ comes from `backend/tests/fixtures/diagnostics.json`. They remain confined to De
 The app has no conversation-list API, durable history, metric history, environment editing, or stack deployment.
 Tool progress records events actually received; streams never reconnect automatically. A running action can be checked
 manually. A confirmed execution may be retried with its original key only after reading that the action is still prepared.
-Observations retain their original timestamps after an operation. A new diagnosis is needed to establish current facts.
+Diagnostic observations retain their original timestamps after an operation. Refresh the container overview for current
+facts, or start a new diagnosis for an explanation and fresh action proposals.

@@ -40,8 +40,9 @@ interface Props {
 export function Investigation({ investigation, client, demo, containers, draft, setDraft, host }: Props) {
   const { t, locale } = useLocale();
   const { turns, running, run, stop } = investigation;
-  const [viewId, setViewId] = useState<string | null>(null);
-  const turn = turns.find((row) => row.id === viewId) ?? turns.at(-1);
+  const [view, setView] = useState<{ id: string; latest: string } | null>(null);
+  const latest = turns.at(-1);
+  const turn = (view?.latest === latest?.id && turns.find((row) => row.id === view?.id)) || latest;
   const [reference, setReference] = useState<string | null>(null);
   const [review, setReview] = useState<Action | null>(null);
   const [outcomes, setOutcomes] = useState<Record<string, Action>>({});
@@ -66,7 +67,7 @@ export function Investigation({ investigation, client, demo, containers, draft, 
 
   /** Submit one host-bound query and keep its text available for a manual retry. */
   function submit(query: string) {
-    setViewId(null);
+    setView(null);
     void run(query);
     setDraft('');
   }
@@ -79,7 +80,11 @@ export function Investigation({ investigation, client, demo, containers, draft, 
             <summary>{t('{count} turns in this tab session', { count: turns.length })}</summary>
             <div>
               {turns.map((row) => (
-                <button className="history-row" key={row.id} onClick={() => setViewId(row.id)}>
+                <button
+                  className="history-row"
+                  key={row.id}
+                  onClick={() => setView({ id: row.id, latest: latest!.id })}
+                >
                   <span>{row.exampleQuery && isMessageKey(row.query) ? t(row.query) : row.query}</span>
                   <span className="muted">{stateLabel(row.state, t, true)}</span>
                 </button>

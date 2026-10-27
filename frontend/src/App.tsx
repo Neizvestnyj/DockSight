@@ -13,6 +13,7 @@ import { Sidebar } from './Sidebar';
 import { HostPicker } from './HostPicker';
 import { utc } from './format';
 import { useInvestigation } from './useInvestigation';
+import { ContainerView } from './ContainerView';
 
 interface ConnectionState {
   client: Transport;
@@ -181,7 +182,8 @@ function Workspace({
   const [lastRefreshed, setLastRefreshed] = useState<string>();
   const [refreshAcknowledged, setRefreshAcknowledged] = useState(0);
   const [revision, setRevision] = useState(0);
-  const [selected, setSelected] = useState(initial ? '1'.repeat(64) : '');
+  const [selected, setSelected] = useState<Container>();
+  const [viewingContainer, setViewingContainer] = useState(false);
   const [draft, setDraft] = useState('');
   const [scenario, setScenario] = useState<ScenarioId>(demoClient?.scenario ?? 'crash_loop');
   const [menu, setMenu] = useState(false);
@@ -232,26 +234,42 @@ function Workspace({
     setScenario(value);
     const item = scenarios.find((row) => row.id === value)!;
     const answer = demoClient.example(host);
-    setSelected(answer.widgets.find((row) => row.widget_type === 'container_status')?.snapshot.id ?? '');
+    setViewingContainer(false);
     investigation.example(answer, item.query);
     setDraft('');
   }
 
-  /** Offer a scoped question without sending it until the operator submits. */
+  /** Open direct Docker reads without changing a draft or invoking diagnostic work. */
   function chooseContainer(container: Container) {
-    setSelected(container.id);
-    setDraft(
-      t('Investigate {name} ({id}). What happened, and what evidence supports it?', {
-        name: container.name,
-        id: container.id,
-      }),
-    );
+    setSelected(container);
+    setViewingContainer(true);
     setMenu(false);
+    requestAnimationFrame(() => document.getElementById('container-title')?.focus({ preventScroll: true }));
+  }
+
+  /** Return to retained diagnostic results and place keyboard focus in the visible workspace. */
+  function openInvestigation(focusQuery = false) {
+    setViewingContainer(false);
+    setMenu(false);
+    requestAnimationFrame(() => document.getElementById(focusQuery ? 'query' : 'workspace-title')?.focus());
+  }
+
+  /** Start an isolated model session for the exact container, preserving previous diagnostic snapshots. */
+  function diagnoseContainer(container: Container) {
+    if (investigation.running) return;
     const matched = scenarios.find((row) => row.container === container.name);
     if (demoClient && matched) {
       demoClient.setScenario(matched.id);
       setScenario(matched.id);
     }
+    openInvestigation();
+    void investigation.run(
+      t('Investigate {name} ({id}). What happened, and what evidence supports it?', {
+        name: container.name,
+        id: container.id,
+      }),
+      true,
+    );
   }
 
   const sidebarProps = {
@@ -265,7 +283,7 @@ function Workspace({
     lastRefreshed,
     refreshAcknowledged: Boolean(refreshAcknowledged),
     loading,
-    selected,
+    selected: viewingContainer ? (selected?.id ?? '') : '',
     chooseContainer,
     refresh,
     demo,
@@ -280,8 +298,9 @@ function Workspace({
     },
     newInvestigation: () => {
       investigation.clear();
-      setMenu(false);
+      openInvestigation();
     },
+    openInvestigation: () => openInvestigation(),
     about: () => {
       setMenu(false);
       setHelp(true);
@@ -333,50 +352,56 @@ function Workspace({
       <main id="main" className="sheet">
         <div className="page-heading">
           <div>
-            <h1>{t('Container investigation')}</h1>
+            <h1 id="workspace-title" tabIndex={-1}>
+              {t(viewingContainer ? 'Container overview' : 'Container investigation')}
+            </h1>
             <p>
-              {inventory[0]
-                ? t('Inventory observed {time} · snapshots, not a live feed', { time: utc(inventory[0].observed_at) })
-                : t('Docker diagnostics · host-scoped sessions')}
+              {viewingContainer
+                ? t('Read-only · no model request')
+                : inventory[0]
+                  ? t('Inventory observed {time} · snapshots, not a live feed', { time: utc(inventory[0].observed_at) })
+                  : t('Docker diagnostics · host-scoped sessions')}
             </p>
           </div>
           <div className="heading-actions">
             <LanguageSwitch />
-            <button
-              className="secondary"
-              aria-label={t('Ask DockSight')}
-              onClick={() => document.getElementById('query')?.focus()}
-            >
-              <MessageSquarePlus size={15} />
-              {t('Ask DockSight')}
-            </button>
+            {!viewingContainer && (
+              <button className="secondary" aria-label={t('Ask DockSight')} onClick={() => openInvestigation(true)}>
+                <MessageSquarePlus size={15} />
+                {t('Ask DockSight')}
+              </button>
+            )}
           </div>
         </div>
         {demo && (
-          <div className="demo-bar">
+          <div className={`demo-bar${viewingContainer ? ' demo-bar-compact' : ''}`}>
             <div>
               <FlaskConical size={15} />
               <strong>{t('Demo')}</strong>
               <span>{t('Example data from a fictional host. Connect an API to diagnose your Docker.')}</span>
             </div>
-            <label>
-              {t('Scenario')}
-              <select
-                aria-label={t('Demo scenario')}
-                value={scenario}
-                onChange={(event) => chooseScenario(event.target.value as ScenarioId)}
-                disabled={investigation.running}
-              >
-                {scenarios.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {t(item.name)}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {!viewingContainer && (
+              <label>
+                {t('Scenario')}
+                <select
+                  aria-label={t('Demo scenario')}
+                  value={scenario}
+                  onChange={(event) => chooseScenario(event.target.value as ScenarioId)}
+                  disabled={investigation.running}
+                >
+                  {scenarios.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {t(item.name)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
           </div>
         )}
-        {demoClient && <DemoControls client={demoClient} refresh={refresh} running={investigation.running} />}
+        {demoClient && !viewingContainer && (
+          <DemoControls client={demoClient} refresh={refresh} running={investigation.running} />
+        )}
         {hostError && (
           <div className="turn-error">
             <p role="alert">{hostError}</p>
@@ -385,15 +410,29 @@ function Workspace({
             </button>
           </div>
         )}
-        <Investigation
-          investigation={investigation}
-          client={client}
-          demo={demo}
-          containers={inventory}
-          draft={draft}
-          setDraft={setDraft}
-          host={host}
-        />
+        {selected && (
+          <div hidden={!viewingContainer}>
+            <ContainerView
+              key={selected.id}
+              client={client}
+              container={selected}
+              running={investigation.running}
+              back={() => openInvestigation()}
+              diagnose={diagnoseContainer}
+            />
+          </div>
+        )}
+        <div hidden={viewingContainer}>
+          <Investigation
+            investigation={investigation}
+            client={client}
+            demo={demo}
+            containers={inventory}
+            draft={draft}
+            setDraft={setDraft}
+            host={host}
+          />
+        </div>
       </main>
       {menu && (
         <Modal title={t('Host & containers')} close={() => setMenu(false)}>

@@ -1,6 +1,50 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ApiClient, executeOnce } from './api';
 import { consumeEvents } from './stream';
+import { demoContainer } from './demo';
+
+describe('direct container reads', () => {
+  it('authenticates, scopes, and validates state, bounded logs, and current metrics', async () => {
+    const snapshot = demoContainer(0, 'test host', '2026-10-27T12:00:00Z');
+    const fetcher = vi.fn(async (url: string | URL | Request) => {
+      const path = String(url);
+      return Response.json(
+        path.endsWith('/stats')
+          ? snapshot.metrics
+          : path.includes('/logs?')
+            ? { entries: [{ message: 'original log', timestamp: null }], truncated: true }
+            : snapshot,
+      );
+    });
+    const client = new ApiClient('/api/v1', 'private-token', fetcher);
+    const signal = new AbortController().signal;
+    expect(await client.container(snapshot.host, snapshot.id, signal)).toEqual(snapshot);
+    expect(await client.logs(snapshot.host, snapshot.id, signal)).toEqual({
+      entries: [{ message: 'original log', timestamp: null }],
+      truncated: true,
+    });
+    expect(await client.stats(snapshot.host, snapshot.id, signal)).toEqual(snapshot.metrics);
+    expect(fetcher.mock.calls.map(([url]) => url)).toEqual([
+      `/api/v1/hosts/test%20host/containers/${snapshot.id}`,
+      `/api/v1/hosts/test%20host/containers/${snapshot.id}/logs?lines=200`,
+      `/api/v1/hosts/test%20host/containers/${snapshot.id}/stats`,
+    ]);
+    for (const call of fetcher.mock.calls) {
+      const init = (call as unknown as [string, RequestInit])[1];
+      expect(new Headers(init.headers).get('Authorization')).toBe('Bearer private-token');
+      expect(init.signal).toBeDefined();
+    }
+  });
+
+  it('rejects invalid observations and a snapshot for another resource', async () => {
+    const snapshot = demoContainer(1, 'local', '2026-10-27T12:00:00Z');
+    const client = new ApiClient('', 'token', async () => Response.json(snapshot));
+    const signal = new AbortController().signal;
+    await expect(client.container('local', '1'.repeat(64), signal)).rejects.toThrow();
+    await expect(client.logs('local', snapshot.id, signal)).rejects.toThrow();
+    await expect(client.stats('local', snapshot.id, signal)).rejects.toThrow();
+  });
+});
 
 /** Encode arbitrary byte splits as a streamed HTTP response. */
 function streamResponse(text: string, size = 7): Response {

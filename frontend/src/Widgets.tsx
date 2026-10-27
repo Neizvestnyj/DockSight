@@ -4,6 +4,7 @@ import { ArrowUpRight, FileText, Layers, LockKeyhole, Terminal, Box } from 'luci
 import type { Action, Evidence, Widget } from './contracts';
 import { Status } from './ui';
 import { bytes, utc } from './format';
+import { EnvironmentContent, LogContent } from './RuntimeContent';
 
 interface Props {
   widget: Widget;
@@ -122,24 +123,7 @@ export function WidgetCard({ widget, selected, evidence, inspect, review, outcom
       )}
       {widget.widget_type === 'log_anomalies' && (
         <>
-          <div className="log-toolbar">
-            <span>{t('{count} lines returned', { count: widget.logs.entries.length })}</span>
-            <span>{t(widget.logs.truncated ? 'Truncated · partial evidence' : 'Within requested bounds')}</span>
-          </div>
-          <div className="logs" tabIndex={0} role="region" aria-label={t('Timestamped container logs')}>
-            {widget.logs.entries.length ? (
-              widget.logs.entries.map((entry, index) => (
-                <div className="log-line" key={index}>
-                  <time dateTime={entry.timestamp ?? undefined}>
-                    {entry.timestamp ? utc(entry.timestamp).replace(' UTC', '') : t('No time')}
-                  </time>
-                  <code>{entry.message}</code>
-                </div>
-              ))
-            ) : (
-              <p>{t('No log entries returned. An empty log does not establish the cause.')}</p>
-            )}
-          </div>
+          <LogContent logs={widget.logs} />
           <footer className="widget-foot">
             <span>{t('Docker logs · sanitized text')}</span>
             {widget.logs.truncated && (
@@ -180,29 +164,7 @@ export function WidgetCard({ widget, selected, evidence, inspect, review, outcom
           )}
         </div>
       )}
-      {widget.widget_type === 'env_inspector' && (
-        <>
-          <p className="section-note">{t('Allowlisted variables · read only')}</p>
-          <dl className="env-list">
-            {Object.keys(widget.variables).length ? (
-              Object.entries(widget.variables).map(([key, value]) => (
-                <div key={key}>
-                  <dt>
-                    <code>{key}</code>
-                  </dt>
-                  <dd>
-                    <code>{value}</code>
-                  </dd>
-                </div>
-              ))
-            ) : (
-              <div>
-                <dt>{t('No allowlisted variables returned.')}</dt>
-              </div>
-            )}
-          </dl>
-        </>
-      )}
+      {widget.widget_type === 'env_inspector' && <EnvironmentContent variables={widget.variables} />}
     </section>
   );
 }

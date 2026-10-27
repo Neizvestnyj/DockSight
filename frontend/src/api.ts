@@ -3,6 +3,8 @@ import {
   actionSchema,
   containerSchema,
   hostsSchema,
+  logSchema,
+  metricsSchema,
   type Transport,
   type TurnInput,
   type TurnEvent,
@@ -67,6 +69,26 @@ export class ApiClient implements Transport {
       .parse(await (await this.send(`/hosts/${encodeURIComponent(host)}/containers`, { signal })).json());
   }
 
+  /** Read and verify the exact selected resource, including its allowlisted environment. */
+  async container(host: string, id: string, signal: AbortSignal) {
+    return containerSchema
+      .refine(
+        (snapshot) => snapshot.host === host && snapshot.id === id,
+        'Container response is outside the selected scope.',
+      )
+      .parse(await (await this.send(containerPath(host, id), { signal })).json());
+  }
+
+  /** Read at most 200 sanitized log lines without invoking the model. */
+  async logs(host: string, id: string, signal: AbortSignal) {
+    return logSchema.parse(await (await this.send(`${containerPath(host, id)}/logs?lines=200`, { signal })).json());
+  }
+
+  /** Read a current measurement, preserving nulls rather than inventing history or zeroes. */
+  async stats(host: string, id: string, signal: AbortSignal) {
+    return metricsSchema.parse(await (await this.send(`${containerPath(host, id)}/stats`, { signal })).json());
+  }
+
   /** Stream one turn until its terminal event or explicit cancellation. */
   async diagnose(input: TurnInput, receive: (event: TurnEvent) => void, signal: AbortSignal) {
     const response = await this.send('/chat/turns', { method: 'POST', body: JSON.stringify(input), signal }, 240_000);
@@ -96,6 +118,11 @@ export class ApiClient implements Transport {
       ).json(),
     );
   }
+}
+
+/** Encode the configured host and exact container identity into a read-only route. */
+function containerPath(host: string, id: string): string {
+  return `/hosts/${encodeURIComponent(host)}/containers/${encodeURIComponent(id)}`;
 }
 
 /** Resolve a lost execution response with a read, never an automatic mutation retry. */

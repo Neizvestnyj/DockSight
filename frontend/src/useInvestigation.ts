@@ -103,8 +103,9 @@ export function useInvestigation(client: Transport, host: string, initial?: Answ
   }
 
   /** Start exactly one manual request; retries are explicit operator submissions. */
-  async function run(query: string) {
+  async function run(query: string, freshSession = false) {
     if (active.current || !query.trim() || !host) return;
+    if (freshSession) session.current = undefined;
     const controller = new AbortController();
     active.current = controller;
     const current = ++generation.current;

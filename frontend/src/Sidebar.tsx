@@ -33,6 +33,7 @@ interface Props {
   refresh: () => void;
   demo: boolean;
   newInvestigation: () => void;
+  openInvestigation: () => void;
   about: () => void;
   connect: () => void;
   returnDemo: () => void;
@@ -56,6 +57,7 @@ export function Sidebar({
   refresh,
   demo,
   newInvestigation,
+  openInvestigation,
   about,
   connect,
   returnDemo,
@@ -101,7 +103,9 @@ export function Sidebar({
       )}
       <div className="workspace-nav">
         <Activity size={16} />
-        <span>{t('Investigations')}</span>
+        <button className="text-button" onClick={openInvestigation}>
+          {t('Investigations')}
+        </button>
         <button
           className="icon-button"
           aria-label={t('New investigation')}
