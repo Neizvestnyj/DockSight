@@ -411,6 +411,21 @@ textarea {
   background: var(--active);
   border-radius: var(--radius-control);
 }
+.inventory-feedback {
+  min-height: 44px;
+  padding: 4px 8px 10px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.inventory-feedback span,
+.inventory-feedback strong {
+  display: block;
+}
+.inventory-feedback strong {
+  color: var(--positive);
+  font-weight: 500;
+}
 .topbar {
   display: flex;
   align-items: center;
@@ -426,8 +441,34 @@ textarea {
   gap: 10px;
   min-width: 0;
 }
-.breadcrumb > span {
+.breadcrumb {
+  flex: 1;
+}
+.workspace-trigger {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: 34px;
+  max-width: 100%;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  font-size: inherit;
+  text-align: left;
+}
+.workspace-trigger > span {
   color: var(--muted);
+  white-space: nowrap;
+}
+.workspace-trigger > svg {
+  flex: none;
+  color: var(--muted);
+}
+.workspace-trigger:hover > span,
+.workspace-trigger:hover > strong {
+  text-decoration: underline;
+  text-underline-offset: 4px;
 }
 .breadcrumb strong {
   white-space: nowrap;
@@ -435,6 +476,7 @@ textarea {
   text-overflow: ellipsis;
 }
 .connection-state {
+  flex: none;
   white-space: nowrap;
   color: var(--muted);
 }
@@ -1167,6 +1209,56 @@ textarea {
 .modal::backdrop {
   background: #13141666;
 }
+.host-picker-description {
+  color: var(--muted);
+  margin-bottom: 20px;
+}
+.host-picker-list {
+  display: grid;
+  gap: 10px;
+}
+.host-picker-row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  text-align: left;
+}
+.host-picker-row[aria-pressed='true'] {
+  background: var(--raised);
+}
+.host-picker-row:hover {
+  border-color: var(--control);
+}
+.host-picker-row strong,
+.host-picker-row code {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.host-picker-row strong {
+  font-size: 14px;
+  font-weight: 500;
+}
+.host-picker-row code {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 4px;
+}
+.host-current {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.host-picker-connect {
+  margin-top: 20px;
+}
 .modal-head {
   display: flex;
   justify-content: space-between;
@@ -1429,9 +1521,13 @@ textarea {
     width: 21px;
     height: 21px;
   }
-  .breadcrumb > span,
-  .breadcrumb > svg {
+  .workspace-trigger > span,
+  .workspace-trigger > .breadcrumb-divider {
     display: none;
+  }
+  .workspace-trigger {
+    min-height: 44px;
+    gap: 6px;
   }
   .connection-state {
     font-size: 11px;

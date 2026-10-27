@@ -65,6 +65,14 @@ DockSight, or enter a separately hosted HTTPS API base. Vite's proxy is for loca
 Keyboard: Tab follows reading order, Enter activates controls, Escape closes dialogs, and Ctrl/Cmd+Enter submits a query.
 **Ask DockSight** focuses the composer without covering evidence. Source links move focus to the selected observation.
 
+The workspace breadcrumb opens configured-host selection, including on mobile. Closing it or choosing the current
+host preserves the investigation, draft, and prepared actions. Choosing another host starts a separate session.
+
+Inventory refresh keeps the last received rows visible during the request. The sidebar announces loading, acknowledges
+success with a check for two seconds, and retains its receipt timestamp. This timestamp records browser receipt, not a
+Docker observation. Refresh failures retain the previous list and offer a manual retry. Diagnostic cards remain
+historical observations until a new diagnosis is run.
+
 ## Language
 
 The language control beside Ask DockSight offers System, English, and Русский. System resolves the first supported

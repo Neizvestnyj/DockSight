@@ -43,6 +43,16 @@ test('explains demo controls, localizes every built-in scenario, and keeps empty
   await page.getByRole('button', { name: 'Исследовать', exact: true }).click();
   await expect(page.getByRole('heading', { name: typedQuery, exact: true })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Объяснение модели' })).toContainText('нехватки памяти (OOM)');
+  await page.getByTitle('Рабочее пространство: выбрать хост').click();
+  await expect(page.getByRole('dialog', { name: 'Выбрать хост' })).toContainText('Текущий хост');
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  await page.screenshot({ path: `test-results/${info.project.name}-russian-host-picker.png` });
+  await page.keyboard.press('Escape');
+  if ((page.viewportSize()?.width ?? 1440) <= 1100)
+    await page.getByRole('button', { name: 'Открыть хосты и контейнеры' }).click();
+  await page.getByRole('button', { name: 'Обновить список контейнеров' }).click();
+  await expect(page.locator('.inventory-feedback:visible')).toContainText('Список контейнеров обновлён');
+  await page.screenshot({ path: `test-results/${info.project.name}-russian-refresh.png` });
 });
 
 test('localizes interrupted streams while preserving the same message when authored by the API', async ({ page }) => {

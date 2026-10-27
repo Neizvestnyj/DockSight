@@ -3,7 +3,7 @@ import AxeBuilder from '@axe-core/playwright';
 import { demoAnswer, demoContainer } from '../src/demo';
 
 /** Open connection settings through the visible control at each breakpoint. */
-async function connectApi(page: Page) {
+async function connectApi(page: Page, waitForDiscovery = true) {
   if ((page.viewportSize()?.width ?? 1440) <= 560) {
     await page.getByRole('button', { name: 'Open host and containers' }).click();
     await page.getByRole('button', { name: 'Connect your API' }).click();
@@ -12,7 +12,7 @@ async function connectApi(page: Page) {
   await expect(page.getByRole('dialog', { name: 'Connect to DockSight' })).toBeVisible();
   await page.getByLabel('Bearer token').fill('browser-test-token');
   await page.getByRole('button', { name: 'Connect', exact: true }).click();
-  await expect(page.locator('.composer-foot')).toContainText('test-host');
+  if (waitForDiscovery) await expect(page.locator('.composer-foot')).toContainText('test-host');
 }
 
 /** Frame test data exactly as the backend's SSE encoder does. */
@@ -22,6 +22,129 @@ function sse(type: string, values: object = {}) {
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/');
+});
+
+test('retains host choice through a discovery retry and restores focus after the workspace remounts', async ({
+  page,
+}) => {
+  let hostReads = 0;
+  let finish = () => {};
+  const gate = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  await page.route('**/api/v1/**', async (route) => {
+    if (!new URL(route.request().url()).pathname.endsWith('/hosts')) return route.fulfill({ json: [] });
+    if (++hostReads === 1) return route.fulfill({ status: 503, json: { message: 'Discovery unavailable' } });
+    await gate;
+    return route.fulfill({
+      json: [
+        { id: 'test-host', name: 'Alpha' },
+        { id: 'beta', name: 'Beta' },
+      ],
+    });
+  });
+  await connectApi(page, false);
+  await page.getByTitle('Workspace: choose host').click();
+  const picker = page.getByRole('dialog', { name: 'Choose a host' });
+  await expect(picker.getByRole('alert')).toBeVisible();
+  await picker.getByRole('button', { name: 'Retry hosts' }).click();
+  try {
+    await expect(picker.getByRole('status')).toHaveText('Loading hosts…');
+  } finally {
+    finish();
+  }
+  await expect(picker.getByRole('button', { name: /Beta/ })).toBeVisible();
+  await expect(picker).toBeVisible();
+  await page.keyboard.press('Escape');
+  const trigger = page.getByTitle('Workspace: choose host');
+  await expect(trigger).toBeFocused();
+  await trigger.click();
+  await picker.getByRole('button', { name: /Beta/ }).click();
+  await expect(picker).toHaveCount(0);
+  await expect(page.locator('.composer-foot')).toContainText('beta');
+});
+
+test('opens host choice from the breadcrumb without losing the current draft or prepared action', async ({
+  page,
+}, info) => {
+  await page.getByRole('textbox', { name: 'Continue the investigation' }).fill('Keep this investigation draft');
+  await page.getByRole('button', { name: 'Review stop' }).click();
+  const actionId = await page.getByRole('dialog').locator('.confirmation-facts code').last().innerText();
+  await page.keyboard.press('Escape');
+  const trigger = page.getByTitle('Workspace: choose host');
+  await trigger.focus();
+  await page.keyboard.press('Enter');
+  const picker = page.getByRole('dialog', { name: 'Choose a host' });
+  await expect(picker.getByRole('button', { name: /Demo host \/ EU/ })).toHaveAttribute('aria-pressed', 'true');
+  await expect(picker).toContainText('Selecting another host starts a separate session.');
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: `test-results/${info.project.name}-host-picker.png` });
+  await page.keyboard.press('Escape');
+  await expect(trigger).toBeFocused();
+  await expect(page.getByRole('textbox')).toHaveValue('Keep this investigation draft');
+  await trigger.click();
+  await picker.getByRole('button', { name: /Demo host \/ EU/ }).click();
+  await expect(picker).toHaveCount(0);
+  await page.getByRole('button', { name: 'Review stop' }).click();
+  expect(await page.getByRole('dialog').locator('.confirmation-facts code').last().innerText()).toBe(actionId);
+  await page.keyboard.press('Escape');
+  await trigger.click();
+  await picker.getByRole('button', { name: /Demo host \/ Empty/ }).click();
+  await expect(picker).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Start an investigation' })).toBeVisible();
+  await expect(page.getByRole('textbox')).toHaveValue('');
+});
+
+test('shows refresh progress and completion and retains the received list after a failed refresh', async ({
+  page,
+}, info) => {
+  const rows = [demoContainer(0, 'test-host', '2026-10-20T09:00:00Z')];
+  const longName = 'Production / ' + 'long-workspace-name-'.repeat(12);
+  let reads = 0;
+  let finish = () => {};
+  const gate = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  await page.route('**/api/v1/**', async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith('/hosts')) return route.fulfill({ json: [{ id: 'test-host', name: longName }] });
+    reads++;
+    if (reads === 2) await gate;
+    if (reads === 3) return route.fulfill({ status: 503, json: { message: 'Docker is unavailable' } });
+    return route.fulfill({ json: rows });
+  });
+  await connectApi(page);
+  await page.getByRole('textbox', { name: 'Ask DockSight' }).fill('Keep the draft during refresh');
+  await page.getByTitle('Workspace: choose host').click();
+  await expect(page.getByRole('dialog')).toContainText(longName);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.keyboard.press('Escape');
+  if ((page.viewportSize()?.width ?? 1440) <= 1100)
+    await page.getByRole('button', { name: 'Open host and containers' }).click();
+  const feedback = page.locator('.inventory-feedback:visible');
+  const refresh = page.getByRole('button', { name: 'Refresh container inventory' });
+  await expect(refresh).toBeEnabled();
+  await refresh.click();
+  try {
+    await expect(feedback).toHaveText('Refreshing container list…');
+    await expect(refresh).toBeDisabled();
+    await expect(page.getByTitle('payments-api').filter({ visible: true })).toBeVisible();
+    await expect(page.locator('.container-list:visible')).toHaveAttribute('aria-busy', 'true');
+  } finally {
+    finish();
+  }
+  await expect(feedback).toContainText('Container list refreshed');
+  await expect(feedback).toContainText('List received at');
+  await expect(refresh).toHaveAttribute('title', 'Container list refreshed');
+  await page.screenshot({ path: `test-results/${info.project.name}-inventory-refresh.png` });
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  await refresh.click();
+  await expect(feedback).toContainText('Refresh failed');
+  await expect(feedback).toContainText('Showing the last received list.');
+  await expect(page.getByTitle('payments-api').filter({ visible: true })).toBeVisible();
+  if ((page.viewportSize()?.width ?? 1440) <= 1100) await page.keyboard.press('Escape');
+  await expect(page.getByRole('textbox')).toHaveValue('Keep the draft during refresh');
 });
 
 test('shows the product, all widgets, and accessible evidence navigation', async ({ page }, info) => {

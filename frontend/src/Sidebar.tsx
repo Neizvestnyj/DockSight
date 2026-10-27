@@ -1,8 +1,20 @@
 import { useLocale } from './locale';
 import { useId } from 'react';
-import { Activity, ArrowRight, ArrowUpRight, Box, Cable, CircleHelp, Plus, RefreshCw, Server } from 'lucide-react';
+import {
+  Activity,
+  ArrowRight,
+  ArrowUpRight,
+  Box,
+  Cable,
+  Check,
+  CircleHelp,
+  Plus,
+  RefreshCw,
+  Server,
+} from 'lucide-react';
 import type { Container, Host } from './contracts';
 import { Mark, Status } from './ui';
+import { utc } from './format';
 
 interface Props {
   hosts: Host[];
@@ -13,6 +25,8 @@ interface Props {
   retryHosts: () => void;
   inventory: Container[];
   inventoryError: string;
+  lastRefreshed?: string;
+  refreshAcknowledged: boolean;
   loading: boolean;
   selected: string;
   chooseContainer: (container: Container) => void;
@@ -34,6 +48,8 @@ export function Sidebar({
   retryHosts,
   inventory,
   inventoryError,
+  lastRefreshed,
+  refreshAcknowledged,
   loading,
   selected,
   chooseContainer,
@@ -106,13 +122,29 @@ export function Sidebar({
           <button
             className={`icon-button${loading ? ' refreshing' : ''}`}
             aria-label={t('Refresh container inventory')}
+            title={t(refreshAcknowledged ? 'Container list refreshed' : 'Refresh container inventory')}
             onClick={refresh}
             disabled={loading || !host}
           >
-            <RefreshCw size={14} />
+            {refreshAcknowledged ? <Check size={14} /> : <RefreshCw size={14} />}
           </button>
         </header>
-        {inventoryError ? (
+        <div className="inventory-feedback" role="status" aria-live="polite" aria-atomic="true">
+          {loading && host ? (
+            t('Refreshing container list…')
+          ) : inventoryError ? (
+            <>
+              {t('Refresh failed')}
+              {lastRefreshed && <span>{t('Showing the last received list.')}</span>}
+            </>
+          ) : lastRefreshed ? (
+            <span key={lastRefreshed}>
+              {refreshAcknowledged && <strong>{t('Container list refreshed')}</strong>}
+              {t('List received at {time}', { time: utc(lastRefreshed) })}
+            </span>
+          ) : null}
+        </div>
+        {inventoryError && (
           <div className="sidebar-error">
             <p>{t('Could not read Docker inventory.')}</p>
             <p role="alert">{inventoryError}</p>
@@ -120,15 +152,15 @@ export function Sidebar({
               {t('Retry inventory')}
             </button>
           </div>
-        ) : loading && host ? (
-          <div className="inventory-loading" role="status">
-            {t('Reading Docker inventory…')}
+        )}
+        {loading && host && !inventory.length ? (
+          <div className="inventory-loading" aria-hidden="true">
             <div />
             <div />
             <div />
           </div>
         ) : inventory.length ? (
-          <div className="container-list">
+          <div className="container-list" aria-busy={loading}>
             {inventory.map((container) => (
               <button
                 className={`container-row${selected === container.id ? ' selected' : ''}`}
@@ -145,9 +177,9 @@ export function Sidebar({
               </button>
             ))}
           </div>
-        ) : (
+        ) : !inventoryError && !loading ? (
           <p className="empty-note">{t('No containers on this host.')}</p>
-        )}
+        ) : null}
       </section>
       <div className="sidebar-bottom">
         <p>

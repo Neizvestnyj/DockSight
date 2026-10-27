@@ -22,7 +22,17 @@ export function Status({ state, action = false }: { state: string; action?: bool
 }
 
 /** Use the native modal's focus containment and restore the invoking control on close. */
-export function Modal({ title, close, children }: { title: string; close: () => void; children: ReactNode }) {
+export function Modal({
+  title,
+  close,
+  children,
+  returnFocusId,
+}: {
+  title: string;
+  close: () => void;
+  children: ReactNode;
+  returnFocusId?: string;
+}) {
   const { t } = useLocale();
   const titleId = useId();
   const dialog = useRef<HTMLDialogElement>(null);
@@ -34,9 +44,10 @@ export function Modal({ title, close, children }: { title: string; close: () => 
     if (element && !element.open) element.setAttribute('open', '');
     return () => {
       element?.close?.();
-      if (previous instanceof HTMLElement && previous.isConnected) previous.focus();
+      const target = (returnFocusId && document.getElementById(returnFocusId)) || previous;
+      if (target instanceof HTMLElement && target.isConnected) target.focus();
     };
-  }, []);
+  }, [returnFocusId]);
   return (
     <dialog
       ref={dialog}

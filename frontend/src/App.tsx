@@ -1,7 +1,7 @@
 import { LocaleProvider, LanguageSwitch } from './LocaleProvider';
 import { useLocale } from './locale';
 import { useEffect, useState } from 'react';
-import { ArrowRight, ChevronRight, FlaskConical, Menu, MessageSquarePlus } from 'lucide-react';
+import { ArrowRight, ChevronDown, ChevronRight, FlaskConical, Menu, MessageSquarePlus } from 'lucide-react';
 import type { Container, Host, Transport } from './contracts';
 import { DemoClient, demoAnswer, demoHosts, scenarios, type ScenarioId } from './demo';
 import { DemoControls } from './DemoControls';
@@ -10,6 +10,7 @@ import { Connection } from './Connection';
 import { Investigation } from './Investigation';
 import { Mark, Modal } from './ui';
 import { Sidebar } from './Sidebar';
+import { HostPicker } from './HostPicker';
 import { utc } from './format';
 import { useInvestigation } from './useInvestigation';
 
@@ -18,6 +19,8 @@ interface ConnectionState {
   demo: boolean;
   id: number;
 }
+
+const hostPickerTriggerId = 'workspace-host-picker';
 
 /** Own the connection lifetime; a new backend or host gets a separate transient workspace. */
 export default function App() {
@@ -43,6 +46,13 @@ function ConnectedApp() {
   const [hostLoading, setHostLoading] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [connecting, setConnecting] = useState(false);
+  const [choosingHost, setChoosingHost] = useState(false);
+  const displayHosts = connection.demo
+    ? hosts.map((row) => ({ ...row, name: isMessageKey(row.name) ? t(row.name) : row.name }))
+    : hosts;
+  const translatedHostError = hostError
+    ? t('Could not load configured hosts. Check the API endpoint, bearer token, and CORS.')
+    : '';
 
   useEffect(() => {
     const controller = new AbortController();
@@ -72,7 +82,14 @@ function ConnectedApp() {
     setHostError('');
     setHostLoading(true);
     setConnecting(false);
+    setChoosingHost(false);
     setShowExample(demo);
+  }
+
+  /** Retry discovery without dismissing an open host picker. */
+  function retryHosts() {
+    setHostLoading(true);
+    setAttempt((value) => value + 1);
   }
 
   return (
@@ -80,28 +97,42 @@ function ConnectedApp() {
       <Workspace
         key={`${connection.id}-${host}`}
         connection={connection}
-        hosts={
-          connection.demo
-            ? hosts.map((row) => ({ ...row, name: isMessageKey(row.name) ? t(row.name) : row.name }))
-            : hosts
-        }
+        hosts={displayHosts}
         host={host}
         changeHost={(value) => {
           setHost(value);
           setShowExample(false);
         }}
         showExample={showExample}
-        hostError={
-          hostError ? t('Could not load configured hosts. Check the API endpoint, bearer token, and CORS.') : ''
-        }
+        hostError={translatedHostError}
         hostLoading={hostLoading}
-        retryHosts={() => {
-          setHostLoading(true);
-          setAttempt((value) => value + 1);
-        }}
+        retryHosts={retryHosts}
+        openHostPicker={() => setChoosingHost(true)}
         connect={() => setConnecting(true)}
         returnDemo={() => changeConnection(new DemoClient(), true)}
       />
+      {choosingHost && (
+        <HostPicker
+          hosts={displayHosts}
+          host={host}
+          loading={hostLoading}
+          error={translatedHostError}
+          retry={retryHosts}
+          returnFocusId={hostPickerTriggerId}
+          close={() => setChoosingHost(false)}
+          choose={(value) => {
+            setChoosingHost(false);
+            if (value !== host) {
+              setHost(value);
+              setShowExample(false);
+            }
+          }}
+          connect={() => {
+            setChoosingHost(false);
+            setConnecting(true);
+          }}
+        />
+      )}
       {connecting && (
         <Connection close={() => setConnecting(false)} connect={(client) => changeConnection(client, false)} />
       )}
@@ -117,6 +148,7 @@ interface WorkspaceProps {
   hostError: string;
   hostLoading: boolean;
   retryHosts: () => void;
+  openHostPicker: () => void;
   connect: () => void;
   returnDemo: () => void;
   showExample: boolean;
@@ -131,6 +163,7 @@ function Workspace({
   hostError,
   hostLoading,
   retryHosts,
+  openHostPicker,
   connect,
   returnDemo,
   showExample,
@@ -145,6 +178,8 @@ function Workspace({
   const [inventory, setInventory] = useState<Container[]>([]);
   const [loading, setLoading] = useState(true);
   const [inventoryError, setInventoryError] = useState('');
+  const [lastRefreshed, setLastRefreshed] = useState<string>();
+  const [refreshAcknowledged, setRefreshAcknowledged] = useState(0);
   const [revision, setRevision] = useState(0);
   const [selected, setSelected] = useState(initial ? '1'.repeat(64) : '');
   const [draft, setDraft] = useState('');
@@ -163,6 +198,8 @@ function Workspace({
           setInventory(rows);
           setInventoryError('');
           setLoading(false);
+          setLastRefreshed(new Date().toISOString());
+          setRefreshAcknowledged(revision);
         }
       })
       .catch((error) => {
@@ -174,9 +211,17 @@ function Workspace({
     return () => controller.abort();
   }, [client, host, revision]);
 
+  useEffect(() => {
+    if (!refreshAcknowledged) return;
+    const timer = setTimeout(() => setRefreshAcknowledged(0), 2000);
+    return () => clearTimeout(timer);
+  }, [refreshAcknowledged]);
+
   /** Refresh only the read model, preserving historical diagnostic observations. */
   function refresh() {
     setLoading(true);
+    setInventoryError('');
+    setRefreshAcknowledged(0);
     setRevision((value) => value + 1);
   }
 
@@ -217,6 +262,8 @@ function Workspace({
     retryHosts,
     inventory,
     inventoryError,
+    lastRefreshed,
+    refreshAcknowledged: Boolean(refreshAcknowledged),
     loading,
     selected,
     chooseContainer,
@@ -262,9 +309,18 @@ function Workspace({
           DockSight
         </span>
         <div className="breadcrumb">
-          <span>{t('Workspace')}</span>
-          <ChevronRight size={13} />
-          <strong>{name || t('Docker hosts')}</strong>
+          <button
+            className="workspace-trigger"
+            id={hostPickerTriggerId}
+            title={t('Workspace: choose host')}
+            aria-haspopup="dialog"
+            onClick={openHostPicker}
+          >
+            <span>{t('Workspace')}</span>
+            <ChevronRight className="breadcrumb-divider" size={13} />
+            <strong>{name || t('Docker hosts')}</strong>
+            <ChevronDown size={13} />
+          </button>
         </div>
         <div className="connection-state">
           <span className={`scope-dot${demo ? ' demo-dot' : ''}`} />

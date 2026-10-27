@@ -8,6 +8,16 @@ export type MessageValues = Record<string, string | number>;
 /** Keep product copy separate from verbatim Docker, model, and server content. */
 const russian = {
   ...demoMessages,
+  'Workspace: choose host': 'Рабочее пространство: выбрать хост',
+  'Choose a host': 'Выбрать хост',
+  'Choose a configured Docker host. Selecting another host starts a separate session.':
+    'Выберите настроенный хост Docker. При выборе другого хоста начнётся отдельная сессия.',
+  'Current host': 'Текущий хост',
+  'Refreshing container list…': 'Обновляем список контейнеров…',
+  'Container list refreshed': 'Список контейнеров обновлён',
+  'List received at {time}': 'Список получен в {time}',
+  'Refresh failed': 'Не удалось обновить список',
+  'Showing the last received list.': 'Показан последний полученный список.',
   Language: 'Язык',
   System: 'Системный',
   'Container investigation': 'Диагностика контейнера',

@@ -15,8 +15,8 @@ server action. The screen asks: what happened to the container, what supports th
 | --- | --- |
 | TypeScript, ESLint, Prettier | Passed |
 | Production Vite build | Passed |
-| Unit and component tests | 31 passed |
-| Chrome browser tests | 39 scenarios passed across 1440, 768, and 390 px |
+| Unit and component tests | 35 passed |
+| Chrome browser tests | 48 scenarios passed across 1440, 768, and 390 px |
 | Axe on workspace and action dialog | No violations in tested states |
 | Design skill inspector | 0 FAIL, 0 WARN at all three widths |
 | Existing pre-commit checks | Passed; backend suite: 111 passed, 11 opt-in tests skipped |
@@ -38,6 +38,12 @@ All six authored demo questions and explanations are localized. Fictional host l
 empty OOM/SIGKILL logs, and operator-entered English questions under Russian UI have browser regressions. Large-log
 coverage uses a mocked API response rather than a demo switch that manufactures evidence. Empty logs use a compact
 neutral message inside their card.
+
+Inventory checks cover deferred refresh progress, visible acknowledgement, retained rows and drafts after failure,
+and distinct receipt/observation times. Host selection checks cover keyboard activation, focus restoration, current-host
+selection without state loss, a new session after changing hosts, long names, loading, errors, and empty discovery.
+English and Russian host pickers and refresh feedback were reviewed at all three widths with no Axe violations.
+Host discovery and successful retries keep the picker open through workspace remounts and restore focus on close.
 
 ## Final app critique
 
@@ -72,6 +78,9 @@ local errors from server messages; unit and browser regressions verify both orig
 Demo review found that scenario selection could bypass empty inventory and create container cards on an empty host.
 Scenario selection and streamed demo answers now share the same empty-state boundary, with regression coverage.
 
+Navigation review reproduced a picker closing during initial host discovery or a successful retry. Picker visibility
+now belongs to the connection owner, with focus returning to the current breadcrumb after a host-scoped remount.
+
 Frontend CI was not added: automatic approval review could not authorize the workflow-file change because its service
 reported a usage limit. Existing CI configuration is unchanged. Local verification remains reproducible with the
 commands in [frontend operation](frontend.md).
@@ -82,3 +91,6 @@ Russian UI: [desktop](screenshots/frontend-russian-desktop.png), [tablet](screen
 [mobile](screenshots/frontend-russian-mobile.png), and [confirmation](screenshots/frontend-russian-action.png).
 Demo clarification: [desktop](screenshots/frontend-demo-desktop.png), [tablet](screenshots/frontend-demo-tablet.png),
 and [mobile](screenshots/frontend-demo-mobile.png).
+Navigation: [host selection](screenshots/frontend-host-picker.png),
+[mobile host selection](screenshots/frontend-host-picker-mobile.png),
+and [refresh acknowledgement](screenshots/frontend-refresh.png).
