@@ -57,8 +57,8 @@ export const scenarios = [
 export type ScenarioId = (typeof scenarios)[number]['id'];
 export type DemoFault = 'none' | 'offline' | 'stream' | 'empty';
 export const demoHosts: Host[] = [
-  { id: 'production-eu', name: 'Production / EU' },
-  { id: 'staging', name: 'Staging' },
+  { id: 'demo-eu', name: 'Demo host / EU' },
+  { id: 'demo-empty', name: 'Demo host / Empty' },
 ];
 
 /** Build a fixture-backed Docker snapshot, keeping missing metrics distinct from zero. */
@@ -90,7 +90,7 @@ export function demoContainer(index: number, host: string, observedAt: string): 
 }
 
 /** Produce all four supported widgets using only fields in the backend contracts. */
-export function demoAnswer(scenarioId: ScenarioId, host = 'production-eu', largeLogs = false): Answer {
+export function demoAnswer(scenarioId: ScenarioId, host = 'demo-eu'): Answer {
   const index = scenarios.findIndex((row) => row.id === scenarioId);
   const now = new Date().toISOString();
   const snapshot = demoContainer(index, host, now);
@@ -119,19 +119,11 @@ export function demoAnswer(scenarioId: ScenarioId, host = 'production-eu', large
           : []),
       ]
     : [];
-  const entries = (
-    largeLogs
-      ? Array.from(
-          { length: 200 },
-          (_, i) =>
-            `${messages[i % Math.max(1, messages.length)] ?? 'No additional application output'} [line ${i + 1}]`,
-        )
-      : messages
-  ).map((message, i) => ({
-    timestamp: new Date(Date.parse(now) - ((largeLogs ? 200 : messages.length) - i) * 1000).toISOString(),
+  const entries = messages.map((message, i) => ({
+    timestamp: new Date(Date.parse(now) - (messages.length - i) * 1000).toISOString(),
     message,
   }));
-  const logs = { entries, truncated: fixture.truncated || largeLogs };
+  const logs = { entries, truncated: fixture.truncated };
   const operation = snapshot.state === 'restarting' ? 'stop' : 'restart';
   const action: Action = {
     id: crypto.randomUUID(),
@@ -219,7 +211,6 @@ export class DemoClient implements Transport {
   scenario: ScenarioId = 'crash_loop';
   fault: DemoFault = 'none';
   outcome: 'succeeded' | 'failed' | 'indeterminate' | 'expired' = 'succeeded';
-  largeLogs = false;
   private readonly actions = new Map<string, Action>();
   private readonly keys = new Map<string, string>();
 
@@ -238,11 +229,6 @@ export class DemoClient implements Transport {
     this.outcome = value;
   }
 
-  /** Expand the bounded log fixture for readability checks. */
-  setLargeLogs(value: boolean) {
-    this.largeLogs = value;
-  }
-
   /** Retain simulated prepared IDs exactly as a server would. */
   remember(answer: Answer): Answer {
     answer.widgets.forEach((widget) => {
@@ -250,6 +236,19 @@ export class DemoClient implements Transport {
         widget.actions.forEach((action) => this.actions.set(action.id, action));
     });
     return answer;
+  }
+
+  /** Keep selected examples consistent with empty-host and empty-inventory simulations. */
+  example(host: string): Answer {
+    if (host === 'demo-empty' || this.fault === 'empty')
+      return {
+        schema_version: 1,
+        summary: 'No containers were returned on this host. There is no container evidence to establish a cause.',
+        uncertain: true,
+        evidence: [],
+        widgets: [],
+      };
+    return this.remember(demoAnswer(this.scenario, host));
   }
 
   /** Return only configured simulated host IDs. */
@@ -260,7 +259,7 @@ export class DemoClient implements Transport {
   /** Keep inventory counts derived from the returned rows. */
   async containers(host: string) {
     if (this.fault === 'offline') throw new Error('Demo: host connection unavailable.');
-    if (this.fault === 'empty' || host === 'staging') return [];
+    if (this.fault === 'empty' || host === 'demo-empty') return [];
     const now = new Date().toISOString();
     return scenarios.map((_, i) => demoContainer(i, host, now));
   }
@@ -270,7 +269,7 @@ export class DemoClient implements Transport {
     if (this.fault === 'offline') throw new Error('Demo: connection lost before the diagnostic stream opened.');
     const envelope = { schema_version: 1 as const, request_id: crypto.randomUUID(), turn_id: crypto.randomUUID() };
     receive({ ...envelope, type: 'turn.started', session_id: input.session_id ?? crypto.randomUUID() });
-    const empty = input.host === 'staging' || this.fault === 'empty';
+    const empty = input.host === 'demo-empty' || this.fault === 'empty';
     const tools = empty
       ? ['list_containers']
       : ['inspect_container', 'get_container_logs', 'list_stacks', 'get_container_env'];
@@ -291,15 +290,7 @@ export class DemoClient implements Transport {
     receive({
       ...envelope,
       type: 'answer.ready',
-      answer: empty
-        ? {
-            schema_version: 1,
-            summary: 'No containers were returned on this host. There is no container evidence to establish a cause.',
-            uncertain: true,
-            evidence: [],
-            widgets: [],
-          }
-        : this.remember(demoAnswer(this.scenario, input.host, this.largeLogs)),
+      answer: this.example(input.host),
     });
     receive({ ...envelope, type: 'turn.completed' });
   }

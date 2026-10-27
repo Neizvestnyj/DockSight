@@ -4,6 +4,47 @@ import { demoAnswer, demoContainer } from '../src/demo';
 
 test.use({ locale: 'ru-RU' });
 
+test('explains demo controls, localizes every built-in scenario, and keeps empty logs empty', async ({
+  page,
+}, info) => {
+  await page.goto('/');
+  await expect(page.locator('.breadcrumb')).toContainText('Демо-хост / EU');
+  await expect(page.locator('.demo-bar')).toContainText('Пример данных вымышленного хоста');
+  const examples = [
+    ['crash_loop', 'Почему payments-api постоянно перезапускается?', 'цикл перезапусков'],
+    ['dependency', 'Почему checkout-api не запускается?', 'база данных отказала в подключении'],
+    ['truncated_logs', 'Что произошло с migration-runner?', 'Логи обрезаны'],
+    [
+      'unconfirmed_sigkill',
+      'Был ли event-consumer завершён из-за нехватки памяти?',
+      'Причина завершения остаётся неизвестной',
+    ],
+    ['running', 'Что известно о состоянии redis по этому наблюдению?', 'единичный замер'],
+    ['oom', 'Почему report-worker завершился с кодом 137?', 'нехватки памяти (OOM)'],
+  ];
+  for (const [scenario, query, summary] of examples) {
+    await page.getByLabel('Демо-сценарий').selectOption(scenario!);
+    await expect(page.getByRole('heading', { name: query, exact: true })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Объяснение модели' })).toContainText(summary!);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
+  await page.getByText('Проверить ошибки', { exact: true }).click();
+  await expect(page.getByRole('checkbox', { name: '200 строк логов' })).toHaveCount(0);
+  await page.getByLabel('Имитация подключения', { exact: true }).selectOption('stream');
+  await expect(page.getByText('Отправьте вопрос, чтобы увидеть ошибку после сбора данных.')).toBeVisible();
+  await page.getByLabel('После подтверждения действия', { exact: true }).selectOption('indeterminate');
+  await expect(page.getByRole('region', { name: 'Логи контейнера', exact: true })).toContainText('Получено 0 строк');
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  await page.getByRole('heading', { name: 'Диагностика контейнера' }).scrollIntoViewIfNeeded();
+  await page.screenshot({ path: `test-results/${info.project.name}-demo-clarity.png`, fullPage: true });
+  await page.getByLabel('Имитация подключения', { exact: true }).selectOption('none');
+  const typedQuery = 'Why did report-worker exit with code 137?';
+  await page.getByRole('textbox', { name: 'Продолжить расследование' }).fill(typedQuery);
+  await page.getByRole('button', { name: 'Исследовать', exact: true }).click();
+  await expect(page.getByRole('heading', { name: typedQuery, exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Объяснение модели' })).toContainText('нехватки памяти (OOM)');
+});
+
 test('localizes interrupted streams while preserving the same message when authored by the API', async ({ page }) => {
   const sourceMessage = 'Connection ended before the diagnostic turn completed. Retry manually.';
   let turns = 0;
@@ -53,7 +94,12 @@ test('detects Russian and preserves evidence, action IDs and draft while switchi
     'Проверить зависимость без изменения логов',
   );
   expect(await page.getByRole('region', { name: 'Timestamped container logs' }).innerText()).toBe(logs);
-  expect(await page.getByRole('region', { name: 'Model explanation' }).locator('p').first().innerText()).toBe(summary);
+  expect(await page.getByRole('region', { name: 'Model explanation' }).locator('p').first().innerText()).not.toBe(
+    summary,
+  );
+  await expect(page.getByRole('region', { name: 'Model explanation' })).toContainText(
+    'payments-api is caught in a restart loop.',
+  );
   await page.getByRole('button', { name: 'Review stop' }).click();
   expect(await page.getByRole('dialog').locator('.confirmation-facts code').last().innerText()).toBe(actionId);
   await page.keyboard.press('Escape');
@@ -87,7 +133,6 @@ test('detects Russian and preserves evidence, action IDs and draft while switchi
 
 test('does not translate API summaries, messages, logs, or environment values', async ({ page }) => {
   const answer = demoAnswer('crash_loop', 'local');
-  answer.summary = 'API-authored explanation: preserve this text exactly.';
   for (const widget of answer.widgets) {
     if (widget.widget_type === 'log_anomalies')
       widget.logs.entries = [{ timestamp: null, message: 'Container investigation <script>untrusted</script>' }];

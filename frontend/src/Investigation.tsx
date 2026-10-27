@@ -47,10 +47,13 @@ export function Investigation({ investigation, client, demo, containers, draft, 
   const [outcomes, setOutcomes] = useState<Record<string, Action>>({});
   const [keys] = useState(() => new Map<string, string>());
   const answer = turn?.answer;
+  const displayedQuery = turn?.exampleQuery && isMessageKey(turn.query) ? t(turn.query) : turn?.query;
   const localError = turn?.errorSource === 'client' && turn.error;
   const errorMessage = localError
     ? t(isMessageKey(localError) ? localError : 'Connection failed. Retry manually.')
-    : turn?.error;
+    : demo && turn?.error && isMessageKey(turn.error)
+      ? t(turn.error)
+      : turn?.error;
   const selected = answer?.evidence.find((row) => row.id === reference) ?? answer?.evidence[0];
 
   /** Move keyboard focus with the selected source so the evidence chain works without a pointer. */
@@ -77,7 +80,7 @@ export function Investigation({ investigation, client, demo, containers, draft, 
             <div>
               {turns.map((row) => (
                 <button className="history-row" key={row.id} onClick={() => setViewId(row.id)}>
-                  <span>{row.query}</span>
+                  <span>{row.exampleQuery && isMessageKey(row.query) ? t(row.query) : row.query}</span>
                   <span className="muted">{stateLabel(row.state, t, true)}</span>
                 </button>
               ))}
@@ -90,7 +93,7 @@ export function Investigation({ investigation, client, demo, containers, draft, 
               <span className="query-glyph" aria-hidden="true">
                 ↳
               </span>
-              <h2>{turn.query}</h2>
+              <h2>{displayedQuery}</h2>
               <span className="muted query-author">{t('Operator')}</span>
             </div>
             {turn.progress.length > 0 && (
@@ -129,7 +132,7 @@ export function Investigation({ investigation, client, demo, containers, draft, 
                       {t(answer.uncertain ? 'Cause uncertain' : 'Model explanation')}
                     </span>
                   </div>
-                  <p>{answer.summary}</p>
+                  <p>{demo && isMessageKey(answer.summary) ? t(answer.summary) : answer.summary}</p>
                   {answer.uncertain && (
                     <p className="uncertain-note">
                       {t('The collected observations do not establish a definitive cause.')}

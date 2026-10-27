@@ -9,6 +9,19 @@ import { vi } from 'vitest';
 afterEach(cleanup);
 
 describe('investigation workspace', () => {
+  it('does not create container evidence or actions by choosing a scenario on an empty demo host', async () => {
+    render(<App />);
+    fireEvent.change(screen.getByLabelText('Configured host'), { target: { value: 'demo-empty' } });
+    fireEvent.change(screen.getByLabelText('Demo scenario'), { target: { value: 'oom' } });
+    expect(screen.queryByRole('button', { name: 'Review restart' })).not.toBeInTheDocument();
+    expect(screen.getByText('No UI cards were returned for this answer.')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Configured host'), { target: { value: 'demo-eu' } });
+    fireEvent.change(screen.getByLabelText('Simulated connection'), { target: { value: 'empty' } });
+    fireEvent.change(screen.getByLabelText('Demo scenario'), { target: { value: 'dependency' } });
+    expect(screen.queryByRole('button', { name: 'Review restart' })).not.toBeInTheDocument();
+    expect(screen.getByText('No UI cards were returned for this answer.')).toBeInTheDocument();
+  });
+
   it('checks a running action without sending another mutation and renders the returned failed state', async () => {
     const answer = demoAnswer('crash_loop');
     const card = answer.widgets.find((row) => row.widget_type === 'container_status')!;
@@ -26,8 +39,8 @@ describe('investigation workspace', () => {
   it('does not replay a demo result after changing away from and back to a host', async () => {
     render(<App />);
     fireEvent.change(screen.getByLabelText('Demo scenario'), { target: { value: 'oom' } });
-    fireEvent.change(screen.getByLabelText('Configured host'), { target: { value: 'staging' } });
-    fireEvent.change(screen.getByLabelText('Configured host'), { target: { value: 'production-eu' } });
+    fireEvent.change(screen.getByLabelText('Configured host'), { target: { value: 'demo-empty' } });
+    fireEvent.change(screen.getByLabelText('Configured host'), { target: { value: 'demo-eu' } });
     expect(await screen.findByText('Start an investigation')).toBeInTheDocument();
     expect(screen.getByLabelText('Demo scenario')).toHaveValue('oom');
   });
@@ -57,7 +70,7 @@ describe('investigation workspace', () => {
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: 'Review stop' }));
     expect(screen.getByRole('dialog')).toHaveTextContent('1'.repeat(64));
-    expect(screen.getByRole('dialog')).toHaveTextContent('production-eu');
+    expect(screen.getByRole('dialog')).toHaveTextContent('demo-eu');
     fireEvent.click(screen.getByRole('button', { name: 'Confirm stop' }));
     await waitFor(() => expect(screen.getByText('succeeded', { exact: true })).toBeInTheDocument());
   });
@@ -65,7 +78,7 @@ describe('investigation workspace', () => {
   it('starts an empty separate investigation when the host changes', async () => {
     render(<App />);
     await screen.findByRole('button', { name: 'Review stop' });
-    fireEvent.change(screen.getByLabelText('Configured host'), { target: { value: 'staging' } });
+    fireEvent.change(screen.getByLabelText('Configured host'), { target: { value: 'demo-empty' } });
     expect(await screen.findByText('Start an investigation')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Review stop' })).not.toBeInTheDocument();
     expect(await screen.findByText('No containers on this host.')).toBeInTheDocument();

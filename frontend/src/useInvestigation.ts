@@ -9,6 +9,7 @@ export interface ToolProgress {
 export interface Turn {
   id: string;
   query: string;
+  exampleQuery?: true;
   state: 'running' | 'completed' | 'failed' | 'stopped';
   progress: ToolProgress[];
   answer?: Answer;
@@ -26,6 +27,7 @@ export function useInvestigation(client: Transport, host: string, initial?: Answ
           {
             id: 'example',
             query: 'Why does payments-api keep restarting?',
+            exampleQuery: true,
             state: 'completed',
             progress: [],
             answer: initial,
@@ -63,7 +65,7 @@ export function useInvestigation(client: Transport, host: string, initial?: Answ
   /** Render a retained demo investigation without pretending it came from a live backend. */
   function example(answer: Answer, query: string) {
     clear();
-    setTurns([{ id: crypto.randomUUID(), query, state: 'completed', progress: [], answer }]);
+    setTurns([{ id: crypto.randomUUID(), query, exampleQuery: true, state: 'completed', progress: [], answer }]);
   }
 
   /** Apply an ordered event to its own turn rather than to a global latest answer. */

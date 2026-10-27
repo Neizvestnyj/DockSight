@@ -111,16 +111,32 @@ describe('language preference', () => {
     expect(translate('en', '{count} lines returned', { count: 1 })).toBe('1 line returned');
   });
 
-  it('changes the interface without replacing evidence, questions, or the current action', async () => {
+  it('localizes demo copy without replacing evidence or the current action', async () => {
     render(<App />);
     const log = 'ValueError: invalid application configuration';
     fireEvent.change(screen.getByRole('combobox', { name: 'Language' }), { target: { value: 'ru' } });
     expect(screen.getByRole('heading', { name: 'Диагностика контейнера' })).toBeInTheDocument();
     expect(screen.getByText(log, { exact: true })).toBeInTheDocument();
     expect(screen.getByText('production', { exact: true })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Why does payments-api keep restarting?' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Почему payments-api постоянно перезапускается?' })).toBeInTheDocument();
     fireEvent.click(await screen.findByRole('button', { name: 'Проверить остановку' }));
     expect(screen.getByRole('dialog')).toHaveTextContent('1'.repeat(64));
     expect(screen.getByRole('button', { name: 'Подтвердить остановку' })).toBeInTheDocument();
+  });
+
+  it('localizes the OOM example and identifies the simulated host without fabricating log lines', async () => {
+    render(<App />);
+    fireEvent.change(screen.getByRole('combobox', { name: 'Language' }), { target: { value: 'ru' } });
+    fireEvent.change(screen.getByLabelText('Демо-сценарий'), { target: { value: 'oom' } });
+    expect(screen.getByRole('heading', { name: 'Почему report-worker завершился с кодом 137?' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Объяснение модели' })).toHaveTextContent(
+      'Docker сообщает, что report-worker был завершён из-за нехватки памяти (OOM)',
+    );
+    expect(screen.getByRole('combobox', { name: 'Настроенный хост' })).toHaveTextContent('Демо-хост / EU');
+    expect(screen.getByRole('region', { name: 'Логи контейнера' })).toHaveTextContent('Получено 0 строк');
+    expect(screen.queryByRole('checkbox', { name: '200 строк логов' })).not.toBeInTheDocument();
+    expect(
+      await screen.findByText('Пример данных вымышленного хоста. Подключите API для диагностики своего Docker.'),
+    ).toBeInTheDocument();
   });
 });

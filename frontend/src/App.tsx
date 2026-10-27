@@ -3,7 +3,9 @@ import { useLocale } from './locale';
 import { useEffect, useState } from 'react';
 import { ArrowRight, ChevronRight, FlaskConical, Menu, MessageSquarePlus } from 'lucide-react';
 import type { Container, Host, Transport } from './contracts';
-import { DemoClient, demoAnswer, demoHosts, scenarios, type DemoFault, type ScenarioId } from './demo';
+import { DemoClient, demoAnswer, demoHosts, scenarios, type ScenarioId } from './demo';
+import { DemoControls } from './DemoControls';
+import { isMessageKey } from './messages';
 import { Connection } from './Connection';
 import { Investigation } from './Investigation';
 import { Mark, Modal } from './ui';
@@ -35,7 +37,7 @@ function ConnectedApp() {
     id: 0,
   }));
   const [hosts, setHosts] = useState<Host[]>(demoHosts);
-  const [host, setHost] = useState('production-eu');
+  const [host, setHost] = useState('demo-eu');
   const [showExample, setShowExample] = useState(true);
   const [hostError, setHostError] = useState('');
   const [hostLoading, setHostLoading] = useState(false);
@@ -66,7 +68,7 @@ function ConnectedApp() {
   function changeConnection(client: Transport, demo: boolean) {
     setConnection((previous) => ({ client, demo, id: previous.id + 1 }));
     setHosts(demo ? demoHosts : []);
-    setHost(demo ? 'production-eu' : '');
+    setHost(demo ? 'demo-eu' : '');
     setHostError('');
     setHostLoading(true);
     setConnecting(false);
@@ -78,7 +80,11 @@ function ConnectedApp() {
       <Workspace
         key={`${connection.id}-${host}`}
         connection={connection}
-        hosts={hosts}
+        hosts={
+          connection.demo
+            ? hosts.map((row) => ({ ...row, name: isMessageKey(row.name) ? t(row.name) : row.name }))
+            : hosts
+        }
         host={host}
         changeHost={(value) => {
           setHost(value);
@@ -133,9 +139,7 @@ function Workspace({
   const { client, demo } = connection;
   const demoClient = client instanceof DemoClient ? client : null;
   const [initial] = useState(() =>
-    demoClient && showExample && host === 'production-eu'
-      ? demoClient.remember(demoAnswer('crash_loop', host))
-      : undefined,
+    demoClient && showExample && host === 'demo-eu' ? demoClient.remember(demoAnswer('crash_loop', host)) : undefined,
   );
   const investigation = useInvestigation(client, host, initial);
   const [inventory, setInventory] = useState<Container[]>([]);
@@ -182,9 +186,9 @@ function Workspace({
     demoClient.setScenario(value);
     setScenario(value);
     const item = scenarios.find((row) => row.id === value)!;
-    const index = scenarios.indexOf(item);
-    setSelected((index + 1).toString(16).repeat(64));
-    investigation.example(demoClient.remember(demoAnswer(value, host, demoClient.largeLogs)), item.query);
+    const answer = demoClient.example(host);
+    setSelected(answer.widgets.find((row) => row.widget_type === 'container_status')?.snapshot.id ?? '');
+    investigation.example(answer, item.query);
     setDraft('');
   }
 
@@ -298,7 +302,7 @@ function Workspace({
             <div>
               <FlaskConical size={15} />
               <strong>{t('Demo')}</strong>
-              <span>{t('Simulated observations · no Docker changes')}</span>
+              <span>{t('Example data from a fictional host. Connect an API to diagnose your Docker.')}</span>
             </div>
             <label>
               {t('Scenario')}
@@ -317,55 +321,7 @@ function Workspace({
             </label>
           </div>
         )}
-        {demoClient && (
-          <details className="demo-controls">
-            <summary>{t('Demo controls')}</summary>
-            <div>
-              <label>
-                {t('Connection behavior')}
-                <select
-                  aria-label={t('Demo connection behavior')}
-                  defaultValue={demoClient.fault}
-                  onChange={(event) => {
-                    demoClient.setFault(event.target.value as DemoFault);
-                    refresh();
-                  }}
-                >
-                  <option value="none">{t('Normal')}</option>
-                  <option value="stream">{t('Turn fails after collection')}</option>
-                  <option value="offline">{t('Connection unavailable')}</option>
-                  <option value="empty">{t('Empty inventory')}</option>
-                </select>
-              </label>
-              <label>
-                {t('Action outcome')}
-                <select
-                  aria-label={t('Demo action outcome')}
-                  defaultValue={demoClient.outcome}
-                  onChange={(event) => {
-                    demoClient.setOutcome(event.target.value as DemoClient['outcome']);
-                  }}
-                >
-                  <option value="succeeded">{t('Succeeded')}</option>
-                  <option value="failed">{t('Failed')}</option>
-                  <option value="indeterminate">{t('Indeterminate')}</option>
-                  <option value="expired">{t('Expired')}</option>
-                </select>
-              </label>
-              <label className="checkbox-label">
-                <input
-                  type="checkbox"
-                  defaultChecked={demoClient.largeLogs}
-                  onChange={(event) => {
-                    demoClient.setLargeLogs(event.target.checked);
-                    chooseScenario(scenario);
-                  }}
-                />
-                {t('200 log lines')}
-              </label>
-            </div>
-          </details>
-        )}
+        {demoClient && <DemoControls client={demoClient} refresh={refresh} running={investigation.running} />}
         {hostError && (
           <div className="turn-error">
             <p role="alert">{hostError}</p>

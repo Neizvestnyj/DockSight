@@ -1,3 +1,5 @@
+import { demoMessages } from './demoMessages';
+
 export type Locale = 'en' | 'ru';
 export type LocalePreference = Locale | 'system';
 type Plurals = { one: string; other: string; few?: string; many?: string };
@@ -5,6 +7,7 @@ export type MessageValues = Record<string, string | number>;
 
 /** Keep product copy separate from verbatim Docker, model, and server content. */
 const russian = {
+  ...demoMessages,
   Language: 'Язык',
   System: 'Системный',
   'Container investigation': 'Диагностика контейнера',
@@ -41,20 +44,33 @@ const russian = {
   'Simulated observations · no Docker changes': 'Пример наблюдений · без изменений в Docker',
   Scenario: 'Сценарий',
   'Demo scenario': 'Демо-сценарий',
-  'Demo controls': 'Настройки демо',
-  'Connection behavior': 'Поведение подключения',
+  'Test error states': 'Проверить ошибки',
+  'Demo host / EU': 'Демо-хост / EU',
+  'Demo host / Empty': 'Демо-хост / Пустой',
+  'Example data from a fictional host. Connect an API to diagnose your Docker.':
+    'Пример данных вымышленного хоста. Подключите API для диагностики своего Docker.',
+  'Simulated connection': 'Имитация подключения',
+  'Requests succeed normally.': 'Запросы выполняются без ошибок.',
+  'Submit a question to simulate a failure after collecting evidence.':
+    'Отправьте вопрос, чтобы увидеть ошибку после сбора данных.',
+  'The container list cannot load; submitting a question also fails.':
+    'Список контейнеров не загружается; отправка вопроса тоже завершится ошибкой.',
+  'The container list is empty; new questions return no container evidence.':
+    'Список контейнеров пуст; новые вопросы вернут ответ без данных о контейнерах.',
+  'After action confirmation': 'После подтверждения действия',
+  'Action outcome': 'Результат действия',
+  'Choose a result, review a container action, then confirm it. Shown cards stay unchanged.':
+    'Выберите результат, откройте действие контейнера и подтвердите его. Данные в карточках останутся прежними.',
   'Demo connection behavior': 'Подключение в демо',
   Normal: 'Обычное',
   'Turn fails after collection': 'Ошибка после сбора данных',
   'Connection unavailable': 'Нет подключения',
   'Empty inventory': 'Пустой список контейнеров',
-  'Action outcome': 'Результат действия',
   'Demo action outcome': 'Результат действия в демо',
   Succeeded: 'Успешно',
   Failed: 'Ошибка',
   Indeterminate: 'Результат не подтверждён',
   Expired: 'Срок истёк',
-  '200 log lines': '200 строк логов',
   'Retry connection': 'Повторить подключение',
   'Host & containers': 'Хосты и контейнеры',
   'Could not load configured hosts. Check the API endpoint, bearer token, and CORS.':

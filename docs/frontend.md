@@ -22,8 +22,7 @@ host-scoped investigations; there is no persisted conversation history. Credenti
 
 Demo is a separate transport with labeled fixtures matching backend contracts. It never contacts Docker. Its scenarios
 cover crash loops, OOM, failed dependencies, truncated logs, an unconfirmed SIGKILL, and a running container with zero CPU.
-Operation outcomes are selectable
-in demo controls. Demo observations and operations are simulations.
+Operation outcomes are selectable under Test error states. Demo observations and operations are simulations.
 
 Action confirmation uses only server-issued IDs and shows the exact host, container ID, operation, and expiry.
 One execution keeps one idempotency key. A dropped execution response triggers an action read; it never triggers another
@@ -38,9 +37,14 @@ rtk proxy npm --prefix frontend ci
 rtk proxy npm --prefix frontend run dev
 ```
 
-The initial workspace is a labeled simulation. `production-eu` contains six fixture-backed containers; `staging` is an
-empty host. The scenario selector chooses the example. Demo controls expose connection errors, a terminal stream error,
-empty inventory, 200 bounded log lines, and succeeded, failed, expired, or indeterminate operations.
+The initial workspace is a labeled simulation. `demo-eu` contains six fixture-backed containers; `demo-empty` is an
+empty host. Both names identify fictional hosts. The scenario selector chooses an example without a network request.
+Test error states explains connection failures, a terminal stream error, and empty inventory. Connection settings apply
+to inventory reads and subsequent questions. The action-result selector applies after a separate action confirmation;
+existing evidence stays unchanged. These controls are disabled during collection.
+
+Log entries come from the selected fixture. OOM and unconfirmed-exit examples keep empty logs; no control generates
+replacement rows. Browser tests exercise 200-line scrolling through mocked API responses.
 
 Choose **Connect API**, use `/api/v1` with the local backend on port 8000, and enter its bearer token. For remote
 connections, enter an HTTPS API base ending in `/api/v1` and configure backend CORS for the frontend's origin. Tokens
@@ -74,8 +78,10 @@ server-issued action IDs, and execution keys.
 
 Typed UI copy, status labels, accessibility names, counts, and numeric formatting are localized. Raw API/model text,
 container/image/host identities, log messages and timestamps, environment keys/values, and observation JSON remain
-verbatim. The demo's example questions and explanations also retain their original text. Self-hosted Latin/Cyrillic
-font subsets use distinct unicode ranges. Code, comments, documentation, and transport contracts remain in English.
+verbatim. Authored demo questions and explanations have English/Russian translations; operator-entered questions stay
+verbatim. Example provenance allows language changes without replacing observations or prepared actions. A real API
+explanation stays verbatim even when it exactly matches a built-in demo narrative. Self-hosted Latin/Cyrillic font
+subsets use distinct unicode ranges. Code, comments, documentation, and transport contracts remain in English.
 
 ## Limitations
 

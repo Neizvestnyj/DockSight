@@ -57,26 +57,33 @@ test('renders OOM, uncertainty, absent logs, and truncated data honestly', async
 
 test('keeps retained demo controls honest across separate host sessions', async ({ page }) => {
   await page.getByLabel('Demo scenario').selectOption('oom');
-  await page.getByText('Demo controls', { exact: true }).click();
-  await page.getByLabel('Demo action outcome').selectOption('indeterminate');
-  await page.getByLabel('200 log lines').check();
-  for (const host of ['staging', 'production-eu']) {
+  await page.getByText('Test error states', { exact: true }).click();
+  await page.getByLabel('After action confirmation', { exact: true }).selectOption('indeterminate');
+  for (const host of ['demo-empty', 'demo-eu']) {
     if ((page.viewportSize()?.width ?? 1440) <= 1100)
       await page.getByRole('button', { name: 'Open host and containers' }).click();
     await page.getByRole('combobox', { name: 'Configured host' }).selectOption(host);
+    if (host === 'demo-empty') {
+      await page.getByLabel('Demo scenario').selectOption('oom');
+      await expect(page.getByText('No UI cards were returned for this answer.')).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Review restart' })).toHaveCount(0);
+    }
   }
   await expect(page.getByRole('heading', { name: 'Start an investigation' })).toBeVisible();
   await expect(page.getByLabel('Demo scenario')).toHaveValue('oom');
-  await page.getByText('Demo controls', { exact: true }).click();
-  await expect(page.getByLabel('Demo action outcome')).toHaveValue('indeterminate');
-  await expect(page.getByLabel('200 log lines')).toBeChecked();
+  await page.getByText('Test error states', { exact: true }).click();
+  await expect(page.getByLabel('After action confirmation', { exact: true })).toHaveValue('indeterminate');
+  await page.getByLabel('Simulated connection', { exact: true }).selectOption('empty');
+  await page.getByLabel('Demo scenario').selectOption('dependency');
+  await expect(page.getByText('No UI cards were returned for this answer.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Review restart' })).toHaveCount(0);
 });
 
 test('shows failed and expired outcomes even when the operation request succeeds', async ({ page }) => {
-  await page.getByText('Demo controls', { exact: true }).click();
+  await page.getByText('Test error states', { exact: true }).click();
   for (const outcome of ['failed', 'expired']) {
     await page.getByLabel('Demo scenario').selectOption('crash_loop');
-    await page.getByLabel('Demo action outcome').selectOption(outcome);
+    await page.getByLabel('After action confirmation', { exact: true }).selectOption(outcome);
     await page.getByRole('button', { name: 'Review stop' }).click();
     await page.getByRole('button', { name: 'Confirm stop' }).click();
     await expect(page.getByRole('dialog').getByText(outcome, { exact: true })).toBeVisible();
@@ -85,8 +92,29 @@ test('shows failed and expired outcomes even when the operation request succeeds
 });
 
 test('keeps large logs bounded and keyboard-scrollable', async ({ page }) => {
-  await page.getByText('Demo controls', { exact: true }).click();
-  await page.getByLabel('200 log lines').check();
+  const answer = demoAnswer('crash_loop', 'test-host');
+  const data = {
+    entries: Array.from({ length: 200 }, (_, i) => ({
+      timestamp: null,
+      message: `Browser test log sample ${i + 1}: application output`,
+    })),
+    truncated: true,
+  };
+  answer.widgets.find((row) => row.widget_type === 'log_anomalies')!.logs = data;
+  answer.evidence.find((row) => row.kind === 'logs')!.data = data;
+  await page.route('**/api/v1/**', (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith('/hosts')) return route.fulfill({ json: [{ id: 'test-host', name: 'Test host' }] });
+    if (path.endsWith('/containers'))
+      return route.fulfill({ json: [demoContainer(0, 'test-host', new Date().toISOString())] });
+    return route.fulfill({
+      contentType: 'text/event-stream',
+      body: sse('answer.ready', { answer }) + sse('turn.completed'),
+    });
+  });
+  await connectApi(page);
+  await page.getByRole('textbox', { name: 'Ask DockSight', exact: true }).fill('Read the log sample');
+  await page.getByRole('button', { name: 'Investigate', exact: true }).click();
   const logs = page.getByRole('region', { name: 'Timestamped container logs' });
   await expect(logs.locator('.log-line')).toHaveCount(200);
   await logs.focus();
@@ -101,29 +129,29 @@ test('can stop, manually retry, and report a terminal failure after HTTP success
   await expect(page.getByRole('status', { name: 'Diagnostic progress' })).toContainText('Inspecting container state');
   await page.getByRole('button', { name: 'Stop diagnosis' }).click();
   await expect(page.getByRole('heading', { name: 'Diagnosis stopped' })).toBeVisible();
-  await page.getByText('Demo controls', { exact: true }).click();
-  await page.getByLabel('Demo connection behavior').selectOption('stream');
+  await page.getByText('Test error states', { exact: true }).click();
+  await page.getByLabel('Simulated connection', { exact: true }).selectOption('stream');
   await page.getByRole('button', { name: 'Retry diagnosis' }).click();
   await expect(page.getByRole('heading', { name: 'Diagnosis could not finish' })).toBeVisible();
   await expect(page.getByRole('alert')).toContainText('model timed out');
-  await page.getByLabel('Demo connection behavior').selectOption('offline');
+  await page.getByLabel('Simulated connection', { exact: true }).selectOption('offline');
   if ((page.viewportSize()?.width ?? 1440) <= 1100)
     await page.getByRole('button', { name: 'Open host and containers' }).click();
   await expect(page.getByRole('button', { name: 'Retry inventory' })).toBeVisible();
   if ((page.viewportSize()?.width ?? 1440) <= 1100) await page.getByRole('button', { name: 'Close dialog' }).click();
-  await page.getByLabel('Demo connection behavior').selectOption('empty');
+  await page.getByLabel('Simulated connection', { exact: true }).selectOption('empty');
   if ((page.viewportSize()?.width ?? 1440) <= 1100)
     await page.getByRole('button', { name: 'Open host and containers' }).click();
   await expect(page.getByText('No containers on this host.', { exact: true }).last()).toBeVisible();
 });
 
 test('contains focus in confirmation and explains an indeterminate operation', async ({ page }, info) => {
-  await page.getByText('Demo controls', { exact: true }).click();
-  await page.getByLabel('Demo action outcome').selectOption('indeterminate');
+  await page.getByText('Test error states', { exact: true }).click();
+  await page.getByLabel('After action confirmation', { exact: true }).selectOption('indeterminate');
   await page.getByRole('button', { name: 'Review stop' }).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toContainText('1'.repeat(64));
-  await expect(dialog).toContainText('production-eu');
+  await expect(dialog).toContainText('demo-eu');
   await page.keyboard.press('Shift+Tab');
   expect(await dialog.evaluate((element) => element.contains(document.activeElement))).toBe(true);
   await page.getByRole('button', { name: 'Confirm stop' }).click();

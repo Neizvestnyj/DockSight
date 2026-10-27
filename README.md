@@ -38,7 +38,7 @@ rtk proxy npm --prefix frontend run dev
 ```
 
 Open the printed local URL. The initial workspace is explicitly labeled Demo and uses local fixtures; it requires
-neither Docker nor a model. Use the scenario selector and Demo controls to inspect failure and action outcomes.
+neither Docker nor a model. Use the scenario selector for examples and **Test error states** for simulated failures.
 
 For real observations, start the backend above, choose **Connect API**, keep `/api/v1`, and enter the backend bearer
 token. Vite forwards `/api` to `http://127.0.0.1:8000` in development and local preview. A remote API base must use HTTPS
