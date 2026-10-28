@@ -19,7 +19,7 @@ from docksight.application.ports.state import Session, SessionStore
 from docksight.application.redaction import Redactor
 from docksight.application.views.assembler import ViewAssembler
 from docksight.application.views.registry import proposal_schema
-from docksight.application.views.schemas import DiagnosisProposal
+from docksight.application.views.schemas import DiagnosisProposal, GroupTarget
 from docksight.domain.diagnostics import JsonObject
 from docksight.domain.errors import DockSightError
 
@@ -61,6 +61,11 @@ def _redact_narrative(proposal: DiagnosisProposal, redactor: Redactor) -> None:
     for card in proposal.widgets:
         if card.action_reason:
             card.action_reason = redactor.text(card.action_reason)[:240]
+    if proposal.cause:
+        proposal.cause.immediate = redactor.text(proposal.cause.immediate)
+        if proposal.cause.underlying:
+            proposal.cause.underlying = redactor.text(proposal.cause.underlying)
+        proposal.cause.unknowns = [redactor.text(value) for value in proposal.cause.unknowns]
 
 
 class Diagnostics:
@@ -96,7 +101,7 @@ class Diagnostics:
         self.model_identity = model_identity
 
     async def stream(
-        self, actor: str, host: str, query: str, session_id: str | None = None
+        self, actor: str, host: str, query: str, session_id: str | None = None, group: GroupTarget | None = None
     ) -> AsyncGenerator[TurnEvent]:
         """Lease a scoped session and emit one terminal event for a bounded turn."""
         turn_id = str(uuid4())
@@ -108,7 +113,7 @@ class Diagnostics:
                 self._slots,
                 self.sessions.lease(session_id, actor, host) as session,
             ):
-                async for event in self._run_turn(session, query, deadline, trace):
+                async for event in self._run_turn(session, query, deadline, trace, group):
                     yield event
         except (TimeoutError, DockSightError) as exc:
             code, message = (
@@ -135,7 +140,7 @@ class Diagnostics:
             raise DockSightError("turn_capacity", "Diagnostic capacity reached; retry later", 503)
 
     async def _run_turn(
-        self, session: Session, query: str, deadline: float, trace: DiagnosticTrace
+        self, session: Session, query: str, deadline: float, trace: DiagnosticTrace, group: GroupTarget | None
     ) -> AsyncGenerator[TurnEvent]:
         """Collect fresh evidence and retain only the validated summary in session history."""
         yield {"type": "turn.started", "turn_id": trace.turn_id, "session_id": session.id}
@@ -152,8 +157,13 @@ class Diagnostics:
             ModelMessage("user", self.redactor.text(query)),
         ]
         context = EvidenceContext()
-        tools = DiagnosticTools(self.runtime, context, session.host, self.log_lines, self.log_bytes)
-        async for event in self._explore(messages, tools, deadline, trace):
+        tools = DiagnosticTools(self.runtime, context, session.host, self.log_lines, self.log_bytes, group)
+        if group:
+            call = ToolCall("selected-group", "inspect_group", group.model_dump())
+            messages.append(ModelMessage("assistant", "", (call,)))
+            async for event in self._record_tool(call, tools, messages, deadline, 0, trace, strict=True):
+                yield event
+        async for event in self._explore(messages, tools, deadline, trace, int(group is not None)):
             yield event
         messages.append(ModelMessage("user", FINAL_PROMPT))
         async for event in self._finalize(messages, context, session.actor, deadline, trace):
@@ -173,9 +183,10 @@ class Diagnostics:
         tools: DiagnosticTools,
         deadline: float,
         trace: DiagnosticTrace,
+        used: int = 0,
     ) -> AsyncGenerator[TurnEvent]:
         """Collect evidence within shared model, tool, and wall-clock budgets."""
-        tool_calls = 0
+        tool_calls = used
         for _ in range(self.max_model_calls - 2):
             yield trace.begin("model", "collect_evidence")
             reply = await _before_deadline(deadline, lambda: self.model.complete(messages, tool_specs()))
@@ -198,6 +209,7 @@ class Diagnostics:
         deadline: float,
         used: int,
         trace: DiagnosticTrace,
+        strict: bool = False,
     ) -> AsyncGenerator[TurnEvent]:
         """Pair every selected call with a result, tracing only calls within the execution budget."""
         name = self.redactor.text(call.name)
@@ -212,6 +224,8 @@ class Diagnostics:
             yield trace.finish(code=error if isinstance(error, str) else None)
         messages.append(ModelMessage("tool", json.dumps(result), tool_call_id=call.id, tool_name=call.name))
         yield {"type": "tool.completed", "turn_id": trace.turn_id, "tool": name, "ok": "error" not in result}
+        if strict and isinstance(result.get("error"), str):
+            raise DockSightError(str(result["error"]), "Selected group could not be inspected", 502)
 
     async def _tool_result(self, call: ToolCall, tools: DiagnosticTools, deadline: float, used: int) -> JsonObject:
         """Return a safe tool result while preserving the absolute turn deadline."""

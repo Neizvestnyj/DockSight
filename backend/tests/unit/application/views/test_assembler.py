@@ -109,3 +109,22 @@ async def test_container_card_rejects_mixed_hosts() -> None:
     )
     with pytest.raises(DockSightError, match="one exact container"):
         await ViewAssembler().build(proposal, context, "alice")
+
+
+async def test_cause_references_must_resolve_even_when_the_summary_has_no_references() -> None:
+    proposal = DiagnosisProposal.model_validate(
+        {
+            "summary": "Failure",
+            "uncertain": True,
+            "evidence_ids": [],
+            "widgets": [],
+            "cause": {
+                "immediate": "Database connection failed",
+                "underlying": None,
+                "unknowns": ["Database availability"],
+                "evidence_ids": ["invented"],
+            },
+        }
+    )
+    with pytest.raises(DockSightError, match="unknown evidence"):
+        await ViewAssembler().build(proposal, EvidenceContext(), "alice")

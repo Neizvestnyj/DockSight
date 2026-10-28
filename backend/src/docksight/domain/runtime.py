@@ -63,6 +63,19 @@ class LogBatch:
 
 
 @dataclass(frozen=True)
+class StackMember:
+    """Describe an observed container or a Swarm service with explicit count units."""
+
+    id: str
+    name: str
+    kind: Literal["container", "service"]
+    state: str
+    total: int
+    running: int
+    exit_code: int | None = None
+
+
+@dataclass(frozen=True)
 class StackSummary:
     """Summarize observed Compose containers or desired and running Swarm tasks."""
 
@@ -71,3 +84,5 @@ class StackSummary:
     total: int
     running: int
     container_ids: tuple[str, ...] = ()
+    members: tuple[StackMember, ...] = ()
+    truncated: bool = False

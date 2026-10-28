@@ -1,5 +1,11 @@
 /** Translate authored demo narratives without touching Docker evidence or API responses. */
 export const demoMessages = {
+  'The project has several affected containers. checkout-api failed to connect to its database. Other member states are shown below; their logs were not collected in this simulated turn.':
+    'В проекте несколько проблемных контейнеров. checkout-api не смог подключиться к базе данных. Состояния остальных участников показаны ниже; их логи в этой демо-диагностике не собирались.',
+  'checkout-api failed during startup because its database connection was refused.':
+    'checkout-api завершился при запуске из-за отказа в подключении к базе данных.',
+  'Why the database connection was refused, and why the other affected members stopped.':
+    'Почему база данных отказала в подключении и почему завершились остальные проблемные участники.',
   'Why does payments-api keep restarting?': 'Почему payments-api постоянно перезапускается?',
   'Why did report-worker exit with code 137?': 'Почему report-worker завершился с кодом 137?',
   'Why can checkout-api not start?': 'Почему checkout-api не запускается?',

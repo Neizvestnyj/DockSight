@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ApiError } from './api';
-import type { Answer, TraceStep, Transport, TurnEvent } from './contracts';
+import type { Answer, GroupTarget, TraceStep, Transport, TurnEvent } from './contracts';
 
 export interface TurnTrace {
   provider: string | null;
@@ -16,6 +16,7 @@ export interface ToolProgress {
 export interface Turn {
   id: string;
   query: string;
+  group?: GroupTarget;
   exampleQuery?: true;
   state: 'running' | 'completed' | 'failed' | 'stopped';
   progress: ToolProgress[];
@@ -47,6 +48,7 @@ export function useInvestigation(client: Transport, host: string, initial?: Answ
   const session = useRef<string | undefined>(undefined);
   const active = useRef<AbortController | null>(null);
   const generation = useRef(0);
+  const scope = useRef('');
   const running = turns.some((turn) => turn.state === 'running');
 
   useEffect(
@@ -130,17 +132,24 @@ export function useInvestigation(client: Transport, host: string, initial?: Answ
   }
 
   /** Start exactly one manual request; retries are explicit operator submissions. */
-  async function run(query: string, freshSession = false) {
+  async function run(query: string, freshSession = false, group?: GroupTarget) {
     if (active.current || !query.trim() || !host) return;
-    if (freshSession) session.current = undefined;
+    const nextScope = group ? `${group.kind}:${group.name}` : '';
+    if (freshSession || nextScope !== scope.current) session.current = undefined;
+    scope.current = nextScope;
     const controller = new AbortController();
     active.current = controller;
     const current = ++generation.current;
     const id = crypto.randomUUID();
-    setTurns((previous) => [...previous, { id, query: query.trim(), state: 'running', progress: [] }]);
+    setTurns((previous) => [...previous, { id, query: query.trim(), group, state: 'running', progress: [] }]);
     try {
       await client.diagnose(
-        { host, query: query.trim(), ...(session.current ? { session_id: session.current } : {}) },
+        {
+          host,
+          query: query.trim(),
+          ...(group ? { group } : {}),
+          ...(session.current ? { session_id: session.current } : {}),
+        },
         (event) => {
           if (generation.current === current) receive(id, event);
         },

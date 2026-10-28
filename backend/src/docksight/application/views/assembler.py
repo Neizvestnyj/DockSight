@@ -29,10 +29,14 @@ class ViewAssembler:
 
     async def build(self, proposal: DiagnosisProposal, context: EvidenceContext, actor: str) -> DiagnosisResponse:
         """Validate references and assemble cards without trusting model-supplied runtime values."""
-        references = list(
+        extra = [row.evidence_id for row in context.group.logs if row.evidence_id] if context.group else []
+        references: list[str] = list(
             dict.fromkeys(
                 [
                     *proposal.evidence_ids,
+                    *(proposal.cause.evidence_ids if proposal.cause else []),
+                    *([context.group.evidence_id] if context.group else []),
+                    *extra,
                     *(ref for card in proposal.widgets for ref in card.evidence_ids),
                 ]
             )
@@ -44,6 +48,8 @@ class ViewAssembler:
         return DiagnosisResponse(
             summary=proposal.summary,
             uncertain=proposal.uncertain,
+            cause=proposal.cause,
+            group=context.group,
             evidence=[context.evidence[ref] for ref in references],
             widgets=widgets,
         )
@@ -96,7 +102,13 @@ def _stack_card(refs: list[str], context: EvidenceContext) -> ComposeStackCard:
     ref = next((ref for ref in refs if ref in context.stacks), None)
     if ref is None:
         raise DockSightError("invalid_evidence", "Stack card requires stack evidence", 502)
-    return ComposeStackCard(host=context.evidence[ref].host, stacks=list(context.stacks[ref]), evidence_ids=refs)
+    stacks = context.stacks[ref]
+    if context.group:
+        target = context.group.summary
+        stacks = tuple(row for row in stacks if (row.kind, row.name) == (target.kind, target.name))
+        if not stacks:
+            raise DockSightError("resource_outside_group", "Card is outside the selected group", 502)
+    return ComposeStackCard(host=context.evidence[ref].host, stacks=list(stacks), evidence_ids=refs)
 
 
 def _container_snapshot(refs: list[str], context: EvidenceContext) -> ContainerSnapshot:
@@ -104,4 +116,7 @@ def _container_snapshot(refs: list[str], context: EvidenceContext) -> ContainerS
     snapshots = [row for ref, row in context.snapshots.items() if ref in refs]
     if not snapshots or len({(row.host, row.id) for row in snapshots}) != 1:
         raise DockSightError("invalid_evidence", "Card requires evidence for one exact container", 502)
-    return max(enumerate(snapshots), key=lambda item: (item[1].observed_at, item[0]))[1]
+    snapshot = max(enumerate(snapshots), key=lambda item: (item[1].observed_at, item[0]))[1]
+    if context.group and snapshot.id not in context.group.summary.container_ids:
+        raise DockSightError("resource_outside_group", "Card is outside the selected group", 502)
+    return snapshot

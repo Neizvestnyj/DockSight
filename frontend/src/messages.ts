@@ -8,6 +8,46 @@ export type MessageValues = Record<string, string | number>;
 /** Keep product copy separate from verbatim Docker, model, and server content. */
 const russian = {
   ...demoMessages,
+  'Inventory scope': 'Область просмотра',
+  'All containers': 'Все контейнеры',
+  'Compose projects': 'Проекты Compose',
+  'Swarm stacks': 'Стеки Swarm',
+  Group: 'Группа',
+  'Reading groups…': 'Читаем группы…',
+  'Choose a group': 'Выберите группу',
+  'Diagnose group': 'Диагностировать группу',
+  'Refresh groups': 'Обновить группы',
+  'Could not read stacks. Swarm requires a manager on this host.':
+    'Не удалось прочитать стеки. Для Swarm нужен manager на выбранном хосте.',
+  'Could not read Compose projects. Retry the group read.':
+    'Не удалось прочитать проекты Compose. Повторите запрос групп.',
+  'No groups of this kind were returned.': 'Группы этого типа не получены.',
+  'Group inventory may be incomplete.': 'Список участников группы может быть неполным.',
+  'Investigate the {kind} group {name}. Check every member and explain the failures.':
+    'Проверь группу {kind} {name}. Проверь всех участников и объясни сбои.',
+  'Partially explained': 'Причина объяснена частично',
+  'Immediate failure': 'Непосредственная причина сбоя',
+  'Underlying cause': 'Первопричина',
+  'Still unknown': 'Пока неизвестно',
+  'Group observations': 'Наблюдения группы',
+  'Swarm stack': 'Стек Swarm',
+  'containers running': 'контейнеров работает',
+  'task replicas running': 'реплик задач работает',
+  'task replicas': 'реплик задач',
+  'Service counts include remote nodes. Container logs are limited to this engine.':
+    'Счётчики сервисов учитывают удалённые узлы. Логи контейнеров доступны только на выбранном Docker Engine.',
+  Service: 'Сервис',
+  'Log read failed': 'Не удалось прочитать логи',
+  'Logs not collected': 'Логи не собраны',
+  'Problem containers with logs: {collected} / {total}': 'Проблемных контейнеров с логами: {collected} / {total}',
+  'Inspecting group members': 'Проверка участников группы',
+  'Local container discovery failed. Group observations are retained.':
+    'Не удалось получить локальные контейнеры. Наблюдения группы сохранены.',
+  'Supporting observations': 'Подтверждающие наблюдения',
+  'Group members': 'Участники группы',
+  'Collection limit reached': 'Достигнут лимит сбора',
+  'Read unavailable': 'Чтение недоступно',
+  'Local container log coverage': 'Охват логов локальных контейнеров',
   'Read-only diagnosis': 'Диагностика без изменений',
   Actions: 'Действия',
   'Available operations': 'Доступные операции',
@@ -441,6 +481,7 @@ const russian = {
 
 export type MessageKey = keyof typeof russian;
 export const diagnosticOperations: Record<string, MessageKey> = {
+  inspect_group: 'Inspecting group members',
   list_containers: 'Reading container inventory',
   inspect_container: 'Inspecting container state',
   get_container_logs: 'Reading container logs',

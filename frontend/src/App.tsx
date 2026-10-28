@@ -17,6 +17,7 @@ import { ContainerView } from './ContainerView';
 import { useSystemStatus } from './useSystemStatus';
 import { SystemStatusPanel, SystemStatusTrigger } from './SystemStatus';
 import { useInventory } from './useInventory';
+import { useGroups } from './useGroups';
 
 interface ConnectionState {
   client: Transport;
@@ -179,6 +180,7 @@ function Workspace({
     demoClient && showExample && host === 'demo-eu' ? demoClient.remember(demoAnswer('crash_loop', host)) : undefined,
   );
   const investigation = useInvestigation(client, host, initial);
+  const groupScope = useGroups(client, host);
   const availability = useSystemStatus(client, host, !hostLoading, !demo);
   const [statusOpen, setStatusOpen] = useState(false);
   const { inventory, loading, fetching, inventoryError, lastRefreshed, refreshAcknowledged, refresh } = useInventory(
@@ -251,7 +253,24 @@ function Workspace({
     hostLoading,
     hostError,
     retryHosts,
-    inventory,
+    inventory: groupScope.group
+      ? inventory.filter((row) => groupScope.group!.container_ids.includes(row.id))
+      : inventory,
+    groupScope,
+    diagnosisBlocked: investigation.running || Boolean(availability.blockedReason),
+    diagnoseGroup: () => {
+      if (!groupScope.group || investigation.running || availability.blockedReason) return;
+      const { kind, name: groupName } = groupScope.group;
+      openInvestigation();
+      void investigation.run(
+        t('Investigate the {kind} group {name}. Check every member and explain the failures.', {
+          kind: kind === 'compose' ? 'Compose' : 'Swarm',
+          name: groupName,
+        }),
+        true,
+        { kind, name: groupName },
+      );
+    },
     inventoryError,
     lastRefreshed,
     refreshAcknowledged: Boolean(refreshAcknowledged),
@@ -424,6 +443,7 @@ function Workspace({
             setDraft={setDraft}
             host={host}
             blocked={Boolean(availability.blockedReason)}
+            group={groupScope.group ? { kind: groupScope.group.kind, name: groupScope.group.name } : undefined}
           />
         </div>
       </main>

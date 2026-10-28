@@ -12,11 +12,12 @@ import {
   MessageSquare,
   TriangleAlert,
 } from 'lucide-react';
-import type { Action, Answer, Container, Transport } from './contracts';
+import type { Action, Answer, Container, GroupTarget, Transport } from './contracts';
 import { ActionReview } from './ActionReview';
 import { EvidenceInspector, WidgetCard } from './Widgets';
 import type { useInvestigation } from './useInvestigation';
 import { DiagnosticTrace } from './DiagnosticTrace';
+import { GroupReport } from './GroupReport';
 
 const evidenceNames = { container: 'State', logs: 'Logs', env: 'Env', stats: 'Metrics', stack: 'Stack' } as const;
 
@@ -29,6 +30,7 @@ interface Props {
   setDraft: (value: string) => void;
   host: string;
   blocked?: boolean;
+  group?: GroupTarget;
 }
 
 /** Compose conclusions, typed observations, and an always-available follow-up query. */
@@ -41,6 +43,7 @@ export function Investigation({
   setDraft,
   host,
   blocked = false,
+  group,
 }: Props) {
   const { t, locale } = useLocale();
   const { turns, running, run, stop } = investigation;
@@ -60,6 +63,7 @@ export function Investigation({
       ? t(turn.error)
       : turn?.error;
   const selected = answer?.evidence.find((row) => row.id === reference) ?? answer?.evidence[0];
+  const narrative = (text: string) => (demo && isMessageKey(text) ? t(text) : text);
 
   /** Move keyboard focus with the selected source so the evidence chain works without a pointer. */
   function inspect(id: string) {
@@ -70,10 +74,10 @@ export function Investigation({
   }
 
   /** Submit one host-bound query and keep its text available for a manual retry. */
-  function submit(query: string) {
+  function submit(query: string, target?: GroupTarget) {
     if (blocked) return;
     setView(null);
-    void run(query);
+    void run(query, false, target);
     setDraft('');
   }
 
@@ -141,11 +145,56 @@ export function Investigation({
                     <span className="sight-line" aria-hidden="true" />
                     <h2>{t('Diagnostic conclusion')}</h2>
                     <span className={answer.uncertain ? 'uncertainty' : 'model-label'}>
-                      {t(answer.uncertain ? 'Cause uncertain' : 'Model explanation')}
+                      {t(
+                        answer.cause
+                          ? answer.uncertain || answer.cause.unknowns.length
+                            ? 'Partially explained'
+                            : 'Model explanation'
+                          : answer.uncertain
+                            ? 'Cause uncertain'
+                            : 'Model explanation',
+                      )}
                     </span>
                   </div>
                   <p>{demo && isMessageKey(answer.summary) ? t(answer.summary) : answer.summary}</p>
-                  {answer.uncertain && (
+                  {answer.cause && (
+                    <dl className="cause-details">
+                      <div>
+                        <dt>{t('Immediate failure')}</dt>
+                        <dd>{narrative(answer.cause.immediate)}</dd>
+                      </div>
+                      {answer.cause.underlying && (
+                        <div>
+                          <dt>{t('Underlying cause')}</dt>
+                          <dd>{narrative(answer.cause.underlying)}</dd>
+                        </div>
+                      )}
+                      {answer.cause.unknowns.length > 0 && (
+                        <div>
+                          <dt>{t('Still unknown')}</dt>
+                          <dd>
+                            {answer.cause.unknowns.map((text, index) => (
+                              <p key={index}>{narrative(text)}</p>
+                            ))}
+                          </dd>
+                        </div>
+                      )}
+                      <div>
+                        <dt className="sr-only">{t('Source')}</dt>
+                        <dd>
+                          <button
+                            type="button"
+                            className="evidence-link"
+                            onClick={() => inspect(answer.cause!.evidence_ids[0]!)}
+                          >
+                            {t('Supporting observations')}
+                            <ArrowUpRight size={13} />
+                          </button>
+                        </dd>
+                      </div>
+                    </dl>
+                  )}
+                  {answer.uncertain && !answer.cause && (
                     <p className="uncertain-note">
                       {t('The collected observations do not establish a definitive cause.')}
                     </p>
@@ -192,7 +241,11 @@ export function Investigation({
                       <p>{localError}</p>
                     </details>
                   )}
-                  <button className="secondary" disabled={running || blocked} onClick={() => submit(turn.query)}>
+                  <button
+                    className="secondary"
+                    disabled={running || blocked}
+                    onClick={() => submit(turn.query, turn.group)}
+                  >
                     {t('Retry diagnosis')}
                     <ArrowRight size={14} />
                   </button>
@@ -200,6 +253,7 @@ export function Investigation({
               </section>
             )}
             <DiagnosticTrace key={turn.id} turn={turn} host={host} demo={demo} />
+            {answer?.group && <GroupReport report={answer.group} evidence={answer.evidence} inspect={inspect} />}
             {answer && (
               <AnswerGrid
                 answer={answer}
@@ -235,7 +289,7 @@ export function Investigation({
         aria-labelledby="composer-title"
         onSubmit={(event) => {
           event.preventDefault();
-          submit(draft);
+          submit(draft, group);
         }}
       >
         <div className="composer-heading">
@@ -265,7 +319,7 @@ export function Investigation({
                 host
               ) {
                 event.preventDefault();
-                submit(draft);
+                submit(draft, group);
               }
             }}
           />
@@ -273,6 +327,12 @@ export function Investigation({
             <span id="composer-scope">
               <span className="scope-dot" />
               {host || t('Select a host')}
+              {group && (
+                <span className="composer-group">
+                  {' '}
+                  · {group.kind === 'compose' ? 'Compose' : 'Swarm'} / {group.name}
+                </span>
+              )}
               <span className="composer-hint">{t(' · Read-only diagnosis')}</span>
             </span>
             <div className="composer-actions">

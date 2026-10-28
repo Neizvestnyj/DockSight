@@ -9,7 +9,7 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, ValidationErro
 from docksight.application.events import TraceStepEvent
 from docksight.application.ports.models import ModelReply
 from docksight.application.redaction import Redactor, secret_name
-from docksight.application.views.schemas import DiagnosisProposal, WidgetProposal
+from docksight.application.views.schemas import CauseAssessment, DiagnosisProposal, WidgetProposal
 from docksight.domain.diagnostics import JsonObject, JsonValue
 
 _PREVIEW_BYTES: Final = 16384
@@ -49,7 +49,9 @@ class TraceStep(BaseModel):
 
 def schema_issues(error: ValidationError) -> list[TraceIssue]:
     """Keep bounded error codes and schema paths without reflecting arbitrary model fields."""
-    fields = DiagnosisProposal.model_fields.keys() | WidgetProposal.model_fields.keys()
+    fields = (
+        DiagnosisProposal.model_fields.keys() | WidgetProposal.model_fields.keys() | CauseAssessment.model_fields.keys()
+    )
     return [
         TraceIssue(
             type=issue["type"][:64],

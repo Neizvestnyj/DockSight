@@ -72,3 +72,23 @@ def test_recommendation_cannot_reference_a_missing_or_foreign_prepared_target(re
         ContainerStatusCard(
             snapshot=item, evidence_ids=["e1"], actions=[action], recommendation={"action_id": reference}
         )
+
+
+def test_cause_assessment_requires_evidence_and_keeps_unknowns_separate() -> None:
+    proposal = DiagnosisProposal.model_validate(
+        {
+            "summary": "Startup failed connecting to PostgreSQL",
+            "uncertain": True,
+            "evidence_ids": ["e1"],
+            "widgets": [],
+            "cause": {
+                "immediate": "Database connection failed during startup",
+                "underlying": None,
+                "unknowns": ["Why the database connection was refused"],
+                "evidence_ids": ["e1"],
+            },
+        }
+    )
+    assert proposal.cause is not None
+    assert proposal.cause.immediate == "Database connection failed during startup"
+    assert proposal.cause.underlying is None

@@ -7,6 +7,7 @@ from docker.errors import DockerException, NotFound
 from paramiko import SSHException
 from requests import RequestException
 
+from docksight.adapters.outbound.docker.groups import SwarmAPI, compose_stacks, swarm_stacks
 from docksight.adapters.outbound.docker.hosts import HostConfig, connect
 from docksight.adapters.outbound.docker.mapping import map_container, map_metrics, parse_logs
 from docksight.application.redaction import Redactor
@@ -32,7 +33,7 @@ class LogStream(Protocol):
         ...
 
 
-class DockerAPI(Protocol):
+class DockerAPI(SwarmAPI, Protocol):
     """Describe the low-level SDK surface whose upstream stubs are incomplete."""
 
     def ping(self) -> bool:
@@ -53,18 +54,6 @@ class DockerAPI(Protocol):
 
     def stats(self, container: str, *, stream: bool) -> dict[str, Any]:
         """Read a container's raw resource counters."""
-        ...
-
-    def info(self) -> dict[str, Any]:
-        """Read engine capabilities, including Swarm manager availability."""
-        ...
-
-    def services(self) -> list[dict[str, Any]]:
-        """List services visible to the connected Swarm manager."""
-        ...
-
-    def tasks(self, *, filters: dict[str, str]) -> list[dict[str, Any]]:
-        """List tasks matching the requested service and desired state."""
         ...
 
     def restart(self, container: str, *, timeout: int) -> None:
@@ -203,29 +192,8 @@ class DockerRuntime:
     async def stacks(self, host: str, kind: Literal["compose", "swarm"]) -> tuple[StackSummary, ...]:
         """Read Compose groups or manager-only Swarm service summaries."""
         if kind == "compose":
-            return _compose_stacks(await self.containers(host))
-        return await self._call(host, self._swarm_stacks)
-
-    def _swarm_stacks(self, client: DockerAPI) -> tuple[StackSummary, ...]:
-        """Read desired and running task counts from a Swarm manager."""
-        info: dict[str, Any] = client.info().get("Swarm") or {}
-        if not info.get("ControlAvailable"):
-            raise DockSightError("unsupported_operation", "Swarm reads require a manager", 409)
-        summaries: list[StackSummary] = []
-        for service in client.services():
-            spec: dict[str, Any] = service["Spec"]
-            mode: dict[str, Any] = spec.get("Mode") or {}
-            replicated: dict[str, Any] = mode.get("Replicated") or {}
-            tasks = client.tasks(filters={"service": service["ID"], "desired-state": "running"})
-            summaries.append(
-                StackSummary(
-                    self._redactor.text(spec["Name"]),
-                    "swarm",
-                    replicated.get("Replicas", len(tasks)),
-                    sum(task.get("Status", {}).get("State") == "running" for task in tasks),
-                )
-            )
-        return tuple(summaries)
+            return compose_stacks(await self.containers(host))
+        return await self._call(host, lambda client: swarm_stacks(client, self._redactor))
 
     async def restart(self, host: str, container_id: str) -> None:
         """Restart an exact container without retrying the mutation."""
@@ -239,21 +207,3 @@ class DockerRuntime:
         """Wait for outstanding SDK workers before application shutdown."""
         if self._jobs:
             await asyncio.gather(*self._jobs, return_exceptions=True)
-
-
-def _compose_stacks(containers: tuple[ContainerSnapshot, ...]) -> tuple[StackSummary, ...]:
-    """Group observed containers by their Compose project label."""
-    groups: dict[str, list[ContainerSnapshot]] = {}
-    for item in containers:
-        if item.compose_project:
-            groups.setdefault(item.compose_project, []).append(item)
-    return tuple(
-        StackSummary(
-            name,
-            "compose",
-            len(rows),
-            sum(row.state == "running" for row in rows),
-            tuple(row.id for row in rows),
-        )
-        for name, rows in groups.items()
-    )

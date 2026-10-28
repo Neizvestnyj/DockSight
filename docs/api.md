@@ -160,6 +160,34 @@ authentication and host scope, add no provider requests, are not persisted, and 
 SSE comments provide heartbeats. Failures after streaming starts remain HTTP 200 and are represented by `turn.failed`.
 Disconnecting cancels diagnostic work. Streams do not support replay or automatic reconnection.
 
+## Group targets and cause assessment
+
+`POST /chat/turns` also accepts an optional `group`: `{"kind":"compose","name":"infra"}` or
+`{"kind":"swarm","name":"infra"}`. The name identifies an observed group on the configured host. Group objects
+reject extra fields, including host overrides. Explicit targets are inspected before model exploration; a failed group
+read produces `turn.failed` without falling back to an individual container. Start a separate session when changing scope.
+
+The read-only `inspect_group` tool provides the same workflow for model-discovered targets. It collects a group summary
+and logs for at most four local problem containers, at most 200 configured lines and 4 KiB per read. Collected payloads
+and evidence references reach the model together. Failed and omitted reads remain distinct. Tool calls keep their normal
+progress and trace events. Group collection never prepares or executes a group-wide mutation.
+
+Stack summaries add `members` and `truncated`. Compose members are containers with state and exit code. Swarm members
+are services, grouped by `com.docker.stack.namespace`; totals count desired/running task replicas. Standalone services
+are excluded. Service/task reads and container identities are bounded to 200. Local container logs do not cover remote
+Swarm nodes. Inventory caps and evidence-budget clipping set `truncated`; counts remain observed totals for the retained
+scope, and a clipped member list is not a complete inventory.
+
+`answer.ready.answer.group` is a server-owned report or `null`, independent of model-selected widgets. It contains the
+summary, its `evidence_id`, optional `inventory_code`, and per-container `logs`: `container_id`, `name`, `state`
+(`collected`, `failed`, `not_collected`), optional evidence reference, and safe error/limit code. Report references remain
+in response evidence even if the model omits their cards. Subsequent inventory refresh does not replace the report.
+
+Optional `cause` separates model-authored `immediate`, nullable `underlying`, `unknowns` (up to four), and supporting
+`evidence_ids`. References are validated and narrative fields are redacted. For example, a database connection refusal
+can explain startup failure while the reason for database unavailability remains unknown. The existing `uncertain`
+field remains available for older clients and responses.
+
 ## Actions
 
 Container status cards distinguish permitted operations from model recommendations. `actions` remains the authoritative

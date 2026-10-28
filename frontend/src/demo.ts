@@ -1,5 +1,6 @@
 import fixtures from '../../backend/tests/fixtures/diagnostics.json' with { type: 'json' };
 import { demoTrace } from './demoTrace';
+import { demoGroupAnswer } from './demoGroup';
 import {
   answerSchema,
   type Action,
@@ -11,6 +12,7 @@ import {
   type Transport,
   type TurnInput,
   type TurnEvent,
+  type Stack,
 } from './contracts';
 
 export const scenarios = [
@@ -303,6 +305,32 @@ export class DemoClient implements Transport {
     return scenarios.map((_, i) => demoContainer(i, host, now));
   }
 
+  /** Derive the fictional Compose project entirely from fixture inventory. */
+  async stacks(host: string, kind: 'compose' | 'swarm', signal: AbortSignal): Promise<Stack[]> {
+    signal.throwIfAborted();
+    const rows = await this.containers(host);
+    if (kind === 'swarm' || !rows.length) return [];
+    return [
+      {
+        name: 'commerce',
+        kind,
+        total: rows.length,
+        running: rows.filter((row) => row.state === 'running').length,
+        container_ids: rows.map((row) => row.id),
+        truncated: false,
+        members: rows.map((row) => ({
+          id: row.id,
+          name: row.name,
+          kind: 'container',
+          state: row.state,
+          total: 1,
+          running: Number(row.state === 'running'),
+          exit_code: row.exit_code,
+        })),
+      },
+    ];
+  }
+
   /** Inspect a fixture by exact identity; reading never prepares an action or calls a model. */
   async container(host: string, id: string, signal: AbortSignal): Promise<Container> {
     await delay(signal);
@@ -331,7 +359,9 @@ export class DemoClient implements Transport {
     const empty = input.host === 'demo-empty' || this.fault === 'empty';
     const tools = empty
       ? ['list_containers']
-      : ['inspect_container', 'get_container_logs', 'list_stacks', 'get_container_env'];
+      : input.group
+        ? ['inspect_group']
+        : ['inspect_container', 'get_container_logs', 'list_stacks', 'get_container_env'];
     const trace = demoTrace(envelope, receive);
     const collected = trace('model', 'collect_evidence');
     await delay(signal);
@@ -343,9 +373,11 @@ export class DemoClient implements Transport {
             id: `demo-call-${index + 1}`,
             name: tool,
             arguments:
-              tool === 'list_containers' || tool === 'list_stacks'
-                ? {}
-                : { container_id: scenarios.find((scenario) => scenario.id === this.scenario)!.container },
+              tool === 'inspect_group'
+                ? input.group!
+                : tool === 'list_containers' || tool === 'list_stacks'
+                  ? {}
+                  : { container_id: scenarios.find((scenario) => scenario.id === this.scenario)!.container },
           })),
         },
         null,
@@ -371,7 +403,15 @@ export class DemoClient implements Transport {
       });
       return;
     }
-    const answer = this.example(input.host);
+    let answer = this.example(input.host);
+    if (input.group && !empty) {
+      const groups = await this.stacks(input.host, input.group.kind, signal);
+      const group = groups.find((row) => row.name === input.group!.name);
+      if (!group) throw new Error('Demo: group not found.');
+      answer = this.remember(
+        demoGroupAnswer(demoAnswer('dependency', input.host), await this.containers(input.host), group),
+      );
+    }
     finalized({
       response: JSON.stringify(
         {
