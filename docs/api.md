@@ -41,6 +41,10 @@ read settles. It pauses while hidden or offline and backs off failed reads to at
 streams, and actions are not polled. Inventory remains bounded to 200 containers; only an exact inspect response with
 `container_not_found` and HTTP 404 confirms removal of a selected container.
 
+The browser checks `/system/status` every 60 seconds while visible and online, with failure backoff up to 300 seconds.
+Panel access and foreground events recheck observations at least 30 seconds old. HTTP 401/403 stops automatic checks
+until a manual retry verifies authorization or the connection changes. Status checks never invoke generation or actions.
+
 ## Dependency status
 
 `GET /system/status` is authenticated and returns `Cache-Control: no-store`. Its optional `host` query selects a configured

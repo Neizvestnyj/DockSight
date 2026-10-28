@@ -123,6 +123,75 @@ for (const failure of ['unauthorized', 'offline'] as const) {
   });
 }
 
+test('rechecks stale status, recovers diagnosis automatically, and stops after rejected authorization', async ({
+  page,
+}, info) => {
+  const healthy = demoSystemStatus('local');
+  let failure: 'none' | 'docker' | 'authorization' = 'none';
+  let calls = 0;
+  await page.route('**/api/v1/**', (route) => {
+    const url = new URL(route.request().url());
+    expect(route.request().method()).toBe('GET');
+    if (url.pathname.endsWith('/hosts')) return route.fulfill({ json: [{ id: 'local', name: 'Test host' }] });
+    if (url.pathname.endsWith('/system/status')) {
+      calls++;
+      if (failure === 'authorization')
+        return route.fulfill({ status: 401, json: { code: 'unauthorized', message: 'Denied' } });
+      return route.fulfill({
+        json:
+          failure === 'docker'
+            ? { ...healthy, docker: { ...healthy.docker, state: 'unavailable', code: 'runtime_unavailable' } }
+            : healthy,
+      });
+    }
+    return route.fulfill({ json: [] });
+  });
+  await page.clock.install();
+  await page.goto('/');
+  await connectApi(page);
+  await expect(page.locator('.composer-foot')).toContainText('local');
+  const draft = page.getByRole('textbox');
+  await draft.fill('Preserve this investigation');
+  const trigger = page.getByRole('button', { name: /^System status/ });
+  const dialog = page.getByRole('dialog', { name: 'System status' });
+  await trigger.click();
+  await expect(dialog).toContainText('Checks refresh every minute while this tab is visible.');
+  expect(calls).toBe(1);
+  await page.keyboard.press('Escape');
+  await page.clock.runFor(30_000);
+  await trigger.click();
+  await expect.poll(() => calls).toBe(2);
+  await expect(dialog.getByRole('button', { name: 'Check again' })).toBeEnabled();
+  await page.keyboard.press('Escape');
+  failure = 'docker';
+  await page.clock.runFor(60_000);
+  await expect(page.getByRole('button', { name: 'Investigate', exact: true })).toBeDisabled();
+  await expect(
+    page.getByText(
+      'Docker is unavailable for this host. Diagnosis cannot collect evidence. Check the connection and try again.',
+    ),
+  ).toBeVisible();
+  failure = 'none';
+  await page.clock.runFor(120_000);
+  await expect(page.getByRole('button', { name: 'Investigate', exact: true })).toBeEnabled();
+  await expect(draft).toHaveValue('Preserve this investigation');
+  failure = 'authorization';
+  await page.clock.runFor(60_000);
+  await trigger.click();
+  await expect(dialog).toContainText('The API rejected the bearer token.');
+  await expect(dialog).toContainText('Dependency results are from the previous successful check.');
+  await expect(dialog).toContainText('Automatic checks stopped. Retry manually.');
+  const deniedCalls = calls;
+  await page.clock.runFor(300_000);
+  expect(calls).toBe(deniedCalls);
+  await page.screenshot({ path: `test-results/${info.project.name}-system-status-stopped.png` });
+  failure = 'none';
+  await dialog.getByRole('button', { name: 'Check again' }).click();
+  await expect(dialog).toContainText('Checks refresh every minute while this tab is visible.');
+  await page.keyboard.press('Escape');
+  await expect(draft).toHaveValue('Preserve this investigation');
+});
+
 test('keeps demo status checks localized and preserves an investigation and its prepared action', async ({
   page,
 }, info) => {

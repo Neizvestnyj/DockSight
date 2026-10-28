@@ -41,7 +41,7 @@ describe('system availability', () => {
     await expect(api.systemStatus(null, signal)).rejects.toMatchObject({ httpStatus: 401, code: 'unauthorized' });
   });
 
-  it('checks on mount and manually, keeps old timestamps while refreshing, and never polls', async () => {
+  it('keeps Demo checks manual and retains old timestamps while refreshing', async () => {
     const client = new DemoClient();
     let finish: (value: typeof healthy) => void = () => {};
     client.systemStatus = vi

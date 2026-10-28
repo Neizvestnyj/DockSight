@@ -81,7 +81,8 @@ or offline; returning to a visible online page or focusing it triggers a read. F
 most 60 seconds, returning to 10 seconds after success. Requests do not overlap. Demo remains manual.
 
 Inventory refresh keeps the last received rows visible, including after failure. Manual refresh announces loading and
-acknowledges success with a check for two seconds; background refresh does not animate loading. The receipt timestamp
+acknowledges success with a check for two seconds. Refresh icons rotate during manual and background requests without
+replacing existing rows with loading placeholders; reduced-motion preferences disable rotation. The receipt timestamp
 records browser receipt, not a Docker observation, and changes only on success. Errors mark the retained list as stale
 and offer a manual retry. Refresh preserves selection by exact container ID, keyboard focus, and investigation state.
 Diagnostic cards and prepared actions retain their original observations until a new diagnosis is run.
@@ -129,9 +130,17 @@ and make no API or model request. Inventory polling never replaces historical tr
 ## System status
 
 The top-bar status control opens independent API/authentication, Docker, provider, and model results. Checks run after
-connection and host discovery, on host changes, and through **Check again**. There is no background polling or automatic
-retry. Rechecks keep the previous dependency values and timestamps until the new result arrives. Failed API checks retain
-previous dependency results with an explicit stale notice; successful checks replace the result for that host only.
+connection and host discovery, on host changes, and through **Check again**. API mode repeats checks 60 seconds after
+settlement while the page is visible and online. Opening the panel or returning to the page rechecks results at least
+30 seconds old. Recent foreground events preserve the next scheduled check. Requests do not overlap; a manual request
+during a pending check queues one follow-up. Demo remains manual.
+
+Transport failures and confirmed unavailable dependencies increase the interval to 120, 240, and at most 300 seconds.
+Healthy or unchecked dependencies restore the 60-second interval. HTTP 401/403 stops automatic attempts until an explicit
+manual retry or a connection change; a failed manual retry keeps automatic attempts stopped. A successful authorized
+response resumes polling even if a dependency still needs recovery. The panel describes normal polling, backoff, or
+stopped checks. Rechecks keep previous dependency values and timestamps until the new result arrives. Failed API checks
+retain previous dependency results with an explicit stale notice; successful checks replace the result for that host only.
 
 The client derives API authorization and connection failures from HTTP/transport outcomes. Dependency timestamps come
 from the server; the API row records browser receipt or failure time. Unsupported status APIs and metadata checks stay

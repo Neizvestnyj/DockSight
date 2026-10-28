@@ -37,7 +37,7 @@ export function useInventory(client: Transport, host: string, automatic: boolean
     },
     [client, host],
   );
-  const refresh = usePolling(read, automatic, Boolean(host));
+  const { refresh, fetching } = usePolling(read, automatic, Boolean(host));
 
   useEffect(() => {
     if (!refreshAcknowledged) return;
@@ -45,5 +45,5 @@ export function useInventory(client: Transport, host: string, automatic: boolean
     return () => clearTimeout(timer);
   }, [refreshAcknowledged]);
 
-  return { inventory, loading, inventoryError, lastRefreshed, refreshAcknowledged, refresh };
+  return { inventory, loading, fetching, inventoryError, lastRefreshed, refreshAcknowledged, refresh };
 }

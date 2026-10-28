@@ -55,7 +55,7 @@ export function useContainerRead(client: Transport, host: string, id: string, au
     },
     [client, host, id],
   );
-  const refresh = usePolling(collect, automatic, active);
+  const { refresh, fetching } = usePolling(collect, automatic, active);
 
-  return { snapshot, logs, metrics, refresh, loading: snapshot.loading || logs.loading || metrics.loading };
+  return { snapshot, logs, metrics, refresh, fetching, loading: snapshot.loading || logs.loading || metrics.loading };
 }

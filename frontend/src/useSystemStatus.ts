@@ -1,7 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { ApiError } from './api';
 import type { CheckCode, CheckState, SystemStatus, Transport } from './contracts';
 import type { MessageKey } from './messages';
+import { usePolling, type PollResult } from './usePolling';
+
+const pollingOptions = { interval: 60_000, maxInterval: 300_000, staleAfter: 30_000 };
 
 export const checkReasons: Record<CheckCode, MessageKey> = {
   ok: 'Availability check succeeded.',
@@ -53,19 +56,21 @@ function failedApi(error: unknown): ApiObservation {
   return { state: 'unavailable', reason: 'No connection to the API. Check the endpoint and network.', checkedAt };
 }
 
-/** Check once per selected host and on demand; retain last observations without polling or retrying. */
-export function useSystemStatus(client: Transport, host: string, enabled = true) {
+/** Refresh bounded metadata checks while retaining host-scoped results and explicit authorization recovery. */
+export function useSystemStatus(client: Transport, host: string, enabled = true, automatic = false) {
   const initial: Observation = { client, host, loading: true, api: { state: 'not_checked', reason: 'Not checked' } };
   const [observation, setObservation] = useState<Observation>(initial);
-  const [revision, setRevision] = useState(0);
   const current = observation.client === client && observation.host === host ? observation : initial;
-  useEffect(() => {
-    if (!enabled) return;
-    const controller = new AbortController();
-    client
-      .systemStatus(host || null, controller.signal)
-      .then((data) => {
-        if (!controller.signal.aborted)
+  const read = useCallback(
+    async (signal: AbortSignal): Promise<PollResult> => {
+      setObservation((previous) =>
+        previous.client === client && previous.host === host
+          ? { ...previous, loading: true }
+          : { client, host, loading: true, api: { state: 'not_checked', reason: 'Not checked' } },
+      );
+      try {
+        const data = await client.systemStatus(host || null, signal);
+        if (!signal.aborted)
           setObservation({
             client,
             host,
@@ -73,9 +78,11 @@ export function useSystemStatus(client: Transport, host: string, enabled = true)
             loading: false,
             api: { state: 'available', reason: 'API and authorization verified.', checkedAt: new Date().toISOString() },
           });
-      })
-      .catch((error: unknown) => {
-        if (!controller.signal.aborted)
+        return [data.docker, data.provider_check, data.model_check].some((check) => check.state === 'unavailable')
+          ? 'unavailable'
+          : 'success';
+      } catch (error: unknown) {
+        if (!signal.aborted)
           setObservation((previous) => ({
             client,
             host,
@@ -83,15 +90,12 @@ export function useSystemStatus(client: Transport, host: string, enabled = true)
             api: failedApi(error),
             data: previous.client === client && previous.host === host ? previous.data : undefined,
           }));
-      });
-    return () => controller.abort();
-  }, [client, host, enabled, revision]);
-
-  /** Leave prior timestamps in place until the manual attempt returns a new observation. */
-  function refresh() {
-    setObservation({ ...current, loading: true });
-    setRevision((value) => value + 1);
-  }
+        return error instanceof ApiError && (error.httpStatus === 401 || error.httpStatus === 403) ? 'stop' : 'retry';
+      }
+    },
+    [client, host],
+  );
+  const { refresh, refreshIfStale, stopped, interactive } = usePolling(read, automatic, enabled, pollingOptions);
 
   let blockedReason: MessageKey | undefined;
   if (current.api.state === 'unavailable') blockedReason = current.api.reason;
@@ -104,5 +108,15 @@ export function useSystemStatus(client: Transport, host: string, enabled = true)
     else if (current.data.model_check.state === 'unavailable')
       blockedReason = 'The configured model is unavailable. You can still inspect Docker directly.';
   }
-  return { data: current.data, api: current.api, loading: current.loading, refresh, blockedReason };
+  return {
+    data: current.data,
+    api: current.api,
+    loading: current.loading,
+    refresh,
+    refreshIfStale,
+    stopped,
+    automatic,
+    interactive,
+    blockedReason,
+  };
 }

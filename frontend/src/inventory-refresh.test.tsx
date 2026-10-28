@@ -27,14 +27,18 @@ function installApi() {
     missing: false,
     inspectFailed: false,
     pendingInspect: undefined as Promise<Response> | undefined,
+    pendingInventory: undefined as Promise<Response> | undefined,
+    pendingStatus: undefined as Promise<Response> | undefined,
     reads: [] as string[],
   };
   vi.stubGlobal('fetch', async (input: string) => {
     const url = new URL(input, 'http://localhost');
     const path = url.pathname;
     api.reads.push(path);
-    if (path.endsWith('/system/status')) return Response.json(demoSystemStatus(url.searchParams.get('host')));
+    if (path.endsWith('/system/status'))
+      return api.pendingStatus ?? Response.json(demoSystemStatus(url.searchParams.get('host')));
     if (path.endsWith('/hosts')) return Response.json([{ id: 'test-host', name: 'Test host' }]);
+    if (path.endsWith('/containers') && api.pendingInventory) return api.pendingInventory;
     if (path.endsWith('/containers'))
       return api.failed
         ? Response.json({ code: 'runtime_unavailable', message: 'Docker unavailable' }, { status: 503 })
@@ -74,7 +78,7 @@ async function advance(milliseconds = 10_000) {
   await act(async () => vi.advanceTimersByTimeAsync(milliseconds));
 }
 
-describe('automatic inventory refresh', () => {
+describe('automatic runtime refresh', () => {
   it('discovers new containers and changed states while preserving focus, drafts, and diagnostic evidence', async () => {
     const api = installApi();
     await connect();
@@ -175,11 +179,55 @@ describe('automatic inventory refresh', () => {
     });
     await advance();
     const facts = screen.getByRole('region', { name: 'Container facts' });
+    expect(within(facts).getByRole('button', { name: 'Refresh data' })).toHaveClass('refreshing');
+    expect(within(facts).getByRole('button', { name: 'Refresh data' })).toBeEnabled();
     fireEvent.click(within(facts).getByRole('button', { name: 'Refresh data' }));
     expect(api.reads.filter((path) => path.endsWith('/logs'))).toHaveLength(1);
     api.pendingInspect = undefined;
     await act(async () => finish(Response.json(api.container)));
     expect(api.reads.filter((path) => path.endsWith('/logs'))).toHaveLength(2);
     expect(api.reads.filter((path) => path.endsWith('/stats'))).toHaveLength(2);
+    expect(within(facts).getByRole('button', { name: 'Refresh data' })).not.toHaveClass('refreshing');
+  });
+
+  it('animates the inventory refresh icon during background reads without hiding rows or changing focus', async () => {
+    const api = installApi();
+    await connect();
+    const button = screen.getByRole('button', { name: 'Refresh container inventory' });
+    const draft = screen.getByRole('textbox');
+    draft.focus();
+    let finish: (response: Response) => void = () => {};
+    api.pendingInventory = new Promise<Response>((resolve) => {
+      finish = resolve;
+    });
+    await advance();
+    expect(button).toHaveClass('refreshing');
+    expect(button).toBeEnabled();
+    expect(screen.getByTitle('payments-api')).toBeInTheDocument();
+    expect(draft).toHaveFocus();
+    expect(document.querySelector('.inventory-feedback')).not.toHaveTextContent('Refreshing container list…');
+    await act(async () => finish(Response.json(api.rows)));
+    expect(button).not.toHaveClass('refreshing');
+  });
+
+  it('queues one manual status check behind an active background check', async () => {
+    const api = installApi();
+    await connect();
+    let finish: (response: Response) => void = () => {};
+    api.pendingStatus = new Promise<Response>((resolve) => {
+      finish = resolve;
+    });
+    await advance(60_000);
+    fireEvent.click(screen.getByRole('button', { name: /^System status/ }));
+    const dialog = screen.getByRole('dialog', { name: 'System status' });
+    const button = within(dialog).getByRole('button', { name: 'Check again' });
+    expect(button).toBeEnabled();
+    fireEvent.click(button);
+    expect(button).toBeDisabled();
+    expect(api.reads.filter((path) => path.endsWith('/system/status'))).toHaveLength(2);
+    api.pendingStatus = undefined;
+    await act(async () => finish(Response.json(demoSystemStatus('test-host'))));
+    expect(api.reads.filter((path) => path.endsWith('/system/status'))).toHaveLength(3);
+    expect(button).toBeEnabled();
   });
 });

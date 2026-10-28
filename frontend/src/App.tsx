@@ -179,9 +179,9 @@ function Workspace({
     demoClient && showExample && host === 'demo-eu' ? demoClient.remember(demoAnswer('crash_loop', host)) : undefined,
   );
   const investigation = useInvestigation(client, host, initial);
-  const availability = useSystemStatus(client, host, !hostLoading);
+  const availability = useSystemStatus(client, host, !hostLoading, !demo);
   const [statusOpen, setStatusOpen] = useState(false);
-  const { inventory, loading, inventoryError, lastRefreshed, refreshAcknowledged, refresh } = useInventory(
+  const { inventory, loading, fetching, inventoryError, lastRefreshed, refreshAcknowledged, refresh } = useInventory(
     client,
     host,
     !demo,
@@ -193,6 +193,12 @@ function Workspace({
   const [menu, setMenu] = useState(false);
   const [help, setHelp] = useState(false);
   const name = hosts.find((row) => row.id === host)?.name ?? host;
+
+  /** Recheck stale availability before opening its retained observations. */
+  function openStatus() {
+    availability.refreshIfStale();
+    setStatusOpen(true);
+  }
 
   /** Make fixture selection a clearly simulated example rather than a live diagnosis. */
   function chooseScenario(value: ScenarioId) {
@@ -250,6 +256,7 @@ function Workspace({
     lastRefreshed,
     refreshAcknowledged: Boolean(refreshAcknowledged),
     loading,
+    fetching,
     selected: viewingContainer ? (selected?.id ?? '') : '',
     chooseContainer,
     refresh,
@@ -310,7 +317,7 @@ function Workspace({
         <div className="connection-state">
           <span className={`scope-dot${demo ? ' demo-dot' : ''}`} />
           {t(demo ? 'Demo' : 'API mode')}
-          <SystemStatusTrigger status={availability} open={() => setStatusOpen(true)} />
+          <SystemStatusTrigger status={availability} open={openStatus} />
           <button className="text-button" onClick={connect}>
             {t(demo ? 'Connect API' : 'Change connection')}
             <ArrowRight size={13} />
@@ -349,7 +356,7 @@ function Workspace({
         {availability.blockedReason && (
           <div className="dependency-notice" role="status">
             <p>{t(availability.blockedReason)}</p>
-            <button className="text-button" onClick={() => setStatusOpen(true)}>
+            <button className="text-button" onClick={openStatus}>
               {t('View system status')}
               <ArrowRight size={14} />
             </button>

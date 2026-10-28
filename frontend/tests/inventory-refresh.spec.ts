@@ -5,15 +5,23 @@ test('updates inventory and exact selected state while preserving a draft across
   let container = demoContainer(0, 'test-host', '2026-10-28T07:00:00Z');
   let rows = [container];
   let removed = false;
+  let holdInventory = false;
+  let release = () => {};
+  const inventoryGate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
   const paths: string[] = [];
-  await page.route('**/api/v1/**', (route) => {
+  await page.route('**/api/v1/**', async (route) => {
     const url = new URL(route.request().url());
     paths.push(url.pathname);
     expect(route.request().headers()['authorization']).toBe('Bearer browser-test-token');
     if (url.pathname.endsWith('/hosts')) return route.fulfill({ json: [{ id: 'test-host', name: 'Test host' }] });
     if (url.pathname.endsWith('/system/status'))
       return route.fulfill({ json: demoSystemStatus(url.searchParams.get('host')) });
-    if (url.pathname.endsWith('/containers')) return route.fulfill({ json: rows });
+    if (url.pathname.endsWith('/containers')) {
+      if (holdInventory) await inventoryGate;
+      return route.fulfill({ json: rows });
+    }
     if (url.pathname.endsWith('/logs')) return route.fulfill({ json: { entries: [], truncated: false } });
     if (url.pathname.endsWith('/stats'))
       return route.fulfill({ json: { cpu_percent: 1, memory_usage_bytes: 100, memory_limit_bytes: 200 } });
@@ -34,8 +42,21 @@ test('updates inventory and exact selected state while preserving a draft across
   await draft.fill('Keep this investigation');
   await expect(page.locator('.sidebar [title="payments-api"]')).toHaveCount(1);
   rows = [container, { ...demoContainer(1, 'test-host', '2026-10-28T07:00:10Z'), name: 'new-worker' }];
+  holdInventory = true;
   await page.clock.runFor(10_000);
+  const refresh = page
+    .locator('.sidebar')
+    .getByRole('button', { name: 'Refresh container inventory', includeHidden: true });
+  try {
+    await expect(refresh).toHaveAttribute('aria-busy', 'true');
+    await expect(refresh.locator('svg')).toHaveCSS('animation-name', 'spin');
+    await expect(page.locator('.sidebar [title="payments-api"]')).toHaveCount(1);
+  } finally {
+    holdInventory = false;
+    release();
+  }
   await expect(page.locator('.sidebar [title="new-worker"]')).toHaveCount(1);
+  await expect(refresh).toHaveAttribute('aria-busy', 'false');
   if ((page.viewportSize()?.width ?? 1440) <= 1100)
     await page.getByRole('button', { name: 'Open host and containers' }).click();
   await page.getByTitle('payments-api', { exact: true }).last().click();

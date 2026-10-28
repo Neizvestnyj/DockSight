@@ -28,6 +28,7 @@ interface Props {
   lastRefreshed?: string;
   refreshAcknowledged: boolean;
   loading: boolean;
+  fetching: boolean;
   selected: string;
   chooseContainer: (container: Container) => void;
   refresh: () => void;
@@ -52,6 +53,7 @@ export function Sidebar({
   lastRefreshed,
   refreshAcknowledged,
   loading,
+  fetching,
   selected,
   chooseContainer,
   refresh,
@@ -122,13 +124,14 @@ export function Sidebar({
           <h2>{t('Containers')}</h2>
           <span>{inventory.length}</span>
           <button
-            className={`icon-button${loading ? ' refreshing' : ''}`}
+            className={`icon-button${fetching ? ' refreshing' : ''}`}
+            aria-busy={fetching}
             aria-label={t('Refresh container inventory')}
             title={t(refreshAcknowledged ? 'Container list refreshed' : 'Refresh container inventory')}
             onClick={refresh}
             disabled={loading || !host}
           >
-            {refreshAcknowledged ? <Check size={14} /> : <RefreshCw size={14} />}
+            {refreshAcknowledged && !fetching ? <Check size={14} /> : <RefreshCw size={14} />}
           </button>
         </header>
         <div className="inventory-feedback" role="status" aria-live="polite" aria-atomic="true">

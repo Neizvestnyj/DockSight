@@ -31,7 +31,7 @@ export function ContainerView({
   diagnose,
 }: Props) {
   const { t, locale } = useLocale();
-  const { snapshot, logs, metrics, refresh, loading } = useContainerRead(
+  const { snapshot, logs, metrics, refresh, loading, fetching } = useContainerRead(
     client,
     container.host,
     container.id,
@@ -60,7 +60,12 @@ export function ContainerView({
           </p>
         </div>
         <div className="container-view-actions">
-          <button className={`secondary${loading ? ' refreshing' : ''}`} onClick={refresh} disabled={loading}>
+          <button
+            className={`secondary${fetching ? ' refreshing' : ''}`}
+            onClick={refresh}
+            disabled={loading}
+            aria-busy={fetching}
+          >
             <RefreshCw size={14} />
             {t('Refresh data')}
           </button>

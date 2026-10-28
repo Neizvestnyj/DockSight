@@ -68,6 +68,13 @@ export function SystemStatusPanel({
 }) {
   const { t } = useLocale();
   const data = status.data;
+  const feedback: MessageKey = status.stopped
+    ? 'Automatic checks stopped. Retry manually.'
+    : status.automatic
+      ? status.blockedReason
+        ? 'Automatic checks retry with increasing intervals.'
+        : 'Checks refresh every minute while this tab is visible.'
+      : 'No background polling';
   const providerNames = {
     ollama: 'Ollama',
     openai: 'OpenAI',
@@ -135,7 +142,7 @@ export function SystemStatusPanel({
       <p className="section-note">{t('Provider and model settings are managed on the server.')}</p>
       <footer className="modal-actions status-actions">
         <span className="status-check-feedback" role="status">
-          {status.loading ? t('Checking dependencies…') : t('No background polling')}
+          {status.loading ? t('Checking dependencies…') : t(feedback)}
         </span>
         {status.api.state === 'unavailable' && !demo && (
           <button className="text-button" onClick={connect}>
@@ -143,8 +150,12 @@ export function SystemStatusPanel({
             <ArrowRight size={14} />
           </button>
         )}
-        <button className="primary" disabled={status.loading} onClick={status.refresh}>
-          <RefreshCw size={14} />
+        <button
+          className="primary"
+          disabled={status.loading && (status.interactive || !status.api.checkedAt)}
+          onClick={status.refresh}
+        >
+          <RefreshCw size={14} className={status.loading ? 'spin' : undefined} />
           {t('Check again')}
         </button>
       </footer>

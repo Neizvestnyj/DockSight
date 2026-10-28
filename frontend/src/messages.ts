@@ -8,6 +8,9 @@ export type MessageValues = Record<string, string | number>;
 /** Keep product copy separate from verbatim Docker, model, and server content. */
 const russian = {
   ...demoMessages,
+  'Checks refresh every minute while this tab is visible.': 'Проверяем каждую минуту, пока вкладка видима.',
+  'Automatic checks retry with increasing intervals.': 'Повторяем автоматические проверки с увеличением интервала.',
+  'Automatic checks stopped. Retry manually.': 'Автоматические проверки остановлены. Повторите проверку вручную.',
   'Diagnostic trace': 'Трассировка диагностики',
   'Back to steps': 'К списку шагов',
   '{count} recorded steps': 'Шагов записано: {count}',

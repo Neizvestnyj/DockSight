@@ -86,7 +86,7 @@ describe('runtime polling', () => {
     await advance(60_000);
     await act(async () => window.dispatchEvent(new Event('focus')));
     expect(read).toHaveBeenCalledOnce();
-    await act(async () => result.current());
+    await act(async () => result.current.refresh());
     expect(read).toHaveBeenLastCalledWith(expect.any(AbortSignal), 'manual');
   });
 
@@ -112,11 +112,11 @@ describe('runtime polling', () => {
     await act(async () => window.dispatchEvent(new Event('focus')));
     expect(read).toHaveBeenCalledOnce();
     read.mockResolvedValue('retry');
-    await act(async () => result.current());
+    await act(async () => result.current.refresh());
     await advance(60_000);
     expect(read).toHaveBeenCalledTimes(2);
     read.mockResolvedValue('success');
-    await act(async () => result.current());
+    await act(async () => result.current.refresh());
     await advance(10_000);
     expect(read).toHaveBeenCalledTimes(4);
   });
