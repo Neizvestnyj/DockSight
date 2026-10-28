@@ -43,12 +43,33 @@ const stackSchema = z.object({
 });
 const references = { evidence_ids: z.array(z.string()) };
 export const widgetSchema = z.discriminatedUnion('widget_type', [
-  z.object({
-    widget_type: z.literal('container_status'),
-    snapshot: containerSchema,
-    actions: z.array(actionSchema),
-    ...references,
-  }),
+  z
+    .object({
+      widget_type: z.literal('container_status'),
+      snapshot: containerSchema,
+      actions: z.array(actionSchema),
+      recommendation: z
+        .object({ action_id: z.string().min(1).max(128), reason: z.string().min(1).max(240).nullable() })
+        .strict()
+        .nullish(),
+      ...references,
+    })
+    .superRefine((card, context) => {
+      if (
+        card.recommendation &&
+        !card.actions.some(
+          (action) =>
+            action.id === card.recommendation!.action_id &&
+            action.host === card.snapshot.host &&
+            action.container_id === card.snapshot.id,
+        )
+      )
+        context.addIssue({
+          code: 'custom',
+          path: ['recommendation'],
+          message: 'Recommendation is outside the prepared card actions.',
+        });
+    }),
   z.object({
     widget_type: z.literal('log_anomalies'),
     host: z.string(),

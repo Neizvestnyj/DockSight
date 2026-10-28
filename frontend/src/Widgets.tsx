@@ -1,10 +1,11 @@
-import { stateLabel } from './messages';
+import { isMessageKey } from './messages';
 import { useLocale } from './locale';
 import { ArrowUpRight, FileText, Layers, LockKeyhole, Terminal, Box } from 'lucide-react';
 import type { Action, Evidence, Widget } from './contracts';
 import { Status } from './ui';
 import { bytes, utc } from './format';
 import { EnvironmentContent, LogContent } from './RuntimeContent';
+import { CardActions } from './CardActions';
 
 interface Props {
   widget: Widget;
@@ -13,10 +14,11 @@ interface Props {
   inspect: (id: string) => void;
   review: (action: Action) => void;
   outcomes: Record<string, Action>;
+  demo?: boolean;
 }
 
 /** Label widgets with observed source data, keeping narrative out of fact cards. */
-export function WidgetCard({ widget, selected, evidence, inspect, review, outcomes }: Props) {
+export function WidgetCard({ widget, selected, evidence, inspect, review, outcomes, demo = false }: Props) {
   const { t, locale } = useLocale();
   const primary =
     widget.widget_type === 'log_anomalies'
@@ -99,25 +101,32 @@ export function WidgetCard({ widget, selected, evidence, inspect, review, outcom
               </span>
             </span>
           </div>
-          <footer className="widget-foot">
-            <time dateTime={widget.snapshot.observed_at}>{utc(widget.snapshot.observed_at)}</time>
-            <div className="actions">
-              {widget.actions.length ? (
-                widget.actions.map((action) => {
-                  const current = outcomes[action.id] ?? action;
-                  return (
-                    <button key={action.id} className="secondary small" onClick={() => review(current)}>
-                      {current.state === 'prepared'
-                        ? t(`Review ${current.operation}`)
-                        : `${t(current.operation)}: ${stateLabel(current.state, t)}`}
-                      <ArrowUpRight size={13} />
-                    </button>
-                  );
-                })
-              ) : (
-                <span>{t('No permitted actions')}</span>
+          {widget.recommendation && (
+            <div className="action-suggestion" aria-label={t('Suggested by model')}>
+              <span>{t('Suggested by model')}</span>
+              {widget.recommendation.reason && (
+                <p>
+                  {demo && isMessageKey(widget.recommendation.reason)
+                    ? t(widget.recommendation.reason)
+                    : widget.recommendation.reason}
+                </p>
+              )}
+              {primary && (
+                <button className="text-button evidence-link" onClick={() => inspect(primary)}>
+                  {t('Supporting evidence')}
+                  <ArrowUpRight size={13} />
+                </button>
               )}
             </div>
+          )}
+          <footer className="widget-foot">
+            <time dateTime={widget.snapshot.observed_at}>{utc(widget.snapshot.observed_at)}</time>
+            <CardActions
+              actions={widget.actions}
+              recommendedId={widget.recommendation?.action_id}
+              outcomes={outcomes}
+              review={review}
+            />
           </footer>
         </>
       )}

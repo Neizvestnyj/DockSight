@@ -162,6 +162,17 @@ Disconnecting cancels diagnostic work. Streams do not support replay or automati
 
 ## Actions
 
+Container status cards distinguish permitted operations from model recommendations. `actions` remains the authoritative
+list of server-prepared operations for the observed exact target. Optional `recommendation` is `null` unless the model's
+explicit `action` matches one of these permitted operations. It contains that existing `action_id` and an optional
+sanitized `reason` of at most 240 characters. The model supplies only an operation and optional `action_reason`; it cannot
+supply the linked ID or grant permission. Unsupported suggestions produce no recommendation. Reasons require an explicit
+action and are never inferred from the summary. The card's evidence references provide the supporting observations.
+
+Clients can highlight the recommended operation while keeping other permitted operations in an action disclosure.
+Missing recommendation metadata from an older server means no recommendation. Both paths use the same separate
+confirmation, expiry, exact-target revalidation, and idempotent execution flow below.
+
 Prepare with `host`, an exact 64-character `container_id`, and `operation` (`restart` or `stop`). Cards can already
 contain server-prepared action IDs: card assembly calls `Actions.prepare` internally, using the same preparation
 workflow without an HTTP request.

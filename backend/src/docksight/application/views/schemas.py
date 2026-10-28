@@ -20,12 +20,15 @@ class WidgetProposal(Contract):
     widget_type: Literal["container_status", "log_anomalies", "compose_stack", "env_inspector"]
     evidence_ids: list[str] = Field(min_length=1, max_length=10)
     action: Operation | None = None
+    action_reason: str | None = Field(default=None, min_length=1, max_length=240)
 
     @model_validator(mode="after")
     def check_action(self) -> Self:
         """Reject action proposals on widgets other than container status cards."""
         if self.action and self.widget_type != "container_status":
             raise ValueError("Actions belong to container status cards")
+        if self.action_reason and self.action is None:
+            raise ValueError("An action reason requires an explicit action proposal")
 
         return self
 
@@ -60,6 +63,13 @@ class ActionView(Contract):
     confirmation_required: Literal[True] = True
 
 
+class ActionRecommendation(Contract):
+    """Link a model suggestion to one exact server-prepared action without granting permission."""
+
+    action_id: str = Field(min_length=1, max_length=128)
+    reason: str | None = Field(default=None, min_length=1, max_length=240)
+
+
 class ContainerStatusCard(Contract):
     """Present an observed container snapshot and server-prepared actions."""
 
@@ -67,6 +77,19 @@ class ContainerStatusCard(Contract):
     snapshot: ContainerSnapshot
     evidence_ids: list[str]
     actions: list[ActionView] = Field(default_factory=list[ActionView])
+    recommendation: ActionRecommendation | None = None
+
+    @model_validator(mode="after")
+    def check_recommendation(self) -> Self:
+        """Require the recommended ID to belong to this card's exact server-prepared target."""
+        if self.recommendation and not any(
+            action.id == self.recommendation.action_id
+            and action.host == self.snapshot.host
+            and action.container_id == self.snapshot.id
+            for action in self.actions
+        ):
+            raise ValueError("A recommendation must reference this card's prepared action")
+        return self
 
 
 class LogAnomalyCard(Contract):

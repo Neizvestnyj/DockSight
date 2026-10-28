@@ -2,6 +2,7 @@ from collections.abc import Awaitable, Callable
 
 from docksight.application.diagnostics.context import EvidenceContext
 from docksight.application.views.schemas import (
+    ActionRecommendation,
     ActionView,
     ComposeStackCard,
     ContainerStatusCard,
@@ -53,8 +54,15 @@ class ViewAssembler:
             return _stack_card(card.evidence_ids, context)
         snapshot = _container_snapshot(card.evidence_ids, context)
         if card.widget_type == "container_status":
+            actions = await self._actions(actor, snapshot)
+            suggested = next((action for action in actions if action.operation == card.action), None)
             return ContainerStatusCard(
-                snapshot=snapshot, evidence_ids=card.evidence_ids, actions=await self._actions(actor, snapshot)
+                snapshot=snapshot,
+                evidence_ids=card.evidence_ids,
+                actions=actions,
+                recommendation=ActionRecommendation(action_id=suggested.id, reason=card.action_reason)
+                if suggested
+                else None,
             )
         if card.widget_type == "env_inspector":
             return EnvInspectorCard(

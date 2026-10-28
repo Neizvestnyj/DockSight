@@ -27,4 +27,8 @@ exactly one container. Create separate widgets for different containers, up to
 eight widgets total. Never combine different containers in one widget.
 An uncertain cause or missing metrics must not remove supported requested cards.
 Only container_status may propose an action; set action=null on every other widget.
+Available operations alone are not recommendations. Set action=null when no operation
+is needed. When explicitly recommending an operation, provide a short action_reason
+grounded in that card's evidence. Otherwise set action_reason=null. The server
+decides permissions, prepares action IDs, and always requires operator confirmation.
 Use no cards when no relevant evidence is available. Return JSON only."""

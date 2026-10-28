@@ -55,6 +55,14 @@ def _repair_feedback(error: ValidationError | DockSightError, context: EvidenceC
     )
 
 
+def _redact_narrative(proposal: DiagnosisProposal, redactor: Redactor) -> None:
+    """Sanitize model-authored explanations before assembling bounded public recommendation text."""
+    proposal.summary = redactor.text(proposal.summary)
+    for card in proposal.widgets:
+        if card.action_reason:
+            card.action_reason = redactor.text(card.action_reason)[:240]
+
+
 class Diagnostics:
     """Coordinate bounded evidence collection, validated cards, and session history."""
 
@@ -232,7 +240,7 @@ class Diagnostics:
                 if reply.tool_calls:
                     raise DockSightError("invalid_model_response", "Final response must not call tools", 502)
                 proposal = DiagnosisProposal.model_validate_json(reply.content)
-                proposal.summary = self.redactor.text(proposal.summary)
+                _redact_narrative(proposal, self.redactor)
 
                 answer = await _before_deadline(deadline, partial(self.assembler.build, proposal, context, actor))
             except (ValidationError, DockSightError) as exc:

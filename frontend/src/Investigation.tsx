@@ -207,6 +207,7 @@ export function Investigation({
                 review={setReview}
                 outcomes={outcomes}
                 containers={containers}
+                demo={demo}
               />
             )}
           </>
@@ -307,6 +308,7 @@ function AnswerGrid({
   review,
   outcomes,
   containers,
+  demo,
 }: {
   answer: Answer;
   selected: string | null;
@@ -314,6 +316,7 @@ function AnswerGrid({
   review: (action: Action) => void;
   outcomes: Record<string, Action>;
   containers: Container[];
+  demo: boolean;
 }) {
   const { t } = useLocale();
   const evidence = answer.evidence.find((row) => row.id === selected);
@@ -326,6 +329,7 @@ function AnswerGrid({
       inspect={inspect}
       review={review}
       outcomes={outcomes}
+      demo={demo}
     />
   );
   return (

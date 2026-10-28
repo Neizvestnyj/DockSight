@@ -1,7 +1,8 @@
 import pytest
 from pydantic import ValidationError
 
-from docksight.application.views.schemas import DiagnosisProposal
+from docksight.application.views.schemas import ActionView, ContainerStatusCard, DiagnosisProposal, WidgetProposal
+from tests.fakes import snapshot
 
 
 def test_model_cannot_supply_endpoints_or_runtime_metrics() -> None:
@@ -44,4 +45,30 @@ def test_empty_evidence_is_allowed_only_for_uncertain_diagnosis() -> None:
                 "uncertain": False,
                 "widgets": [],
             }
+        )
+
+
+@pytest.mark.parametrize(
+    "payload", [{"action": None, "action_reason": "Restart"}, {"action": "restart", "action_reason": "x" * 241}]
+)
+def test_action_reason_requires_an_explicit_operation_and_has_a_size_limit(payload: dict) -> None:
+    with pytest.raises(ValidationError):
+        WidgetProposal(widget_type="container_status", evidence_ids=["e1"], **payload)
+
+
+@pytest.mark.parametrize(("reference", "host"), [("invented", "local"), ("prepared", "other")])
+def test_recommendation_cannot_reference_a_missing_or_foreign_prepared_target(reference: str, host: str) -> None:
+    item = snapshot()
+    action = ActionView(
+        id="prepared",
+        host=host,
+        container_id=item.id,
+        operation="restart",
+        expires_at=item.observed_at,
+        state="prepared",
+        message="Confirm",
+    )
+    with pytest.raises(ValidationError):
+        ContainerStatusCard(
+            snapshot=item, evidence_ids=["e1"], actions=[action], recommendation={"action_id": reference}
         )

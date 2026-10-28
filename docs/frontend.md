@@ -110,6 +110,17 @@ answers in this tab; follow-up questions use the new session. Returning to the i
 evidence, prepared action IDs, and execution keys. Direct refresh never replaces diagnostic card data. Host or connection
 changes cancel outstanding reads and discard the previous workspace.
 
+## Diagnostic actions
+
+Ordinary permitted operations appear under **Actions**. An explicit server-linked model recommendation keeps its review
+button visible, with a separately labeled model reason and a link to the card's observations. The client never infers
+recommendations from narrative text, container state, or the order of available actions. Older responses without
+recommendation metadata put every operation in **Actions**.
+
+The disclosure closes on selection, Escape, or an outside click. Cancelling confirmation restores focus to its stable
+trigger. Opening either kind of action only reviews the original server-issued ID; execution still requires the existing
+separate confirmation and retains its original idempotency key. Historical cards retain their original recommendation.
+
 ## Diagnostic trace
 
 Each diagnostic turn has a collapsed **Diagnostic trace** disclosure with public model identity, request/turn IDs,

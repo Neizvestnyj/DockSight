@@ -1,13 +1,76 @@
 from dataclasses import replace
 from datetime import timedelta
+from uuid import uuid4
 
 import pytest
 
 from docksight.application.diagnostics.context import EvidenceContext
 from docksight.application.views.assembler import ViewAssembler
-from docksight.application.views.schemas import ContainerStatusCard, DiagnosisProposal
+from docksight.application.views.schemas import ActionView, ContainerStatusCard, DiagnosisProposal
+from docksight.domain.actions import Operation
 from docksight.domain.errors import DockSightError
 from tests.fakes import snapshot
+
+
+@pytest.mark.parametrize(
+    ("state", "suggested", "permitted", "expected"),
+    [
+        ("running", None, {"restart", "stop"}, None),
+        ("running", "restart", {"restart", "stop"}, "restart"),
+        ("running", "stop", {"restart", "stop"}, "stop"),
+        ("exited", "stop", {"restart"}, None),
+        ("paused", "restart", set(), None),
+    ],
+)
+async def test_recommendation_links_only_the_explicit_model_operation_to_a_prepared_action(
+    state: str,
+    suggested: str | None,
+    permitted: set[str],
+    expected: str | None,
+) -> None:
+    item = replace(snapshot(), state=state)
+    context = EvidenceContext()
+    context.record("container", "local", {}, item)
+
+    async def prepare(actor: str, host: str, container_id: str, operation: Operation) -> ActionView:
+        """Issue opaque IDs using the real exact resource passed by the assembler."""
+        assert (actor, host, container_id) == ("alice", "local", item.id)
+        return ActionView(
+            id=str(uuid4()),
+            host=host,
+            container_id=container_id,
+            operation=operation,
+            expires_at=item.observed_at + timedelta(minutes=5),
+            state="prepared",
+            message="Confirm",
+        )
+
+    proposal = DiagnosisProposal.model_validate(
+        {
+            "summary": "Observed",
+            "uncertain": False,
+            "evidence_ids": ["e1"],
+            "widgets": [
+                {
+                    "widget_type": "container_status",
+                    "evidence_ids": ["e1"],
+                    "action": suggested,
+                    "action_reason": "Operator requested maintenance." if suggested else None,
+                }
+            ],
+        }
+    )
+    answer = await ViewAssembler(prepare).build(proposal, context, "alice")
+    card = answer.widgets[0]
+    assert isinstance(card, ContainerStatusCard)
+    assert {action.operation for action in card.actions} == permitted
+    if expected is None:
+        assert card.recommendation is None
+    else:
+        assert card.recommendation is not None
+        action = next(action for action in card.actions if action.id == card.recommendation.action_id)
+        assert action.operation == expected
+        assert card.recommendation.reason == "Operator requested maintenance."
 
 
 @pytest.mark.parametrize("references", [["e2", "e1"], ["e1", "e2"]])

@@ -195,6 +195,10 @@ export function demoAnswer(scenarioId: ScenarioId, host = 'demo-eu'): Answer {
         evidence_ids: [ref('container')],
         actions:
           snapshot.state === 'running' ? [action, { ...action, id: crypto.randomUUID(), operation: 'stop' }] : [action],
+        recommendation:
+          scenarioId === 'crash_loop'
+            ? { action_id: action.id, reason: 'Stop the restart loop while reviewing the configuration error.' }
+            : null,
       },
       {
         widget_type: 'log_anomalies',
@@ -377,7 +381,11 @@ export class DemoClient implements Transport {
           widgets: answer.widgets.map((widget) => ({
             widget_type: widget.widget_type,
             evidence_ids: widget.evidence_ids,
-            action: widget.widget_type === 'container_status' ? (widget.actions[0]?.operation ?? null) : null,
+            action:
+              widget.widget_type === 'container_status'
+                ? (widget.actions.find((action) => action.id === widget.recommendation?.action_id)?.operation ?? null)
+                : null,
+            action_reason: widget.widget_type === 'container_status' ? (widget.recommendation?.reason ?? null) : null,
           })),
         },
         null,
