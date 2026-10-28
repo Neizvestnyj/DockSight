@@ -37,8 +37,8 @@ mutation automatically. Indeterminate means the Docker result is unknown and mus
 Run commands from the repository root with Node.js 24 LTS:
 
 ```powershell
-rtk proxy npm --prefix frontend ci
-rtk proxy npm --prefix frontend run dev
+npm --prefix frontend ci
+npm --prefix frontend run dev
 ```
 
 The initial workspace is a labeled simulation. `demo-eu` contains six fixture-backed containers; `demo-empty` is an
@@ -55,11 +55,11 @@ connections, enter an HTTPS API base ending in `/api/v1` and configure backend C
 are not stored in localStorage, sessionStorage, source, URLs, or build environment variables. Reload returns to Demo.
 
 ```powershell
-rtk proxy npm --prefix frontend run check
-rtk proxy npm --prefix frontend test
-rtk proxy npm --prefix frontend run build
-rtk proxy npm --prefix frontend run preview -- --port 4173
-rtk proxy npm --prefix frontend run test:browser
+npm --prefix frontend run check
+npm --prefix frontend test
+npm --prefix frontend run build
+npm --prefix frontend run preview -- --port 4173
+npm --prefix frontend run test:browser
 ```
 
 Browser tests use installed Chrome and mocked HTTP responses. They do not contact Docker or model providers.

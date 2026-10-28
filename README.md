@@ -33,8 +33,8 @@ On Linux/macOS, use `cp .env.example .env` instead of `Copy-Item`.
 Requires Node.js 24 LTS. From the repository root:
 
 ```powershell
-rtk proxy npm --prefix frontend ci
-rtk proxy npm --prefix frontend run dev
+npm --prefix frontend ci
+npm --prefix frontend run dev
 ```
 
 Open the printed local URL. The initial workspace is explicitly labeled Demo and uses local fixtures; it requires
@@ -48,11 +48,11 @@ The language selector follows the browser's language preferences by default and 
 It remembers only the language preference. Logs, environment values, resource names, and API/model text stay verbatim.
 
 ```powershell
-rtk proxy npm --prefix frontend run check
-rtk proxy npm --prefix frontend test
-rtk proxy npm --prefix frontend run build
-rtk proxy npm --prefix frontend run preview -- --port 4173
-rtk proxy npm --prefix frontend run test:browser
+npm --prefix frontend run check
+npm --prefix frontend test
+npm --prefix frontend run build
+npm --prefix frontend run preview -- --port 4173
+npm --prefix frontend run test:browser
 ```
 
 Browser checks use an installed Chrome. The Frontend workflow runs checks, tests, a production build, and browser

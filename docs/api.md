@@ -5,20 +5,20 @@ Diagram source: [backend.drawio](diagrams/backend.drawio).
 Base path: `/api/v1`. All API routes require `Authorization: Bearer TOKEN`. `/health/live`, `/health/ready`, `/docs`,
 and `/openapi.json` are public.
 
-| Method | Path                                           | Result                                               |
-|--------|------------------------------------------------|------------------------------------------------------|
-| GET    | `/hosts`                                       | Configured host IDs and display names                |
-| GET    | `/system/status?host=local`                     | Safe configuration and independent availability checks |
-| GET    | `/hosts/{host}/containers`                     | Up to 200 inspected containers                       |
-| GET    | `/hosts/{host}/containers/{id}`                | Sanitized snapshot                                   |
-| GET    | `/hosts/{host}/containers/{id}/logs?lines=200` | Bounded timestamped logs                             |
-| GET    | `/hosts/{host}/containers/{id}/stats`          | CPU/memory observations; unavailable values are null |
-| GET    | `/hosts/{host}/stacks?kind=compose`            | Compose groups; `swarm` requires a manager           |
-| GET    | `/widgets/schema`                              | Versioned JSON Schema for response cards             |
-| POST   | `/chat/turns`                                  | Diagnostic SSE stream                                |
-| POST   | `/actions`                                     | Prepare an action without executing it               |
-| GET    | `/actions/{id}`                                | Current action outcome                               |
-| POST   | `/actions/{id}/execute`                        | Explicitly confirmed execution                       |
+| Method | Path                                           | Result                                                 |
+|--------|------------------------------------------------|--------------------------------------------------------|
+| GET    | `/hosts`                                       | Configured host IDs and display names                  |
+| GET    | `/system/status?host=local`                    | Safe configuration and independent availability checks |
+| GET    | `/hosts/{host}/containers`                     | Up to 200 inspected containers                         |
+| GET    | `/hosts/{host}/containers/{id}`                | Sanitized snapshot                                     |
+| GET    | `/hosts/{host}/containers/{id}/logs?lines=200` | Bounded timestamped logs                               |
+| GET    | `/hosts/{host}/containers/{id}/stats`          | CPU/memory observations; unavailable values are null   |
+| GET    | `/hosts/{host}/stacks?kind=compose`            | Compose groups; `swarm` requires a manager             |
+| GET    | `/widgets/schema`                              | Versioned JSON Schema for response cards               |
+| POST   | `/chat/turns`                                  | Diagnostic SSE stream                                  |
+| POST   | `/actions`                                     | Prepare an action without executing it                 |
+| GET    | `/actions/{id}`                                | Current action outcome                                 |
+| POST   | `/actions/{id}/execute`                        | Explicitly confirmed execution                         |
 
 Errors contain `code`, `message`, and a request ID where available. Validation errors omit submitted values. Request
 bodies are limited to 16 KiB. Host IDs resolve through server configuration; callers cannot submit connection URLs. At
@@ -133,14 +133,14 @@ and server UTC `started_at`; unavailable identity fields are `null`. `trace.step
 These events accompany model calls, budget-eligible tool calls, and schema/evidence validation, including the single
 permitted repair attempt. Clients must retain received steps when the turn fails or the connection ends.
 
-| Step field | Contract |
-| --- | --- |
-| `id`, `kind`, `operation` | Turn-scoped ID; `model`, `tool`, or `validation`; approved tool name or application phase |
-| `state` | `running`, `succeeded`, or `failed`; receiving model output does not imply successful validation |
-| `started_at`, `finished_at`, `duration_ms` | Server UTC timestamps and monotonic elapsed milliseconds; unfinished values are `null` |
-| `input_tokens`, `output_tokens` | Provider-reported counts, including real zeroes; missing usage is `null` |
-| `code`, `issues` | Safe failure code and at most eight validation codes/paths, without submitted values or unknown field names |
-| `response`, `response_truncated` | Optional sanitized model response text and an explicit size-limit flag |
+| Step field                                 | Contract                                                                                                    |
+|--------------------------------------------|-------------------------------------------------------------------------------------------------------------|
+| `id`, `kind`, `operation`                  | Turn-scoped ID; `model`, `tool`, or `validation`; approved tool name or application phase                   |
+| `state`                                    | `running`, `succeeded`, or `failed`; receiving model output does not imply successful validation            |
+| `started_at`, `finished_at`, `duration_ms` | Server UTC timestamps and monotonic elapsed milliseconds; unfinished values are `null`                      |
+| `input_tokens`, `output_tokens`            | Provider-reported counts, including real zeroes; missing usage is `null`                                    |
+| `code`, `issues`                           | Safe failure code and at most eight validation codes/paths, without submitted values or unknown field names |
+| `response`, `response_truncated`           | Optional sanitized model response text and an explicit size-limit flag                                      |
 
 Exploration previews normalize the adapter reply as `content` and `tool_calls` (`id`, `name`, `arguments`), including empty
 content and no-call replies. Tool calls and arguments are untrusted model proposals; the preview grants no permission to

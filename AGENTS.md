@@ -31,6 +31,8 @@ actions. Models provide explanations and select from approved tools and widgets.
   Product UI copy may be localized through the English/Russian catalog; keep external evidence text verbatim.
 - Keep Markdown brief and factual. Document decisions, contracts, and commands. Omit promotional language, repeated
   summaries, and obvious explanations.
+- In README files and all Markdown except `AGENTS.md`, show commands without `rtk` wrappers such as `rtk proxy`
+  or `rtk run`. RTK is an agent output-reading tool and must not be a prerequisite for documented commands.
 - PR/MR descriptions and changelog entries focus on changes and relevant limitations. Omit test counts, verification
   checklists, and statements that tests, linters, or CI passed.
 - Production classes, functions, and methods require English docstrings, including private, nested, and protocol
