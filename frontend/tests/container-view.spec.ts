@@ -77,7 +77,7 @@ test('reads and refreshes facts without LLM calls, then diagnoses in a separate 
   await expect(historical.locator('footer time')).toHaveAttribute('datetime', snapshot.observed_at);
   await expect(historical.getByText('9', { exact: true })).toBeVisible();
   await chooseContainer(page, snapshot.name);
-  expect(reads).toBe(2);
+  await expect.poll(() => reads).toBe(3);
   await facts.getByRole('button', { name: 'Diagnose', exact: true }).click();
   await expect.poll(() => requests.length).toBe(2);
   expect(requests[1]).toEqual({

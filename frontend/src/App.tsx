@@ -16,6 +16,7 @@ import { useInvestigation } from './useInvestigation';
 import { ContainerView } from './ContainerView';
 import { useSystemStatus } from './useSystemStatus';
 import { SystemStatusPanel, SystemStatusTrigger } from './SystemStatus';
+import { useInventory } from './useInventory';
 
 interface ConnectionState {
   client: Transport;
@@ -180,12 +181,11 @@ function Workspace({
   const investigation = useInvestigation(client, host, initial);
   const availability = useSystemStatus(client, host, !hostLoading);
   const [statusOpen, setStatusOpen] = useState(false);
-  const [inventory, setInventory] = useState<Container[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [inventoryError, setInventoryError] = useState('');
-  const [lastRefreshed, setLastRefreshed] = useState<string>();
-  const [refreshAcknowledged, setRefreshAcknowledged] = useState(0);
-  const [revision, setRevision] = useState(0);
+  const { inventory, loading, inventoryError, lastRefreshed, refreshAcknowledged, refresh } = useInventory(
+    client,
+    host,
+    !demo,
+  );
   const [selected, setSelected] = useState<Container>();
   const [viewingContainer, setViewingContainer] = useState(false);
   const [draft, setDraft] = useState('');
@@ -193,43 +193,6 @@ function Workspace({
   const [menu, setMenu] = useState(false);
   const [help, setHelp] = useState(false);
   const name = hosts.find((row) => row.id === host)?.name ?? host;
-
-  useEffect(() => {
-    if (!host) return;
-    const controller = new AbortController();
-    client
-      .containers(host, controller.signal)
-      .then((rows) => {
-        if (!controller.signal.aborted) {
-          setInventory(rows);
-          setInventoryError('');
-          setLoading(false);
-          setLastRefreshed(new Date().toISOString());
-          setRefreshAcknowledged(revision);
-        }
-      })
-      .catch((error) => {
-        if (!controller.signal.aborted) {
-          setInventoryError(error instanceof Error ? error.message : 'Could not read Docker inventory.');
-          setLoading(false);
-        }
-      });
-    return () => controller.abort();
-  }, [client, host, revision]);
-
-  useEffect(() => {
-    if (!refreshAcknowledged) return;
-    const timer = setTimeout(() => setRefreshAcknowledged(0), 2000);
-    return () => clearTimeout(timer);
-  }, [refreshAcknowledged]);
-
-  /** Refresh only the read model, preserving historical diagnostic observations. */
-  function refresh() {
-    setLoading(true);
-    setInventoryError('');
-    setRefreshAcknowledged(0);
-    setRevision((value) => value + 1);
-  }
 
   /** Make fixture selection a clearly simulated example rather than a live diagnosis. */
   function chooseScenario(value: ScenarioId) {
@@ -364,7 +327,12 @@ function Workspace({
               {viewingContainer
                 ? t('Read-only · no model request')
                 : inventory[0]
-                  ? t('Inventory observed {time} · snapshots, not a live feed', { time: utc(inventory[0].observed_at) })
+                  ? t(
+                      demo
+                        ? 'Inventory observed {time} · snapshots, not a live feed'
+                        : 'Inventory observed {time} · refreshes every 10 seconds',
+                      { time: utc(inventory[0].observed_at) },
+                    )
                   : t('Docker diagnostics · host-scoped sessions')}
             </p>
           </div>
@@ -432,6 +400,8 @@ function Workspace({
               container={selected}
               running={investigation.running}
               blocked={Boolean(availability.blockedReason)}
+              automatic={!demo}
+              active={viewingContainer}
               back={() => openInvestigation()}
               diagnose={diagnoseContainer}
             />

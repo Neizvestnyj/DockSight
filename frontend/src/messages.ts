@@ -8,6 +8,10 @@ export type MessageValues = Record<string, string | number>;
 /** Keep product copy separate from verbatim Docker, model, and server content. */
 const russian = {
   ...demoMessages,
+  'Inventory observed {time} · refreshes every 10 seconds': 'Список получен в {time} · обновляется каждые 10 секунд',
+  'State refreshes every 10 seconds · logs and metrics refresh manually.':
+    'Состояние обновляется каждые 10 секунд · логи и метрики обновляются вручную.',
+  'This container no longer exists on the selected host.': 'Этот контейнер больше не существует на выбранном хосте.',
   'Workspace: choose host': 'Рабочее пространство: выбрать хост',
   'Choose a host': 'Выбрать хост',
   'Choose a configured Docker host. Selecting another host starts a separate session.':

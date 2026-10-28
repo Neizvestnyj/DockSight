@@ -36,6 +36,11 @@ Its separate, labeled Demo transport does not contact the API. Local Vite develo
 8000; a deployed static build needs a reverse proxy or an HTTPS API base with explicitly configured CORS.
 See [frontend operation and limitations](frontend.md).
 
+The browser polls the selected host's container list and the visible container's inspect endpoint 10 seconds after each
+read settles. It pauses while hidden or offline and backs off failed reads to at most 60 seconds. Logs, stats, diagnostic
+streams, and actions are not polled. Inventory remains bounded to 200 containers; only an exact inspect response with
+`container_not_found` and HTTP 404 confirms removal of a selected container.
+
 ## Dependency status
 
 `GET /system/status` is authenticated and returns `Cache-Control: no-store`. Its optional `host` query selects a configured

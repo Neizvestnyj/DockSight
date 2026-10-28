@@ -76,10 +76,15 @@ Keyboard: Tab follows reading order, Enter activates controls, Escape closes dia
 The workspace breadcrumb opens configured-host selection, including on mobile. Closing it or choosing the current
 host preserves the investigation, draft, and prepared actions. Choosing another host starts a separate session.
 
-Inventory refresh keeps the last received rows visible during the request. The sidebar announces loading, acknowledges
-success with a check for two seconds, and retains its receipt timestamp. This timestamp records browser receipt, not a
-Docker observation. Refresh failures retain the previous list and offer a manual retry. Diagnostic cards remain
-historical observations until a new diagnosis is run.
+In API mode, inventory refreshes 10 seconds after the previous request settles. Polling pauses while the page is hidden
+or offline; returning to a visible online page or focusing it triggers a read. Failed reads back off to 20, 40, and at
+most 60 seconds, returning to 10 seconds after success. Requests do not overlap. Demo remains manual.
+
+Inventory refresh keeps the last received rows visible, including after failure. Manual refresh announces loading and
+acknowledges success with a check for two seconds; background refresh does not animate loading. The receipt timestamp
+records browser receipt, not a Docker observation, and changes only on success. Errors mark the retained list as stale
+and offer a manual retry. Refresh preserves selection by exact container ID, keyboard focus, and investigation state.
+Diagnostic cards and prepared actions retain their original observations until a new diagnosis is run.
 
 ## Container reads
 
@@ -87,10 +92,17 @@ Selecting a container opens its read-only overview without calling the model or 
 the exact container snapshot, `/stats`, and `/logs?lines=200` independently. The snapshot includes the allowlisted
 environment. No direct restart or stop controls are exposed here.
 
-**Refresh data** manually rereads these sources; no polling runs. A failed source retains its last successful values and
-timestamp while other sources remain usable. State and environment show the server's `observed_at`. Metrics and log
-batches have no server observation timestamp, so their footers show browser receipt time as **Received**. Log entries
-retain their individual Docker timestamps. These separate requests are not an atomic snapshot.
+In API mode, the visible overview refreshes inspect with the inventory polling interval and pause/backoff rules.
+Logs and metrics remain manual. Returning to the investigation cancels overview requests and polling; reopening the
+overview rereads its sources. **Refresh data** manually rereads all sources. A failed source retains its last successful
+values and timestamp while other sources remain usable. State and environment show the server's `observed_at`. Metrics
+and log batches have no server observation timestamp, so their footers show browser receipt time as **Received**. Log
+entries retain their individual Docker timestamps. These separate requests are not an atomic snapshot.
+
+An exact inspect returning `container_not_found` with HTTP 404 marks the selected container as removed and stops its
+automatic reads. Retained observations stay labeled; diagnosis is disabled until a successful explicit read. A new
+container with the same name never replaces the selected ID. Absence from the bounded inventory alone does not prove
+deletion. Other inspect failures also disable diagnosis until a successful read.
 
 **Diagnose** starts a new model session with the selected host and exact container ID in the question. It retains prior
 answers in this tab; follow-up questions use the new session. Returning to the investigation preserves its draft,

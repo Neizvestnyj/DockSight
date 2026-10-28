@@ -13,14 +13,31 @@ interface Props {
   container: Container;
   running: boolean;
   blocked?: boolean;
+  automatic?: boolean;
+  active?: boolean;
   back: () => void;
   diagnose: (container: Container) => void;
 }
 
-/** Present manually refreshed Docker facts independently from model-authored diagnostic history. */
-export function ContainerView({ client, container, running, blocked = false, back, diagnose }: Props) {
+/** Present current inspect data independently from manually read sources and diagnostic history. */
+export function ContainerView({
+  client,
+  container,
+  running,
+  blocked = false,
+  automatic = false,
+  active = true,
+  back,
+  diagnose,
+}: Props) {
   const { t, locale } = useLocale();
-  const { snapshot, logs, metrics, refresh, loading } = useContainerRead(client, container.host, container.id);
+  const { snapshot, logs, metrics, refresh, loading } = useContainerRead(
+    client,
+    container.host,
+    container.id,
+    automatic,
+    active,
+  );
   const state = snapshot.data;
   const measure = metrics.data;
   return (
@@ -49,7 +66,7 @@ export function ContainerView({ client, container, running, blocked = false, bac
           </button>
           <button
             className="primary"
-            disabled={running || blocked || !state || snapshot.loading}
+            disabled={running || blocked || !state || snapshot.loading || Boolean(snapshot.error)}
             onClick={() => state && diagnose(state)}
           >
             {t('Diagnose')}
@@ -58,8 +75,20 @@ export function ContainerView({ client, container, running, blocked = false, bac
         </div>
       </div>
       <p className="runtime-feedback" role="status" aria-live="polite">
-        {t(loading ? 'Refreshing container data…' : 'Snapshot only · refresh manually for current data.')}
+        {t(
+          loading
+            ? 'Refreshing container data…'
+            : automatic
+              ? 'State refreshes every 10 seconds · logs and metrics refresh manually.'
+              : 'Snapshot only · refresh manually for current data.',
+        )}
       </p>
+      {snapshot.missing && (
+        <div className="runtime-error" role="alert">
+          <p>{t('This container no longer exists on the selected host.')}</p>
+          {state && <p>{t('Showing the last successful observation.')}</p>}
+        </div>
+      )}
       <div className="container-view-grid">
         <div className="container-view-column">
           <ReadPanel
