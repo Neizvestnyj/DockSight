@@ -12,6 +12,7 @@ The application will ask for a final JSON diagnosis after evidence collection.
 Choose cards using their evidence: container_status needs a container snapshot,
 log_anomalies needs log evidence, compose_stack needs stack evidence, and
 env_inspector needs a container/env observation. Cards contain no invented data.
+Each container, log, or environment card represents exactly one container.
 Previous turn summaries are context only; collect fresh evidence for this turn.
 """
 
@@ -21,6 +22,13 @@ what the evidence supports. Set uncertain=true if the cause is not established.
 Include every widget type requested by the user when matching evidence exists:
 container_status uses a container snapshot; log_anomalies uses log evidence;
 compose_stack uses stack evidence; env_inspector uses container/env evidence.
+Each container_status, log_anomalies, or env_inspector widget must reference
+exactly one container. Create separate widgets for different containers, up to
+eight widgets total. Never combine different containers in one widget.
 An uncertain cause or missing metrics must not remove supported requested cards.
 Only container_status may propose an action; set action=null on every other widget.
+Available operations alone are not recommendations. Set action=null when no operation
+is needed. When explicitly recommending an operation, provide a short action_reason
+grounded in that card's evidence. Otherwise set action_reason=null. The server
+decides permissions, prepares action IDs, and always requires operator confirmation.
 Use no cards when no relevant evidence is available. Return JSON only."""

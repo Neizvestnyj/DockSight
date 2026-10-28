@@ -7,8 +7,11 @@ actions. Models provide explanations and select from approved tools and widgets.
 
 - Keep backend and future frontend code in this repository.
 - Follow `docs/architecture.md` and keep `docs/api.md` aligned with the implementation.
-- Use `master` as the base branch and `feature/<lowercase-kebab-case>` for features. Implement the backend on
-  `feature/backend`.
+- Stay on the current branch unless the user explicitly approves a branch switch. Never run `git switch`,
+  `git checkout`, or any equivalent branch-changing operation without that approval. Backend or frontend ownership
+  does not authorize switching branches. Commit task changes on the current branch unless the user directs otherwise.
+- Use `master` as the base branch and `feature/<lowercase-kebab-case>` for new features when the user approves creating
+  or switching to a branch.
 - Run shell commands through `rtk`. On Windows, prefer `rtk read`, `rtk rg`, and `rtk proxy` for commands that need
   their original arguments.
 - Use patch-based edits. Keep files UTF-8 without BOM, with LF line endings.
@@ -25,6 +28,7 @@ actions. Models provide explanations and select from approved tools and widgets.
 ## Writing
 
 - Write documentation, comments, docstrings, API descriptions, and runtime messages in English.
+  Product UI copy may be localized through the English/Russian catalog; keep external evidence text verbatim.
 - Keep Markdown brief and factual. Document decisions, contracts, and commands. Omit promotional language, repeated
   summaries, and obvious explanations.
 - PR/MR descriptions and changelog entries focus on changes and relevant limitations. Omit test counts, verification
@@ -111,3 +115,19 @@ actions. Models provide explanations and select from approved tools and widgets.
   same checks through `uv`.
 - Start the backend at `0.1.0`. Before releases, decide whether behavior warrants a version and changelog update.
   Documentation-only changes need neither.
+
+## Frontend
+
+- Keep the React, strict TypeScript, and Vite client in `frontend/`. Branch changes require explicit user approval.
+- Treat the backend widget schemas, runtime values, SSE events, and action lifecycle as the client contracts.
+  Validate API data at the transport boundary; render logs and environment values as text.
+- Keep API credentials in browser memory. Never put tokens in source, browser storage, URLs, or `VITE_*` variables.
+- Resolve the interface locale from browser language preferences unless the operator chooses English or Russian.
+  Persist only the locale preference. Switching language must preserve active investigations and prepared actions.
+- Keep demo transport visibly separate from API transport. Derive demo inventory totals from fixture rows.
+- Keep diagnosis sessions scoped to one host. Do not imply durable conversation history or replayable streams.
+- Keep one idempotency key per action execution. Recover lost responses by reading the existing action.
+  Never retry a Docker mutation automatically. Require separate confirmation of the exact server-prepared target.
+- Run `rtk proxy npm --prefix frontend run check`, `rtk proxy npm --prefix frontend test`, and
+  `rtk proxy npm --prefix frontend run build`. Run browser checks against the production preview with
+  `rtk proxy npm --prefix frontend run test:browser` when changing layout or user flows.

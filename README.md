@@ -1,7 +1,7 @@
 # DockSight
 
 DockSight explains Docker container problems using runtime state, logs, and metrics. It can restart or stop a container
-after explicit user confirmation. This repository contains the backend and an HTTP demo client.
+after explicit user confirmation. This repository contains the backend, a browser frontend, and an HTTP demo client.
 
 ## Run locally
 
@@ -27,6 +27,37 @@ Open [API documentation](http://127.0.0.1:8000/docs) and enter the token through
 application readiness without contacting Docker or a model. Provider requests happen only during diagnostic turns.
 
 On Linux/macOS, use `cp .env.example .env` instead of `Copy-Item`.
+
+## Browser frontend
+
+Requires Node.js 24 LTS. From the repository root:
+
+```powershell
+rtk proxy npm --prefix frontend ci
+rtk proxy npm --prefix frontend run dev
+```
+
+Open the printed local URL. The initial workspace is explicitly labeled Demo and uses local fixtures; it requires
+neither Docker nor a model. Use the scenario selector for examples and **Test error states** for simulated failures.
+
+For real observations, start the backend above, choose **Connect API**, keep `/api/v1`, and enter the backend bearer
+token. Vite forwards `/api` to `http://127.0.0.1:8000` in development and local preview. A remote API base must use HTTPS
+and allow the frontend origin in `DOCKSIGHT_CORS_ORIGINS`. The browser keeps the token only in memory.
+
+The language selector follows the browser's language preferences by default and supports English and Russian overrides.
+It remembers only the language preference. Logs, environment values, resource names, and API/model text stay verbatim.
+
+```powershell
+rtk proxy npm --prefix frontend run check
+rtk proxy npm --prefix frontend test
+rtk proxy npm --prefix frontend run build
+rtk proxy npm --prefix frontend run preview -- --port 4173
+rtk proxy npm --prefix frontend run test:browser
+```
+
+Browser checks use an installed Chrome. The Frontend workflow runs checks, tests, a production build, and browser
+scenarios on pull requests to `master`, pushes to `master`, and manual dispatches.
+See [frontend design and operation](docs/frontend.md) for contracts, deployment, and limitations.
 
 ## System overview
 
@@ -144,7 +175,7 @@ for example through `host.docker.internal` on Docker Desktop. Set `DOCKSIGHT_TES
 alongside the Docker test flag to run the built-image health check.
 
 Use one backend worker. Sessions, action records, and idempotency state live in bounded memory and disappear on restart.
-An indeterminate action fences its target until the operator checks Docker and restarts the backend. No frontend,
-environment editing, or stack deployment is included in this release.
+An indeterminate action fences its target until the operator checks Docker and restarts the backend. Environment
+editing and stack deployment are not included.
 
 [Architecture](docs/architecture.md) · [API contract](docs/api.md)

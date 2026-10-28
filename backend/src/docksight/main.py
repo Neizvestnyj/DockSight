@@ -31,7 +31,7 @@ def create_app(settings: Settings | None = None, components: Components | None =
     app = FastAPI(title="DockSight", version=version, lifespan=lifespan)
     app.add_middleware(BodyLimit)
     install_errors(app)
-    app.include_router(build_router(services.queries, services.diagnostics, services.actions))
+    app.include_router(build_router(services.queries, services.diagnostics, services.actions, services.status))
 
     @app.middleware("http")
     async def request_context(

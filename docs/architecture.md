@@ -21,6 +21,10 @@ selects the concrete implementations and injects them into use cases.
 executes confirmed commands. `Diagnostics` uses `ViewAssembler` to build typed responses. Ports are interfaces owned by
 the application and implemented by outbound adapters.
 
+`SystemStatus` checks a selected Docker host through `RuntimeReadPort.ping` and provider metadata through `ModelStatusPort`.
+It owns independent deadlines, public reason codes, and UTC check times. The metadata adapter owns provider-specific HTTP
+routes and credentials; the status use case never calls `ModelPort.complete` or changes diagnostic or action state.
+
 - `domain` uses the standard library only. It owns values and business rules.
 - `application` owns use cases, ports, tool orchestration, and output contracts. Pydantic may validate application DTOs
   and widget proposals; it must not become a base class for domain entities.
@@ -48,10 +52,12 @@ backend/src/docksight/
     ports/
       runtime.py         # Separate runtime read and mutation protocols
       models.py          # Provider-neutral model protocol and messages
+      status.py          # Non-generative provider metadata checks
       state.py           # Session/action stores and audit sink
-    diagnostics/         # Turn orchestration, tools, context, prompts
+    diagnostics/         # Turn orchestration, bounded trace, tools, context, prompts
     actions.py           # Prepare and execute workflows
     queries.py           # Host/container read workflows
+    system_status.py     # Bounded dependency checks and safe public results
     events.py            # Transport-neutral turn events
     views/               # Widget proposals, registry, server assembly
   adapters/

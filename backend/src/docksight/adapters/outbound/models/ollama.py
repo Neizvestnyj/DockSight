@@ -41,8 +41,8 @@ class _Response(BaseModel):
     model_config = ConfigDict(strict=True)
     message: _Message
     done_reason: str | None = None
-    prompt_eval_count: int = Field(default=0, ge=0)
-    eval_count: int = Field(default=0, ge=0)
+    prompt_eval_count: int | None = Field(default=None, ge=0)
+    eval_count: int | None = Field(default=None, ge=0)
 
 
 def _messages(messages: Sequence[ModelMessage]) -> list[dict[str, Any]]:

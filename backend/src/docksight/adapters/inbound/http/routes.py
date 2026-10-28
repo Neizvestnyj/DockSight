@@ -1,7 +1,7 @@
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, Query, Request
+from fastapi import APIRouter, Depends, Header, Query, Request, Response
 from fastapi.security import HTTPBearer
 
 from docksight.adapters.inbound.http.schemas import (
@@ -15,6 +15,7 @@ from docksight.adapters.inbound.http.streaming import EventResponse
 from docksight.application.actions import Actions
 from docksight.application.diagnostics.use_case import Diagnostics
 from docksight.application.queries import RuntimeQueries
+from docksight.application.system_status import SystemStatus, SystemStatusView
 from docksight.application.views.registry import widget_schema
 from docksight.application.views.schemas import ActionView
 from docksight.domain.diagnostics import JsonObject
@@ -27,9 +28,17 @@ from docksight.domain.runtime import (
 )
 
 
-def build_router(queries: RuntimeQueries, diagnostics: Diagnostics, actions: Actions) -> APIRouter:
+def build_router(
+    queries: RuntimeQueries, diagnostics: Diagnostics, actions: Actions, status: SystemStatus
+) -> APIRouter:
     """Bind versioned HTTP endpoints to application use cases."""
     router = APIRouter(prefix="/api/v1", dependencies=[Depends(HTTPBearer())])
+
+    @router.get("/system/status", tags=["System"])
+    async def system_status(request: Request, response: Response, host: HostId | None = None) -> SystemStatusView:
+        """Check configured dependencies without generation or exposing private endpoints."""
+        response.headers["Cache-Control"] = "no-store"
+        return await status.check(host, request.state.request_id)
 
     @router.get("/hosts", tags=["Runtime"])
     async def hosts() -> tuple[Host, ...]:

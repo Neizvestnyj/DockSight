@@ -43,6 +43,9 @@ class FakeRuntime:
         """Return the configured public host inventory."""
         return (Host("local", "Local"),)
 
+    async def ping(self, host: str) -> None:
+        """Report an available fake engine without reading or changing its workloads."""
+
     async def containers(self, host: str) -> tuple[ContainerSnapshot, ...]:
         """Read bounded sanitized container snapshots for one host."""
         return (self.item,)

@@ -1,6 +1,6 @@
 import logging
 import os
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from typing import Literal
 from urllib.parse import urlparse
@@ -20,12 +20,15 @@ from docksight.adapters.outbound.models.anthropic import AnthropicModel
 from docksight.adapters.outbound.models.compatible import CompatibleModel
 from docksight.adapters.outbound.models.ollama import OllamaModel
 from docksight.adapters.outbound.models.openai import OpenAIModel
+from docksight.adapters.outbound.models.status import ModelAvailability
 from docksight.application.actions import Actions
 from docksight.application.diagnostics.use_case import Diagnostics
 from docksight.application.ports.models import ModelPort
 from docksight.application.ports.runtime import RuntimeMutationPort, RuntimeReadPort
+from docksight.application.ports.status import ModelStatusPort
 from docksight.application.queries import RuntimeQueries
 from docksight.application.redaction import Redactor
+from docksight.application.system_status import SystemStatus
 from docksight.application.views.assembler import ViewAssembler
 
 
@@ -38,7 +41,7 @@ class Settings(BaseSettings):
 
     api_token: SecretStr = SecretStr("")
     provider: Literal["ollama", "openai", "anthropic", "compatible"] = "ollama"
-    model: str = Field(default="qwen3.5:9b", min_length=1)
+    model: str = Field(default="qwen3.5:9b", min_length=1, max_length=256)
     model_base_url: str | None = None
     model_api_key: SecretStr | None = None
     hosts_file: str | None = None
@@ -97,6 +100,7 @@ class Components:
     queries: RuntimeQueries
     diagnostics: Diagnostics
     actions: Actions
+    status: SystemStatus
     closers: list[Callable[[], Awaitable[None]]]
 
     async def close(self) -> None:
@@ -126,7 +130,9 @@ def _provider_key(settings: Settings) -> str | None:
     return None
 
 
-def _openai_model(settings: Settings, key: str | None, closers: list[Callable[[], Awaitable[None]]]) -> ModelPort:
+def _openai_model(
+    settings: Settings, key: str | None, closers: list[Callable[[], Awaitable[None]]]
+) -> tuple[ModelPort, ModelStatusPort]:
     """Wire the native Responses adapter or a configured compatible endpoint."""
     if settings.provider == "compatible":
         if not settings.model_base_url:
@@ -141,12 +147,15 @@ def _openai_model(settings: Settings, key: str | None, closers: list[Callable[[]
         max_retries=0,
     )
     closers.append(client.close)
+    probe = _build_probe(settings, str(client.base_url), {**client.auth_headers, **client.default_headers}, closers)
     if settings.provider == "openai":
-        return OpenAIModel(client, settings.model, settings.model_max_tokens)
-    return CompatibleModel(client, settings.model, settings.model_max_tokens, settings.model_structured_output)
+        return OpenAIModel(client, settings.model, settings.model_max_tokens), probe
+    return CompatibleModel(client, settings.model, settings.model_max_tokens, settings.model_structured_output), probe
 
 
-def _build_model(settings: Settings, key: str | None, closers: list[Callable[[], Awaitable[None]]]) -> ModelPort:
+def _build_model(
+    settings: Settings, key: str | None, closers: list[Callable[[], Awaitable[None]]]
+) -> tuple[ModelPort, ModelStatusPort]:
     """Validate model capabilities and register the selected client's cleanup."""
     if not settings.model_supports_tools:
         raise ValueError("Docker diagnostics require a model with tool-calling support")
@@ -159,7 +168,8 @@ def _build_model(settings: Settings, key: str | None, closers: list[Callable[[],
             headers={"Authorization": f"Bearer {key}"} if key else {},
         )
         closers.append(client.aclose)
-        return OllamaModel(client, settings.model, settings.model_max_tokens, settings.ollama_context_length)
+        probe = _build_probe(settings, str(client.base_url), dict(client.headers), closers)
+        return OllamaModel(client, settings.model, settings.model_max_tokens, settings.ollama_context_length), probe
     if settings.provider == "anthropic":
         if not key:
             raise ValueError("Configure DOCKSIGHT_MODEL_API_KEY or ANTHROPIC_API_KEY")
@@ -170,8 +180,32 @@ def _build_model(settings: Settings, key: str | None, closers: list[Callable[[],
             max_retries=0,
         )
         closers.append(anthropic_client.close)
-        return AnthropicModel(anthropic_client, settings.model, settings.model_max_tokens)
+        probe = _build_probe(
+            settings,
+            str(anthropic_client.base_url),
+            {**anthropic_client.auth_headers, **anthropic_client.default_headers},
+            closers,
+        )
+        return AnthropicModel(anthropic_client, settings.model, settings.model_max_tokens), probe
     return _openai_model(settings, key, closers)
+
+
+def _build_probe(
+    settings: Settings,
+    base_url: str,
+    headers: Mapping[str, object],
+    closers: list[Callable[[], Awaitable[None]]],
+) -> ModelStatusPort:
+    """Wire a bounded metadata client with the same server configuration as generation."""
+    client = httpx.AsyncClient(
+        base_url=base_url,
+        headers={name: value for name, value in headers.items() if isinstance(value, str)},
+        timeout=2,
+        follow_redirects=False,
+        limits=httpx.Limits(max_connections=4, max_keepalive_connections=2),
+    )
+    closers.append(client.aclose)
+    return ModelAvailability(client, settings.provider, settings.model)
 
 
 def build_components(
@@ -180,6 +214,7 @@ def build_components(
     reader: RuntimeReadPort | None = None,
     writer: RuntimeMutationPort | None = None,
     model: ModelPort | None = None,
+    model_probe: ModelStatusPort | None = None,
 ) -> Components:
     """Wire hexagonal services with configured adapters or explicitly injected test ports."""
     configure_logging()
@@ -201,7 +236,9 @@ def build_components(
     if writer is None:
         raise ValueError("A runtime mutation adapter must be supplied with a custom reader")
     if model is None:
-        model = _build_model(settings, effective_key, closers)
+        model, configured_probe = _build_model(settings, effective_key, closers)
+        if model_probe is None:
+            model_probe = configured_probe
     actions = Actions(
         reader,
         writer,
@@ -222,11 +259,13 @@ def build_components(
         settings.log_lines,
         settings.log_bytes,
         settings.max_concurrent_turns,
+        model_identity=(settings.provider, settings.model),
     )
 
     return Components(
         RuntimeQueries(reader, settings.log_lines, settings.log_bytes),
         diagnostics,
         actions,
+        SystemStatus(reader, model_probe, settings.provider, settings.model),
         closers,
     )

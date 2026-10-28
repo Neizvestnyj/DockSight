@@ -12,7 +12,7 @@ TOKEN = "test-token-at-least-24-characters"
 HEADERS = {"Authorization": f"Bearer {TOKEN}"}
 
 
-def client() -> TestClient:
+def client(suggested: bool = False) -> TestClient:
     """Create an authenticated in-process client with deterministic runtime and model ports."""
     settings = Settings(api_token=TOKEN, cors_origins=("http://localhost:5173",), _env_file=None)
     runtime = FakeRuntime()
@@ -26,7 +26,14 @@ def client() -> TestClient:
                         "summary": "Worker exited",
                         "uncertain": True,
                         "evidence_ids": ["e1"],
-                        "widgets": [{"widget_type": "container_status", "evidence_ids": ["e1"]}],
+                        "widgets": [
+                            {
+                                "widget_type": "container_status",
+                                "evidence_ids": ["e1"],
+                                "action": "restart" if suggested else None,
+                                "action_reason": f"Review {TOKEN}" if suggested else None,
+                            }
+                        ],
                     }
                 )
             ),
@@ -59,6 +66,19 @@ def test_streamed_diagnosis_contains_validated_cards_and_terminal_event() -> Non
         assert all(event["request_id"] == response.headers["x-request-id"] for event in events)
 
 
+def test_streamed_trace_contains_public_configuration_and_sanitized_proposal() -> None:
+    with client() as api:
+        response = api.post("/api/v1/chat/turns", headers=HEADERS, json={"host": "local", "query": "Inspect worker"})
+        events = [json.loads(line[6:]) for line in response.text.splitlines() if line.startswith("data: ")]
+        trace = next(event for event in events if event["type"] == "trace.started")
+        assert (trace["provider"], trace["model"]) == ("ollama", "qwen3.5:9b")
+        steps = [event["step"] for event in events if event["type"] == "trace.step"]
+        assert steps[-1]["state"] == "succeeded"
+        assert steps[-1]["operation"] == "validate_diagnosis"
+        assert any(step["response"] and '"summary": "Worker exited"' in step["response"] for step in steps)
+        assert TOKEN not in response.text
+
+
 def test_action_endpoint_requires_confirmation_and_deduplicates_execution() -> None:
     with client() as api:
         prepared = api.post(
@@ -75,6 +95,15 @@ def test_action_endpoint_requires_confirmation_and_deduplicates_execution() -> N
         result = api.post(path, headers=headers, json={"confirmed": True})
         assert result.json()["state"] == "succeeded"
         assert api.post(path, headers=headers, json={"confirmed": True}).json() == result.json()
+
+
+def test_recommended_action_uses_server_id_and_redacts_its_model_reason() -> None:
+    with client(suggested=True) as api:
+        response = api.post("/api/v1/chat/turns", headers=HEADERS, json={"host": "local", "query": "Inspect worker"})
+        events = [json.loads(line[6:]) for line in response.text.splitlines() if line.startswith("data: ")]
+        card = next(event["answer"]["widgets"][0] for event in events if event["type"] == "answer.ready")
+        assert card["recommendation"] == {"action_id": card["actions"][0]["id"], "reason": "Review [REDACTED]"}
+        assert TOKEN not in response.text
 
 
 def test_cors_preflight_does_not_require_a_token_and_foreign_origin_is_rejected() -> None:
