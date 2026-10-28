@@ -97,6 +97,23 @@ answers in this tab; follow-up questions use the new session. Returning to the i
 evidence, prepared action IDs, and execution keys. Direct refresh never replaces diagnostic card data. Host or connection
 changes cancel outstanding reads and discard the previous workspace.
 
+## System status
+
+The top-bar status control opens independent API/authentication, Docker, provider, and model results. Checks run after
+connection and host discovery, on host changes, and through **Check again**. There is no background polling or automatic
+retry. Rechecks keep the previous dependency values and timestamps until the new result arrives. Failed API checks retain
+previous dependency results with an explicit stale notice; successful checks replace the result for that host only.
+
+The client derives API authorization and connection failures from HTTP/transport outcomes. Dependency timestamps come
+from the server; the API row records browser receipt or failure time. Unsupported status APIs and metadata checks stay
+`not_checked`. A confirmed unavailable dependency disables new diagnosis submissions, including keyboard submit and retry;
+it does not discard drafts, past cards, action IDs, or execution keys. Unchecked models remain usable for explicit diagnosis.
+Provider/model failures do not block direct Docker reads. Docker failures explain why diagnosis cannot collect evidence.
+
+The panel exposes only the server-selected provider and model. Metadata availability does not verify generation, tools,
+or structured output. Those require an explicit diagnostic request. Demo results are labeled simulations and never contact
+any dependency. Provider selection remains server configuration.
+
 ## Language
 
 The language control beside Ask DockSight offers System, English, and Русский. System resolves the first supported

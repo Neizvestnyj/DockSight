@@ -34,10 +34,20 @@ interface Props {
   draft: string;
   setDraft: (value: string) => void;
   host: string;
+  blocked?: boolean;
 }
 
 /** Compose conclusions, typed observations, and an always-available follow-up query. */
-export function Investigation({ investigation, client, demo, containers, draft, setDraft, host }: Props) {
+export function Investigation({
+  investigation,
+  client,
+  demo,
+  containers,
+  draft,
+  setDraft,
+  host,
+  blocked = false,
+}: Props) {
   const { t, locale } = useLocale();
   const { turns, running, run, stop } = investigation;
   const [view, setView] = useState<{ id: string; latest: string } | null>(null);
@@ -67,6 +77,7 @@ export function Investigation({ investigation, client, demo, containers, draft, 
 
   /** Submit one host-bound query and keep its text available for a manual retry. */
   function submit(query: string) {
+    if (blocked) return;
     setView(null);
     void run(query);
     setDraft('');
@@ -193,7 +204,7 @@ export function Investigation({ investigation, client, demo, containers, draft, 
                       <p>{localError}</p>
                     </details>
                   )}
-                  <button className="secondary" disabled={running} onClick={() => submit(turn.query)}>
+                  <button className="secondary" disabled={running || blocked} onClick={() => submit(turn.query)}>
                     {t('Retry diagnosis')}
                     <ArrowRight size={14} />
                   </button>
@@ -235,7 +246,14 @@ export function Investigation({ investigation, client, demo, containers, draft, 
           rows={2}
           placeholder={t(turn ? 'What else should we check?' : 'Why did this container exit?')}
           onKeyDown={(event) => {
-            if ((event.metaKey || event.ctrlKey) && event.key === 'Enter' && !running && draft.trim() && host) {
+            if (
+              (event.metaKey || event.ctrlKey) &&
+              event.key === 'Enter' &&
+              !running &&
+              !blocked &&
+              draft.trim() &&
+              host
+            ) {
               event.preventDefault();
               submit(draft);
             }
@@ -259,7 +277,7 @@ export function Investigation({ investigation, client, demo, containers, draft, 
                 {t('Stop diagnosis')}
               </button>
             ) : (
-              <button className="primary" type="submit" disabled={!draft.trim() || !host}>
+              <button className="primary" type="submit" disabled={blocked || !draft.trim() || !host}>
                 {t('Investigate')}
                 <ArrowRight size={15} />
               </button>

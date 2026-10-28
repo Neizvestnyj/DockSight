@@ -12,12 +12,13 @@ interface Props {
   client: Transport;
   container: Container;
   running: boolean;
+  blocked?: boolean;
   back: () => void;
   diagnose: (container: Container) => void;
 }
 
 /** Present manually refreshed Docker facts independently from model-authored diagnostic history. */
-export function ContainerView({ client, container, running, back, diagnose }: Props) {
+export function ContainerView({ client, container, running, blocked = false, back, diagnose }: Props) {
   const { t, locale } = useLocale();
   const { snapshot, logs, metrics, refresh, loading } = useContainerRead(client, container.host, container.id);
   const state = snapshot.data;
@@ -48,7 +49,7 @@ export function ContainerView({ client, container, running, back, diagnose }: Pr
           </button>
           <button
             className="primary"
-            disabled={running || !state || snapshot.loading}
+            disabled={running || blocked || !state || snapshot.loading}
             onClick={() => state && diagnose(state)}
           >
             {t('Diagnose')}

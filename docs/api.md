@@ -8,6 +8,7 @@ and `/openapi.json` are public.
 | Method | Path                                           | Result                                               |
 |--------|------------------------------------------------|------------------------------------------------------|
 | GET    | `/hosts`                                       | Configured host IDs and display names                |
+| GET    | `/system/status?host=local`                     | Safe configuration and independent availability checks |
 | GET    | `/hosts/{host}/containers`                     | Up to 200 inspected containers                       |
 | GET    | `/hosts/{host}/containers/{id}`                | Sanitized snapshot                                   |
 | GET    | `/hosts/{host}/containers/{id}/logs?lines=200` | Bounded timestamped logs                             |
@@ -34,6 +35,52 @@ The React client in `frontend/` implements this API through streaming `fetch` an
 Its separate, labeled Demo transport does not contact the API. Local Vite development and preview proxy `/api` to port
 8000; a deployed static build needs a reverse proxy or an HTTPS API base with explicitly configured CORS.
 See [frontend operation and limitations](frontend.md).
+
+## Dependency status
+
+`GET /system/status` is authenticated and returns `Cache-Control: no-store`. Its optional `host` query selects a configured
+host ID; an unknown ID is rejected before any external work. Without a host, Docker is `not_checked`. The response exposes
+only the configured provider type and model name, never credentials, provider URLs, Docker URLs, or raw upstream errors.
+
+```json
+{
+  "schema_version": 1,
+  "host": "local",
+  "provider": "ollama",
+  "model": "qwen3.5:9b",
+  "docker": {
+    "state": "available", "code": "ok", "message": "Availability check succeeded.",
+    "checked_at": "2026-10-27T12:00:00Z"
+  },
+  "provider_check": {
+    "state": "available", "code": "ok", "message": "Availability check succeeded.",
+    "checked_at": "2026-10-27T12:00:00Z"
+  },
+  "model_check": {
+    "state": "not_checked", "code": "unsupported",
+    "message": "The provider does not expose a supported model metadata endpoint.",
+    "checked_at": "2026-10-27T12:00:00Z"
+  }
+}
+```
+
+Each result has its own UTC completion time and state: `available`, `unavailable`, or `not_checked`. A dependency failure
+remains HTTP 200 with an explicit result; authentication, validation, and unknown-host failures use normal HTTP errors.
+Docker and provider checks run concurrently with three-second deadlines, including queue waits. The metadata HTTP client
+has a two-second timeout, at most four connections, no redirects or retries, and a 256 KiB response limit. Docker uses
+`ping`, a short SDK timeout, and the existing bounded worker pool; cancelled workers retain their slots until they finish.
+The probe reuses the generation client's resolved base URL and authentication headers, including SDK environment defaults.
+
+Native metadata probes use [Ollama show](https://docs.ollama.com/api/show),
+[OpenAI model retrieval](https://developers.openai.com/api/reference/resources/models/methods/retrieve), and
+[Anthropic model retrieval](https://platform.claude.com/docs/en/api/http/models/retrieve).
+Compatible providers use their model catalog. An unlisted compatible alias, denied metadata access, unsupported endpoint,
+or malformed metadata leaves the model `not_checked`. A native model lookup returning 404 reports `model_not_found`.
+An unreachable provider leaves the model `not_checked`, keeping provider failure separate from a missing model.
+
+These probes do not generate text, load or pull models, run tools, validate structured output, or change Docker state.
+They do not establish generation health or tool compatibility. Full diagnostic validation requires an explicit diagnostic
+request. `/health/live` still reports process liveness; `/health/ready` still reports successful configuration and wiring.
 
 ## Diagnostic stream
 

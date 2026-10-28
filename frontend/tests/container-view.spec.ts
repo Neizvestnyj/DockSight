@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-import { demoAnswer, demoContainer } from '../src/demo';
+import { demoAnswer, demoContainer, demoSystemStatus } from '../src/demo';
 import type { TurnInput } from '../src/contracts';
 
 /** Reach the same container from a persistent sidebar or the mobile navigation sheet. */
@@ -34,6 +34,8 @@ test('reads and refreshes facts without LLM calls, then diagnoses in a separate 
     const request = route.request();
     expect(request.headers()['authorization']).toBe('Bearer browser-test-token');
     const path = new URL(request.url()).pathname;
+    if (path.endsWith('/system/status'))
+      return route.fulfill({ json: demoSystemStatus(new URL(request.url()).searchParams.get('host')) });
     if (path.endsWith('/hosts')) return route.fulfill({ json: [{ id: snapshot.host, name: 'Test host' }] });
     if (path.endsWith('/containers')) return route.fulfill({ json: [snapshot] });
     if (path.endsWith('/stats')) return route.fulfill({ json: { ...snapshot.metrics, cpu_percent: 0 } });
@@ -101,6 +103,8 @@ test('keeps large untrusted observations bounded and retains successful data aft
     expect(request.method()).toBe('GET');
     const path = new URL(request.url()).pathname;
     calls.push(path);
+    if (path.endsWith('/system/status'))
+      return route.fulfill({ json: demoSystemStatus(new URL(request.url()).searchParams.get('host')) });
     if (path.endsWith('/hosts')) return route.fulfill({ json: [{ id: snapshot.host, name: 'Test host' }] });
     if (path.endsWith('/containers')) return route.fulfill({ json: [snapshot] });
     if (path.endsWith('/stats'))

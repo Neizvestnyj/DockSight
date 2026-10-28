@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-import { demoAnswer, demoContainer } from '../src/demo';
+import { demoAnswer, demoContainer, demoSystemStatus } from '../src/demo';
 
 test.use({ locale: 'ru-RU' });
 
@@ -60,6 +60,8 @@ test('localizes interrupted streams while preserving the same message when autho
   let turns = 0;
   await page.route('**/api/v1/**', (route) => {
     const path = new URL(route.request().url()).pathname;
+    if (path.endsWith('/system/status'))
+      return route.fulfill({ json: demoSystemStatus(new URL(route.request().url()).searchParams.get('host')) });
     if (path.endsWith('/hosts')) return route.fulfill({ json: [{ id: 'local', name: 'Local' }] });
     if (path.endsWith('/containers')) return route.fulfill({ json: [] });
     turns++;
@@ -150,6 +152,8 @@ test('does not translate API summaries, messages, logs, or environment values', 
   }
   await page.route('**/api/v1/**', (route) => {
     const path = new URL(route.request().url()).pathname;
+    if (path.endsWith('/system/status'))
+      return route.fulfill({ json: demoSystemStatus(new URL(route.request().url()).searchParams.get('host')) });
     if (path.endsWith('/hosts')) return route.fulfill({ json: [{ id: 'local', name: 'Production / EU' }] });
     if (path.endsWith('/containers'))
       return route.fulfill({ json: [demoContainer(0, 'local', new Date().toISOString())] });

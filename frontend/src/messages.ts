@@ -16,6 +16,64 @@ const russian = {
   'Refreshing container list…': 'Обновляем список контейнеров…',
   'Container list refreshed': 'Список контейнеров обновлён',
   'List received at {time}': 'Список получен в {time}',
+  API: 'API',
+  Docker: 'Docker',
+  Model: 'Модель',
+  Provider: 'Провайдер',
+  Available: 'Доступно',
+  'Not checked': 'Не проверено',
+  'System status': 'Состояние системы',
+  'View system status': 'Посмотреть состояние системы',
+  'API & authorization': 'API и авторизация',
+  'Provider & model': 'Провайдер и модель',
+  'No host selected': 'Хост не выбран',
+  'Check again': 'Проверить снова',
+  'Checking dependencies…': 'Проверяем подключения…',
+  'No background polling': 'Автоматического опроса нет',
+  'API and authorization verified.': 'API доступен, авторизация подтверждена.',
+  'The API rejected the bearer token.': 'API отклонил токен авторизации.',
+  'API access is denied. Check permissions and allowed origins.':
+    'Доступ к API запрещён. Проверьте права и разрешённые источники.',
+  'No connection to the API. Check the endpoint and network.': 'Нет соединения с API. Проверьте адрес и сеть.',
+  'Status checks are not supported by this API.': 'Этот API не поддерживает проверку состояния системы.',
+  'The API could not complete the status check.': 'API не смог завершить проверку состояния системы.',
+  'Demo statuses are simulated. No connections are checked.':
+    'Статусы в демо смоделированы. Реальные подключения не проверяются.',
+  'Dependency results are from the previous successful check.':
+    'Показаны результаты последней успешной проверки подключений.',
+  'Tools and structured output have not been tested.': 'Вызов инструментов и структурированный ответ не проверялись.',
+  'This check reads metadata only and never generates an answer.':
+    'Проверка читает только метаданные и не генерирует ответ.',
+  'Provider and model settings are managed on the server.': 'Настройки провайдера и модели задаются на сервере.',
+  'Docker is unavailable for this host. Diagnosis cannot collect evidence. Check the connection and try again.':
+    'Docker выбранного хоста недоступен. Диагностика не сможет собрать данные. Проверьте подключение и повторите проверку.',
+  'The configured model is unavailable. You can still inspect Docker directly.':
+    'Настроенная модель недоступна. Данные Docker можно просматривать напрямую.',
+  'The model provider is unavailable. You can still inspect Docker directly.':
+    'Провайдер модели недоступен. Данные Docker можно просматривать напрямую.',
+  'Availability check succeeded.': 'Проверка доступности выполнена успешно.',
+  'Select a configured host to check Docker.': 'Выберите настроенный хост для проверки Docker.',
+  'The availability check timed out.': 'Время проверки доступности истекло.',
+  'Could not connect to the provider.': 'Не удалось подключиться к провайдеру.',
+  'Could not connect to the selected Docker host.': 'Не удалось подключиться к выбранному хосту Docker.',
+  'The provider rejected its server-configured credentials.':
+    'Провайдер отклонил учётные данные, настроенные на сервере.',
+  'Model metadata access is denied; generation access was not tested.':
+    'Доступ к метаданным модели запрещён; возможность генерации не проверялась.',
+  'The provider does not expose a supported model metadata endpoint.':
+    'Провайдер не предоставляет поддерживаемый API метаданных модели.',
+  'The configured model was not found by the provider.': 'Провайдер не нашёл настроенную модель.',
+  'The model is not in the returned catalog; aliases and generation were not tested.':
+    'Модель отсутствует в полученном каталоге; псевдонимы и генерация не проверялись.',
+  'The provider rate-limited the availability check.': 'Провайдер ограничил частоту запросов проверки доступности.',
+  'The provider could not complete the availability check.': 'Провайдер не смог завершить проверку доступности.',
+  'The provider returned unsupported or oversized metadata.':
+    'Провайдер вернул неподдерживаемые или слишком большие метаданные.',
+  'Metadata checks are not configured for this model adapter.':
+    'Проверка метаданных для этого адаптера модели не настроена.',
+  'The availability check could not finish.': 'Не удалось завершить проверку доступности.',
+  'Model availability was not checked because the provider check failed.':
+    'Доступность модели не проверена из-за ошибки проверки провайдера.',
   'Refresh failed': 'Не удалось обновить список',
   'Showing the last received list.': 'Показан последний полученный список.',
   'Container overview': 'Обзор контейнера',

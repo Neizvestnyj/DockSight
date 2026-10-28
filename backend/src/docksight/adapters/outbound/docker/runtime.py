@@ -35,6 +35,10 @@ class LogStream(Protocol):
 class DockerAPI(Protocol):
     """Describe the low-level SDK surface whose upstream stubs are incomplete."""
 
+    def ping(self) -> bool:
+        """Check the engine connection without reading container inventory."""
+        ...
+
     def inspect_container(self, container: str) -> dict[str, Any]:
         """Read the raw inspect document for one container."""
         ...
@@ -94,16 +98,17 @@ class DockerRuntime:
         """Return public identifiers and display names for configured hosts."""
         return tuple(Host(item.id, item.name or item.id) for item in self._hosts.values())
 
-    async def _call[T](self, host: str, operation: Callable[[DockerAPI], T]) -> T:
+    async def _call[T](self, host: str, operation: Callable[[DockerAPI], T], sdk_timeout: float | None = None) -> T:
         """Run SDK work off-loop and retain its slot until the worker actually finishes."""
         config = self._hosts.get(host)
         if config is None:
             raise DockSightError("host_not_found", "Configured host not found", 404)
+        effective_timeout = self._timeout if sdk_timeout is None else min(sdk_timeout, self._timeout)
 
         def run() -> T:
             """Close the SDK client and translate transport failures into domain errors."""
             try:
-                client = connect(config, self._timeout)
+                client = connect(config, effective_timeout)
                 try:
                     return operation(cast(DockerAPI, client.api))
                 finally:
@@ -114,7 +119,7 @@ class DockerRuntime:
                 raise DockSightError("runtime_unavailable", "Docker operation failed", 503) from exc
 
         try:
-            async with asyncio.timeout(self._timeout + 5):
+            async with asyncio.timeout(effective_timeout + 5):
                 await self._slots.acquire()
                 task = asyncio.create_task(asyncio.to_thread(run))
                 self._jobs.add(task)
@@ -131,6 +136,11 @@ class DockerRuntime:
                 return await asyncio.shield(task)
         except TimeoutError as exc:
             raise DockSightError("runtime_timeout", "Docker operation timed out", 504) from exc
+
+    async def ping(self, host: str) -> None:
+        """Use a short SDK timeout while preserving worker-slot ownership after cancellation."""
+        if not await self._call(host, lambda client: client.ping(), sdk_timeout=3):
+            raise DockSightError("runtime_unavailable", "Docker ping failed", 503)
 
     async def containers(self, host: str) -> tuple[ContainerSnapshot, ...]:
         """Read and sanitize at most 200 container snapshots."""

@@ -6,6 +6,7 @@ import {
   type Container,
   type Host,
   type LogBatch,
+  type SystemStatus,
   type Transport,
   type TurnInput,
   type TurnEvent,
@@ -61,6 +62,21 @@ export const demoHosts: Host[] = [
   { id: 'demo-eu', name: 'Demo host / EU' },
   { id: 'demo-empty', name: 'Demo host / Empty' },
 ];
+
+/** Keep simulated checks independent of diagnostics and inventory reads. */
+export function demoSystemStatus(host: string | null): SystemStatus {
+  const checked_at = new Date().toISOString();
+  const ok = { state: 'available' as const, code: 'ok' as const, message: 'Availability check succeeded.', checked_at };
+  return {
+    schema_version: 1,
+    host,
+    provider: 'ollama',
+    model: 'qwen3.5:9b',
+    docker: host ? ok : { ...ok, state: 'not_checked', code: 'host_not_selected' },
+    provider_check: ok,
+    model_check: ok,
+  };
+}
 
 /** Build a fixture-backed Docker snapshot, keeping missing metrics distinct from zero. */
 export function demoContainer(index: number, host: string, observedAt: string): Container {
@@ -222,6 +238,15 @@ export class DemoClient implements Transport {
   outcome: 'succeeded' | 'failed' | 'indeterminate' | 'expired' = 'succeeded';
   private readonly actions = new Map<string, Action>();
   private readonly keys = new Map<string, string>();
+
+  /** Return explicitly simulated dependency checks without contacting any real service. */
+  async systemStatus(host: string | null, signal: AbortSignal): Promise<SystemStatus> {
+    signal.throwIfAborted();
+    const result = demoSystemStatus(host);
+    if (host && this.fault === 'offline')
+      result.docker = { ...result.docker, state: 'unavailable', code: 'runtime_unavailable' };
+    return result;
+  }
 
   /** Configure the next fixture without mutating React-owned data. */
   setScenario(value: ScenarioId) {

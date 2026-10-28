@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-import { demoAnswer, demoContainer } from '../src/demo';
+import { demoAnswer, demoContainer, demoSystemStatus } from '../src/demo';
 
 /** Open connection settings through the visible control at each breakpoint. */
 async function connectApi(page: Page, waitForDiscovery = true) {
@@ -108,6 +108,8 @@ test('shows refresh progress and completion and retains the received list after 
   });
   await page.route('**/api/v1/**', async (route) => {
     const path = new URL(route.request().url()).pathname;
+    if (path.endsWith('/system/status'))
+      return route.fulfill({ json: demoSystemStatus(new URL(route.request().url()).searchParams.get('host')) });
     if (path.endsWith('/hosts')) return route.fulfill({ json: [{ id: 'test-host', name: longName }] });
     reads++;
     if (reads === 2) await gate;
@@ -232,6 +234,8 @@ test('keeps large logs bounded and keyboard-scrollable', async ({ page }) => {
   answer.evidence.find((row) => row.kind === 'logs')!.data = data;
   await page.route('**/api/v1/**', (route) => {
     const path = new URL(route.request().url()).pathname;
+    if (path.endsWith('/system/status'))
+      return route.fulfill({ json: demoSystemStatus(new URL(route.request().url()).searchParams.get('host')) });
     if (path.endsWith('/hosts')) return route.fulfill({ json: [{ id: 'test-host', name: 'Test host' }] });
     if (path.endsWith('/containers'))
       return route.fulfill({ json: [demoContainer(0, 'test-host', new Date().toISOString())] });
@@ -303,6 +307,8 @@ test('connects to authenticated POST SSE and recovers action delivery by GET onl
     const req = route.request();
     expect(req.headers()['authorization']).toBe('Bearer browser-test-token');
     const path = new URL(req.url()).pathname;
+    if (path.endsWith('/system/status'))
+      return route.fulfill({ json: demoSystemStatus(new URL(req.url()).searchParams.get('host')) });
     if (path.endsWith('/hosts')) return route.fulfill({ json: [{ id: 'test-host', name: 'Test host' }] });
     if (path.endsWith('/containers')) return route.fulfill({ json: [container] });
     if (path.endsWith('/chat/turns')) {
@@ -354,6 +360,8 @@ test('handles long untrusted logs, container names and environment as text', asy
   }
   await page.route('**/api/v1/**', (route) => {
     const path = new URL(route.request().url()).pathname;
+    if (path.endsWith('/system/status'))
+      return route.fulfill({ json: demoSystemStatus(new URL(route.request().url()).searchParams.get('host')) });
     if (path.endsWith('/hosts')) return route.fulfill({ json: [{ id: 'test-host', name: 'Test host' }] });
     if (path.endsWith('/containers')) return route.fulfill({ json: [container] });
     return route.fulfill({

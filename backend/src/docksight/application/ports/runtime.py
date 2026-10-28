@@ -16,6 +16,10 @@ class RuntimeReadPort(Protocol):
         """Return the configured public host inventory."""
         ...
 
+    async def ping(self, host: str) -> None:
+        """Check a configured Docker connection without inspecting workloads or mutating state."""
+        ...
+
     async def containers(self, host: str) -> tuple[ContainerSnapshot, ...]:
         """Read bounded sanitized container snapshots for one host."""
         ...

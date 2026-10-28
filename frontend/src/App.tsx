@@ -14,6 +14,8 @@ import { HostPicker } from './HostPicker';
 import { utc } from './format';
 import { useInvestigation } from './useInvestigation';
 import { ContainerView } from './ContainerView';
+import { useSystemStatus } from './useSystemStatus';
+import { SystemStatusPanel, SystemStatusTrigger } from './SystemStatus';
 
 interface ConnectionState {
   client: Transport;
@@ -176,6 +178,8 @@ function Workspace({
     demoClient && showExample && host === 'demo-eu' ? demoClient.remember(demoAnswer('crash_loop', host)) : undefined,
   );
   const investigation = useInvestigation(client, host, initial);
+  const availability = useSystemStatus(client, host, !hostLoading);
+  const [statusOpen, setStatusOpen] = useState(false);
   const [inventory, setInventory] = useState<Container[]>([]);
   const [loading, setLoading] = useState(true);
   const [inventoryError, setInventoryError] = useState('');
@@ -256,7 +260,7 @@ function Workspace({
 
   /** Start an isolated model session for the exact container, preserving previous diagnostic snapshots. */
   function diagnoseContainer(container: Container) {
-    if (investigation.running) return;
+    if (investigation.running || availability.blockedReason) return;
     const matched = scenarios.find((row) => row.container === container.name);
     if (demoClient && matched) {
       demoClient.setScenario(matched.id);
@@ -343,6 +347,7 @@ function Workspace({
         <div className="connection-state">
           <span className={`scope-dot${demo ? ' demo-dot' : ''}`} />
           {t(demo ? 'Demo' : 'API mode')}
+          <SystemStatusTrigger status={availability} open={() => setStatusOpen(true)} />
           <button className="text-button" onClick={connect}>
             {t(demo ? 'Connect API' : 'Change connection')}
             <ArrowRight size={13} />
@@ -373,6 +378,15 @@ function Workspace({
             )}
           </div>
         </div>
+        {availability.blockedReason && (
+          <div className="dependency-notice" role="status">
+            <p>{t(availability.blockedReason)}</p>
+            <button className="text-button" onClick={() => setStatusOpen(true)}>
+              {t('View system status')}
+              <ArrowRight size={14} />
+            </button>
+          </div>
+        )}
         {demo && (
           <div className={`demo-bar${viewingContainer ? ' demo-bar-compact' : ''}`}>
             <div>
@@ -417,6 +431,7 @@ function Workspace({
               client={client}
               container={selected}
               running={investigation.running}
+              blocked={Boolean(availability.blockedReason)}
               back={() => openInvestigation()}
               diagnose={diagnoseContainer}
             />
@@ -431,9 +446,22 @@ function Workspace({
             draft={draft}
             setDraft={setDraft}
             host={host}
+            blocked={Boolean(availability.blockedReason)}
           />
         </div>
       </main>
+      {statusOpen && (
+        <SystemStatusPanel
+          status={availability}
+          host={name || host}
+          demo={demo}
+          close={() => setStatusOpen(false)}
+          connect={() => {
+            setStatusOpen(false);
+            connect();
+          }}
+        />
+      )}
       {menu && (
         <Modal title={t('Host & containers')} close={() => setMenu(false)}>
           <div className="mobile-sidebar">

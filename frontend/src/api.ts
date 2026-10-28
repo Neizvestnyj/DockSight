@@ -5,6 +5,7 @@ import {
   hostsSchema,
   logSchema,
   metricsSchema,
+  systemStatusSchema,
   type Transport,
   type TurnInput,
   type TurnEvent,
@@ -19,6 +20,7 @@ export class ApiError extends Error {
     public readonly code: string,
     public readonly requestId?: string,
     public readonly source: 'server' | 'client' = 'server',
+    public readonly httpStatus?: number,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -30,8 +32,15 @@ async function rejectResponse(response: Response): Promise<never> {
   const result = z
     .object({ code: z.string(), message: z.string(), request_id: z.string().optional() })
     .safeParse(await response.json().catch(() => null));
-  if (result.success) throw new ApiError(result.data.message, result.data.code, result.data.request_id);
-  throw new ApiError(`API request failed (HTTP ${response.status}).`, 'http_error', undefined, 'client');
+  if (result.success)
+    throw new ApiError(result.data.message, result.data.code, result.data.request_id, 'server', response.status);
+  throw new ApiError(
+    `API request failed (HTTP ${response.status}).`,
+    'http_error',
+    undefined,
+    'client',
+    response.status,
+  );
 }
 
 /** Authenticate bounded requests; never store credentials or retry mutations. */
@@ -60,6 +69,22 @@ export class ApiClient implements Transport {
   /** List configured hosts without accepting a Docker connection URL. */
   async hosts(signal: AbortSignal) {
     return hostsSchema.parse(await (await this.send('/hosts', { signal })).json());
+  }
+
+  /** Read metadata availability only, preserving authentication failures and exact host scope. */
+  async systemStatus(host: string | null, signal: AbortSignal) {
+    const query = host ? `?${new URLSearchParams({ host })}` : '';
+    const response = await this.send(`/system/status${query}`, { signal }, 8000);
+    const result = systemStatusSchema.safeParse(await response.json().catch(() => null));
+    if (!result.success || result.data.host !== host)
+      throw new ApiError(
+        'Unsupported system status response.',
+        'status_unsupported',
+        undefined,
+        'client',
+        response.status,
+      );
+    return result.data;
   }
 
   /** Read the selected host's bounded inventory. */

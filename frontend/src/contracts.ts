@@ -97,6 +97,44 @@ export const eventSchema = z.discriminatedUnion('type', [
   }),
 ]);
 export const hostsSchema = z.array(z.object({ id: z.string(), name: z.string() }));
+export const checkStateSchema = z.enum(['available', 'unavailable', 'not_checked']);
+export const checkCodeSchema = z.enum([
+  'ok',
+  'host_not_selected',
+  'timeout',
+  'connection_failed',
+  'runtime_unavailable',
+  'credentials_rejected',
+  'metadata_forbidden',
+  'unsupported',
+  'model_not_found',
+  'model_not_listed',
+  'rate_limited',
+  'upstream_error',
+  'invalid_response',
+  'probe_not_configured',
+  'check_failed',
+  'provider_unavailable',
+]);
+const dependencyCheckSchema = z.strictObject({
+  state: checkStateSchema,
+  code: checkCodeSchema,
+  message: z.string().max(256),
+  checked_at: z.iso.datetime({ offset: true }),
+});
+export const systemStatusSchema = z.strictObject({
+  schema_version: z.literal(1),
+  host: z.string().max(64).nullable(),
+  provider: z.enum(['ollama', 'openai', 'anthropic', 'compatible']),
+  model: z.string().min(1).max(256),
+  docker: dependencyCheckSchema,
+  provider_check: dependencyCheckSchema,
+  model_check: dependencyCheckSchema,
+});
+export type CheckState = z.infer<typeof checkStateSchema>;
+export type CheckCode = z.infer<typeof checkCodeSchema>;
+export type DependencyCheck = z.infer<typeof dependencyCheckSchema>;
+export type SystemStatus = z.infer<typeof systemStatusSchema>;
 export type Host = z.infer<typeof hostsSchema>[number];
 export type Container = z.infer<typeof containerSchema>;
 export type Metrics = z.infer<typeof metricsSchema>;
@@ -112,6 +150,7 @@ export interface TurnInput {
   session_id?: string;
 }
 export interface Transport {
+  systemStatus(host: string | null, signal: AbortSignal): Promise<SystemStatus>;
   hosts(signal: AbortSignal): Promise<Host[]>;
   containers(host: string, signal: AbortSignal): Promise<Container[]>;
   container(host: string, id: string, signal: AbortSignal): Promise<Container>;
