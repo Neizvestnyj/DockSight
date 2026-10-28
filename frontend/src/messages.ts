@@ -8,6 +8,7 @@ export type MessageValues = Record<string, string | number>;
 /** Keep product copy separate from verbatim Docker, model, and server content. */
 const russian = {
   ...demoMessages,
+  'Read-only diagnosis': 'Диагностика без изменений',
   Actions: 'Действия',
   'Available operations': 'Доступные операции',
   'Suggested by model': 'Предложено моделью',

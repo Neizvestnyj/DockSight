@@ -9,6 +9,7 @@ import {
   LoaderCircle,
   Square,
   Terminal,
+  MessageSquare,
   TriangleAlert,
 } from 'lucide-react';
 import type { Action, Answer, Container, Transport } from './contracts';
@@ -231,56 +232,67 @@ export function Investigation({
       </div>
       <form
         className="composer"
+        aria-labelledby="composer-title"
         onSubmit={(event) => {
           event.preventDefault();
           submit(draft);
         }}
       >
-        <label htmlFor="query">{t(turn ? 'Continue the investigation' : 'Ask DockSight')}</label>
-        <textarea
-          id="query"
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          maxLength={4000}
-          rows={2}
-          placeholder={t(turn ? 'What else should we check?' : 'Why did this container exit?')}
-          onKeyDown={(event) => {
-            if (
-              (event.metaKey || event.ctrlKey) &&
-              event.key === 'Enter' &&
-              !running &&
-              !blocked &&
-              draft.trim() &&
-              host
-            ) {
-              event.preventDefault();
-              submit(draft);
-            }
-          }}
-        />
-        <div className="composer-foot">
-          <span>
-            <span className="scope-dot" />
-            {host || t('Select a host')}
-            <span className="composer-hint">{t(' · Read-only diagnosis')}</span>
-          </span>
-          <div className="composer-actions">
-            <span className="query-limit">
-              {draft.length
-                ? `${draft.length.toLocaleString(locale)} / ${Number(4000).toLocaleString(locale)}`
-                : t('Ctrl / ⌘ + Enter to send')}
+        <div className="composer-heading">
+          <MessageSquare size={18} aria-hidden="true" />
+          <h2 id="composer-title">{t('Ask DockSight')}</h2>
+          <p>{t(running ? 'Following the evidence' : turn ? 'Continue the investigation' : 'Read-only diagnosis')}</p>
+        </div>
+        <div className="composer-entry">
+          <label htmlFor="query" className="sr-only">
+            {t(turn ? 'Continue the investigation' : 'Ask DockSight')}
+          </label>
+          <textarea
+            id="query"
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            maxLength={4000}
+            rows={3}
+            aria-describedby="composer-scope"
+            placeholder={t(turn ? 'What else should we check?' : 'Why did this container exit?')}
+            onKeyDown={(event) => {
+              if (
+                (event.metaKey || event.ctrlKey) &&
+                event.key === 'Enter' &&
+                !running &&
+                !blocked &&
+                draft.trim() &&
+                host
+              ) {
+                event.preventDefault();
+                submit(draft);
+              }
+            }}
+          />
+          <div className="composer-foot">
+            <span id="composer-scope">
+              <span className="scope-dot" />
+              {host || t('Select a host')}
+              <span className="composer-hint">{t(' · Read-only diagnosis')}</span>
             </span>
-            {running ? (
-              <button type="button" className="primary" onClick={stop}>
-                <Square size={12} />
-                {t('Stop diagnosis')}
-              </button>
-            ) : (
-              <button className="primary" type="submit" disabled={blocked || !draft.trim() || !host}>
-                {t('Investigate')}
-                <ArrowRight size={15} />
-              </button>
-            )}
+            <div className="composer-actions">
+              <span className="query-limit">
+                {draft.length
+                  ? `${draft.length.toLocaleString(locale)} / ${Number(4000).toLocaleString(locale)}`
+                  : t('Ctrl / ⌘ + Enter to send')}
+              </span>
+              {running ? (
+                <button type="button" className="primary" onClick={stop}>
+                  <Square size={12} />
+                  {t('Stop diagnosis')}
+                </button>
+              ) : (
+                <button className="primary" type="submit" disabled={blocked || !draft.trim() || !host}>
+                  {t('Investigate')}
+                  <ArrowRight size={15} />
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </form>
