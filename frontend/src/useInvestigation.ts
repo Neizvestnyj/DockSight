@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { ApiError } from './api';
-import type { Answer, Transport, TurnEvent } from './contracts';
+import type { Answer, TraceStep, Transport, TurnEvent } from './contracts';
+
+export interface TurnTrace {
+  provider: string | null;
+  model: string | null;
+  started_at: string | null;
+  steps: TraceStep[];
+}
 
 export interface ToolProgress {
   tool: string;
@@ -17,6 +24,8 @@ export interface Turn {
   errorSource?: 'server' | 'client';
   code?: string;
   requestId?: string;
+  serverTurnId?: string;
+  trace?: TurnTrace;
 }
 
 /** Manage ephemeral turns and protect the workspace from late events after cancellation. */
@@ -74,8 +83,26 @@ export function useInvestigation(client: Transport, host: string, initial?: Answ
     setTurns((previous) =>
       previous.map((turn) => {
         if (turn.id !== id) return turn;
-        const common = { ...turn, requestId: event.request_id };
+        const common = { ...turn, requestId: event.request_id, serverTurnId: event.turn_id ?? turn.serverTurnId };
         switch (event.type) {
+          case 'trace.started':
+            return {
+              ...common,
+              trace: {
+                provider: event.provider,
+                model: event.model,
+                started_at: event.started_at,
+                steps: turn.trace?.steps ?? [],
+              },
+            };
+          case 'trace.step': {
+            const trace = turn.trace ?? { provider: null, model: null, started_at: null, steps: [] };
+            const existing = trace.steps.some((row) => row.id === event.step.id);
+            const steps = existing
+              ? trace.steps.map((row) => (row.id === event.step.id ? event.step : row))
+              : [...trace.steps, event.step].slice(0, 132);
+            return { ...common, trace: { ...trace, steps } };
+          }
           case 'tool.started':
             return { ...common, progress: [...turn.progress, { tool: event.tool, state: 'running' }] };
           case 'tool.completed': {

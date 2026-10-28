@@ -1,4 +1,4 @@
-import { isMessageKey, stateLabel, type MessageKey } from './messages';
+import { diagnosticOperations, isMessageKey, stateLabel } from './messages';
 import { useLocale } from './locale';
 import { useState } from 'react';
 import {
@@ -15,17 +15,10 @@ import type { Action, Answer, Container, Transport } from './contracts';
 import { ActionReview } from './ActionReview';
 import { EvidenceInspector, WidgetCard } from './Widgets';
 import type { useInvestigation } from './useInvestigation';
+import { DiagnosticTrace } from './DiagnosticTrace';
 
 const evidenceNames = { container: 'State', logs: 'Logs', env: 'Env', stats: 'Metrics', stack: 'Stack' } as const;
 
-const toolNames: Record<string, MessageKey> = {
-  list_containers: 'Reading container inventory',
-  inspect_container: 'Inspecting container state',
-  get_container_logs: 'Reading container logs',
-  get_container_stats: 'Measuring CPU and memory',
-  get_container_env: 'Reading allowlisted environment',
-  list_stacks: 'Reading stack context',
-};
 interface Props {
   investigation: ReturnType<typeof useInvestigation>;
   client: Transport;
@@ -123,7 +116,9 @@ export function Investigation({
                     ) : (
                       <Check size={13} />
                     )}
-                    {toolNames[row.tool] ? t(toolNames[row.tool]!) : t('Read tool: {tool}', { tool: row.tool })}
+                    {diagnosticOperations[row.tool]
+                      ? t(diagnosticOperations[row.tool]!)
+                      : t('Read tool: {tool}', { tool: row.tool })}
                     {demo && row.state === 'running' ? t(' · simulated') : ''}
                   </span>
                 ))}
@@ -174,14 +169,6 @@ export function Investigation({
                     {!answer.evidence.length && <span>{t('No supporting evidence returned')}</span>}
                   </div>
                 </section>
-                <AnswerGrid
-                  answer={answer}
-                  selected={selected?.id ?? null}
-                  inspect={inspect}
-                  review={setReview}
-                  outcomes={outcomes}
-                  containers={containers}
-                />
               </>
             )}
             {(turn.state === 'failed' || turn.state === 'stopped') && (
@@ -210,6 +197,17 @@ export function Investigation({
                   </button>
                 </div>
               </section>
+            )}
+            <DiagnosticTrace key={turn.id} turn={turn} host={host} demo={demo} />
+            {answer && (
+              <AnswerGrid
+                answer={answer}
+                selected={selected?.id ?? null}
+                inspect={inspect}
+                review={setReview}
+                outcomes={outcomes}
+                containers={containers}
+              />
             )}
           </>
         ) : (

@@ -82,8 +82,41 @@ export const answerSchema = z.object({
   widgets: z.array(widgetSchema).max(8),
 });
 const envelope = { schema_version: z.literal(1), request_id: z.string(), turn_id: z.string() };
+export const traceStepSchema = z
+  .object({
+    id: z.string().min(1).max(16),
+    kind: z.enum(['model', 'tool', 'validation']),
+    operation: z.string().min(1).max(128),
+    state: z.enum(['running', 'succeeded', 'failed']),
+    started_at: z.iso.datetime({ offset: true }),
+    finished_at: z.iso.datetime({ offset: true }).nullable(),
+    duration_ms: z.number().int().nonnegative().nullable(),
+    input_tokens: z.number().int().nonnegative().nullable(),
+    output_tokens: z.number().int().nonnegative().nullable(),
+    code: z.string().max(64).nullable(),
+    issues: z
+      .array(
+        z
+          .object({ type: z.string().max(64), loc: z.array(z.union([z.string().max(64), z.number().int()])).max(8) })
+          .strict(),
+      )
+      .max(8),
+    response: z.string().max(16_384).nullable(),
+    response_truncated: z.boolean(),
+  })
+  .strict();
 export const eventSchema = z.discriminatedUnion('type', [
   z.object({ ...envelope, type: z.literal('turn.started'), session_id: z.string().uuid() }),
+  z
+    .object({
+      ...envelope,
+      type: z.literal('trace.started'),
+      provider: z.string().max(32).nullable(),
+      model: z.string().max(256).nullable(),
+      started_at: z.iso.datetime({ offset: true }),
+    })
+    .strict(),
+  z.object({ ...envelope, type: z.literal('trace.step'), step: traceStepSchema }).strict(),
   z.object({ ...envelope, type: z.literal('tool.started'), tool: z.string() }),
   z.object({ ...envelope, type: z.literal('tool.completed'), tool: z.string(), ok: z.boolean() }),
   z.object({ ...envelope, type: z.literal('answer.ready'), answer: answerSchema }),
@@ -144,6 +177,7 @@ export type Widget = z.infer<typeof widgetSchema>;
 export type Evidence = z.infer<typeof evidenceSchema>;
 export type Answer = z.infer<typeof answerSchema>;
 export type TurnEvent = z.infer<typeof eventSchema>;
+export type TraceStep = z.infer<typeof traceStepSchema>;
 export interface TurnInput {
   host: string;
   query: string;

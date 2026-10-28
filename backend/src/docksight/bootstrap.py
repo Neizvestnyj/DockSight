@@ -259,6 +259,7 @@ def build_components(
         settings.log_lines,
         settings.log_bytes,
         settings.max_concurrent_turns,
+        model_identity=(settings.provider, settings.model),
     )
 
     return Components(

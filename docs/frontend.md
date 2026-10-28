@@ -109,6 +109,23 @@ answers in this tab; follow-up questions use the new session. Returning to the i
 evidence, prepared action IDs, and execution keys. Direct refresh never replaces diagnostic card data. Host or connection
 changes cancel outstanding reads and discard the previous workspace.
 
+## Diagnostic trace
+
+Each diagnostic turn has a collapsed **Diagnostic trace** disclosure with public model identity, request/turn IDs,
+recorded steps, measured duration, and optional provider usage. Selecting a step shows its safe failure details or
+sanitized final proposal before card assembly. Desktop keeps the step list beside its details. Tablet and mobile open
+one pane at a time; **Back to steps** restores keyboard focus to the selected step.
+
+Step updates replace their original row by ID and stay attached to that turn. Failed, stopped, and disconnected turns
+retain received steps. An unfinished step is labeled interrupted after the stream ends; its completion and duration are
+not invented. Previous turns and older servers without trace events remain usable and show **Not recorded**.
+
+**Copy trace** copies only the public trace and its scope/identifiers, excluding the operator query, action execution
+keys, and credentials. Text is rendered verbatim without HTML or Markdown interpretation. Invalid/oversized proposal
+bodies are withheld, clipped previews are marked, and missing token usage differs from zero. Traces stay in browser
+memory with the current tab's investigation; changing language preserves them. Demo trace steps are explicitly simulated
+and make no API or model request. Inventory polling never replaces historical trace data.
+
 ## System status
 
 The top-bar status control opens independent API/authentication, Docker, provider, and model results. Checks run after

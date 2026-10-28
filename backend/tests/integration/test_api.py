@@ -59,6 +59,19 @@ def test_streamed_diagnosis_contains_validated_cards_and_terminal_event() -> Non
         assert all(event["request_id"] == response.headers["x-request-id"] for event in events)
 
 
+def test_streamed_trace_contains_public_configuration_and_sanitized_proposal() -> None:
+    with client() as api:
+        response = api.post("/api/v1/chat/turns", headers=HEADERS, json={"host": "local", "query": "Inspect worker"})
+        events = [json.loads(line[6:]) for line in response.text.splitlines() if line.startswith("data: ")]
+        trace = next(event for event in events if event["type"] == "trace.started")
+        assert (trace["provider"], trace["model"]) == ("ollama", "qwen3.5:9b")
+        steps = [event["step"] for event in events if event["type"] == "trace.step"]
+        assert steps[-1]["state"] == "succeeded"
+        assert steps[-1]["operation"] == "validate_diagnosis"
+        assert any(step["response"] and '"summary": "Worker exited"' in step["response"] for step in steps)
+        assert TOKEN not in response.text
+
+
 def test_action_endpoint_requires_confirmation_and_deduplicates_execution() -> None:
     with client() as api:
         prepared = api.post(

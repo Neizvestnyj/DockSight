@@ -11,6 +11,24 @@ class TurnStarted(TypedDict):
     session_id: str
 
 
+class TraceStarted(TypedDict):
+    """Identify public model configuration and the server start time for this turn's trace."""
+
+    type: Literal["trace.started"]
+    turn_id: str
+    provider: str | None
+    model: str | None
+    started_at: str
+
+
+class TraceStepEvent(TypedDict):
+    """Insert or replace one bounded, sanitized diagnostic step by its application-issued ID."""
+
+    type: Literal["trace.step"]
+    turn_id: str
+    step: JsonObject
+
+
 class ToolStarted(TypedDict):
     """Announce a model-selected read-only tool before execution."""
 
@@ -52,4 +70,6 @@ class TurnFailed(TypedDict):
     message: str
 
 
-type TurnEvent = TurnStarted | ToolStarted | ToolCompleted | AnswerReady | TurnCompleted | TurnFailed
+type TurnEvent = (
+    TurnStarted | TraceStarted | TraceStepEvent | ToolStarted | ToolCompleted | AnswerReady | TurnCompleted | TurnFailed
+)

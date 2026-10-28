@@ -8,6 +8,47 @@ export type MessageValues = Record<string, string | number>;
 /** Keep product copy separate from verbatim Docker, model, and server content. */
 const russian = {
   ...demoMessages,
+  'Diagnostic trace': 'Трассировка диагностики',
+  'Back to steps': 'К списку шагов',
+  '{count} recorded steps': 'Шагов записано: {count}',
+  'Not recorded': 'Не записана',
+  'No trace was recorded for this turn. Run a new diagnosis to capture its steps.':
+    'Трассировка этого запроса не записана. Запустите новую диагностику, чтобы увидеть её шаги.',
+  'Copy trace': 'Скопировать трассировку',
+  'Trace copied': 'Трассировка скопирована',
+  'Could not copy trace': 'Не удалось скопировать трассировку',
+  'Simulated trace · no model request': 'Демонстрационная трассировка · без обращения к модели',
+  'Recorded by the diagnostic backend': 'Записано бэкендом диагностики',
+  'Request ID': 'ID запроса',
+  'Turn ID': 'ID диагностики',
+  'Recorded diagnostic steps': 'Записанные шаги диагностики',
+  'Trace step details': 'Детали шага трассировки',
+  'Waiting for the first recorded step…': 'Ожидаем первый шаг…',
+  Interrupted: 'Прервано',
+  Running: 'Выполняется',
+  Duration: 'Длительность',
+  '{duration} ms': '{duration} мс',
+  'Input tokens': 'Входные токены',
+  'Output tokens': 'Выходные токены',
+  'Collecting evidence with the model': 'Сбор доказательств с моделью',
+  'Generating the final response': 'Формирование ответа',
+  'Repairing the model response': 'Исправление ответа модели',
+  'Validating schema and evidence': 'Проверка схемы и доказательств',
+  'Unapproved tool request': 'Запрос неразрешённого инструмента',
+  'The stream ended before this step reported a result. Its completion is unknown.':
+    'Поток завершился до получения результата этого шага. Его завершение не подтверждено.',
+  'The schema and evidence references passed validation. Cards were assembled by the backend.':
+    'Схема и ссылки на доказательства прошли проверку. Карточки собраны бэкендом.',
+  'Model proposal · sanitized': 'Предложение модели · очищено',
+  'Recognized proposal fields before card assembly. Formatting and secrets may be changed.':
+    'Разрешённые поля ответа до сборки карточек. Форматирование и секретные значения могут быть изменены.',
+  'Sanitized model proposal': 'Очищенное предложение модели',
+  'Proposal unavailable. Invalid or oversized response bodies are withheld.':
+    'Предложение недоступно. Некорректное или слишком большое содержимое ответа не передаётся.',
+  'Preview limited to 16 KiB. The displayed response is incomplete.':
+    'Просмотр ограничен 16 КиБ. Показан неполный ответ.',
+  'This trace stays in this tab. Prompts, hidden reasoning, and provider-native data are excluded.':
+    'Трассировка хранится в этой вкладке. Промпты, скрытые рассуждения и служебные данные провайдера не передаются.',
   'Inventory observed {time} · refreshes every 10 seconds': 'Список получен в {time} · обновляется каждые 10 секунд',
   'State refreshes every 10 seconds · logs and metrics refresh manually.':
     'Состояние обновляется каждые 10 секунд · логи и метрики обновляются вручную.',
@@ -384,6 +425,19 @@ const russian = {
 } as const;
 
 export type MessageKey = keyof typeof russian;
+export const diagnosticOperations: Record<string, MessageKey> = {
+  list_containers: 'Reading container inventory',
+  inspect_container: 'Inspecting container state',
+  get_container_logs: 'Reading container logs',
+  get_container_stats: 'Measuring CPU and memory',
+  get_container_env: 'Reading allowlisted environment',
+  list_stacks: 'Reading stack context',
+  collect_evidence: 'Collecting evidence with the model',
+  final_response: 'Generating the final response',
+  repair_response: 'Repairing the model response',
+  validate_diagnosis: 'Validating schema and evidence',
+  unapproved_tool: 'Unapproved tool request',
+};
 export type Translator = (key: MessageKey, values?: MessageValues) => string;
 
 const englishOverrides: Partial<Record<MessageKey, string | Plurals>> = {

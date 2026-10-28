@@ -1,7 +1,26 @@
 import { describe, expect, it } from 'vitest';
 import { DemoClient, demoAnswer } from './demo';
+import { eventSchema, type TurnEvent } from './contracts';
 
 describe('demo evidence integrity', () => {
+  it('simulates a schema-valid trace with a model proposal matching the returned evidence cards', async () => {
+    const client = new DemoClient();
+    const events: TurnEvent[] = [];
+    await client.diagnose(
+      { host: 'demo-eu', query: 'Inspect' },
+      (event) => events.push(eventSchema.parse(event)),
+      new AbortController().signal,
+    );
+    const final = events.find(
+      (event) =>
+        event.type === 'trace.step' && event.step.operation === 'final_response' && event.step.state === 'succeeded',
+    );
+    expect(final?.type === 'trace.step' && JSON.parse(final.step.response!)).toMatchObject({
+      summary: demoAnswer('crash_loop', 'demo-eu').summary,
+      uncertain: false,
+    });
+    expect(events.some((event) => event.type === 'trace.started')).toBe(true);
+  });
   it('does not invent containers when the selected host inventory is empty', async () => {
     const client = new DemoClient();
     const answers: unknown[] = [];

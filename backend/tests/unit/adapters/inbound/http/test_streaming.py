@@ -75,5 +75,9 @@ async def test_turn_deadline_survives_sse_task_boundaries(stage: str) -> None:
     assert events[-1]["type"] == "turn.failed"
     assert events[-1]["code"] == "turn_timeout"
     assert sum(event["type"] == "turn.failed" for event in events) == 1
+    step = events[-2]["step"]
+    assert step["state"] == "failed"
+    assert step["code"] == "turn_timeout"
+    assert step["duration_ms"] >= 0
     async with sessions.lease(events[0]["session_id"], "operator", "local"):
         pass

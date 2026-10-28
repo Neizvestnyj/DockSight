@@ -54,7 +54,7 @@ backend/src/docksight/
       models.py          # Provider-neutral model protocol and messages
       status.py          # Non-generative provider metadata checks
       state.py           # Session/action stores and audit sink
-    diagnostics/         # Turn orchestration, tools, context, prompts
+    diagnostics/         # Turn orchestration, bounded trace, tools, context, prompts
     actions.py           # Prepare and execute workflows
     queries.py           # Host/container read workflows
     system_status.py     # Bounded dependency checks and safe public results

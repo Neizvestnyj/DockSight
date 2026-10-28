@@ -42,8 +42,8 @@ class ModelReply:
     content: str
     tool_calls: tuple[ToolCall, ...] = ()
     native: tuple[JsonObject, ...] = ()
-    input_tokens: int = 0
-    output_tokens: int = 0
+    input_tokens: int | None = None
+    output_tokens: int | None = None
 
 
 class ModelPort(Protocol):

@@ -58,8 +58,8 @@ def _reply(response: ChatCompletion, tool_output: bool) -> ModelReply:
     return ModelReply(
         content,
         calls,
-        input_tokens=response.usage.prompt_tokens if response.usage else 0,
-        output_tokens=response.usage.completion_tokens if response.usage else 0,
+        input_tokens=response.usage.prompt_tokens if response.usage else None,
+        output_tokens=response.usage.completion_tokens if response.usage else None,
     )
 
 

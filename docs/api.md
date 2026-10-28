@@ -124,6 +124,32 @@ Events carry `schema_version: 1`, `request_id`, and `turn_id`:
 3. `answer.ready` includes the validated summary, evidence, and typed widgets.
 4. Exactly one terminal event is `turn.completed` or `turn.failed`.
 
+The stream also carries a diagnostic trace. `trace.started` follows `turn.started` with the public `provider`, `model`,
+and server UTC `started_at`; unavailable identity fields are `null`. `trace.step` inserts or replaces a step by its `id`.
+These events accompany model calls, budget-eligible tool calls, and schema/evidence validation, including the single
+permitted repair attempt. Clients must retain received steps when the turn fails or the connection ends.
+
+| Step field | Contract |
+| --- | --- |
+| `id`, `kind`, `operation` | Turn-scoped ID; `model`, `tool`, or `validation`; approved tool name or application phase |
+| `state` | `running`, `succeeded`, or `failed`; receiving model output does not imply successful validation |
+| `started_at`, `finished_at`, `duration_ms` | Server UTC timestamps and monotonic elapsed milliseconds; unfinished values are `null` |
+| `input_tokens`, `output_tokens` | Provider-reported counts, including real zeroes; missing usage is `null` |
+| `code`, `issues` | Safe failure code and at most eight validation codes/paths, without submitted values or unknown field names |
+| `response`, `response_truncated` | Optional sanitized final proposal text and an explicit size-limit flag |
+
+Exploration text, tool arguments/results, prompts, native replay items, and hidden reasoning are excluded. Final response
+previews contain only schema-recognized proposal fields before server card assembly. Invalid JSON/schema bodies and
+candidates over 64 KiB are withheld; validation codes and paths remain available. String values are redacted before JSON
+serialization. A preview is at most 16 KiB of UTF-8 text, may have changed formatting, and may be clipped mid-JSON.
+`response_truncated=true` also marks an oversized withheld candidate. Never interpret a preview as authoritative Docker
+data or execute a proposed action directly from it.
+
+Configured budgets allow at most 30 model calls, 100 tool executions, and two validation steps, yielding at most 132
+trace steps. Calls beyond the tool budget still receive paired `tool_limit` results for provider replay and existing
+tool-progress events; they perform no runtime read and add no execution trace step. Trace events share the request's
+authentication and host scope, add no provider requests, are not persisted, and do not support replay.
+
 SSE comments provide heartbeats. Failures after streaming starts remain HTTP 200 and are represented by `turn.failed`.
 Disconnecting cancels diagnostic work. Streams do not support replay or automatic reconnection.
 

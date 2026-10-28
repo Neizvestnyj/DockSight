@@ -1,4 +1,5 @@
 import fixtures from '../../backend/tests/fixtures/diagnostics.json' with { type: 'json' };
+import { demoTrace } from './demoTrace';
 import {
   answerSchema,
   type Action,
@@ -318,21 +319,30 @@ export class DemoClient implements Transport {
     return (await this.container(host, id, signal)).metrics;
   }
 
-  /** Emit the same six event types as the streaming backend. */
+  /** Emit a visibly simulated diagnostic stream, including model, tool, and validation trace steps. */
   async diagnose(input: TurnInput, receive: (event: TurnEvent) => void, signal: AbortSignal) {
     if (this.fault === 'offline') throw new Error('Demo: connection lost before the diagnostic stream opened.');
     const envelope = { schema_version: 1 as const, request_id: crypto.randomUUID(), turn_id: crypto.randomUUID() };
     receive({ ...envelope, type: 'turn.started', session_id: input.session_id ?? crypto.randomUUID() });
+    const trace = demoTrace(envelope, receive);
+    const collected = trace('model', 'collect_evidence');
+    await delay(signal);
+    collected();
     const empty = input.host === 'demo-empty' || this.fault === 'empty';
     const tools = empty
       ? ['list_containers']
       : ['inspect_container', 'get_container_logs', 'list_stacks', 'get_container_env'];
     for (const tool of tools) {
       receive({ ...envelope, type: 'tool.started', tool });
+      const finished = trace('tool', tool);
       await delay(signal);
+      finished();
       receive({ ...envelope, type: 'tool.completed', tool, ok: true });
     }
+    const finalized = trace('model', 'final_response');
+    await delay(signal);
     if (this.fault === 'stream') {
+      finalized({ code: 'provider_timeout' });
       receive({
         ...envelope,
         type: 'turn.failed',
@@ -341,10 +351,28 @@ export class DemoClient implements Transport {
       });
       return;
     }
+    const answer = this.example(input.host);
+    finalized({
+      response: JSON.stringify(
+        {
+          summary: answer.summary,
+          uncertain: answer.uncertain,
+          evidence_ids: answer.evidence.map((row) => row.id),
+          widgets: answer.widgets.map((widget) => ({
+            widget_type: widget.widget_type,
+            evidence_ids: widget.evidence_ids,
+            action: widget.widget_type === 'container_status' ? (widget.actions[0]?.operation ?? null) : null,
+          })),
+        },
+        null,
+        2,
+      ),
+    });
+    trace('validation', 'validate_diagnosis')();
     receive({
       ...envelope,
       type: 'answer.ready',
-      answer: this.example(input.host),
+      answer,
     });
     receive({ ...envelope, type: 'turn.completed' });
   }
