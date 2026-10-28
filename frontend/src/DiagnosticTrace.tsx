@@ -184,6 +184,7 @@ export function DiagnosticTrace({ turn, host, demo }: { turn: Turn; host: string
 /** Render measured values and sanitized proposal text without interpreting model content as markup. */
 function StepDetails({ step, interrupted }: { step: TraceStep; interrupted: boolean }) {
   const { t, locale } = useLocale();
+  const exploration = step.operation === 'collect_evidence';
   const label = diagnosticOperations[step.operation];
   const count = (value: number | null) => (value === null ? t('Unavailable') : value.toLocaleString(locale));
   return (
@@ -244,19 +245,31 @@ function StepDetails({ step, interrupted }: { step: TraceStep; interrupted: bool
       {step.kind === 'validation' && step.state === 'succeeded' && (
         <p>{t('The schema and evidence references passed validation. Cards were assembled by the backend.')}</p>
       )}
-      {step.kind === 'model' && step.operation !== 'collect_evidence' && (
+      {step.kind === 'model' && (
         <>
-          <h4>{t('Model proposal · sanitized')}</h4>
+          <h4>{t(exploration ? 'Model response · sanitized' : 'Model proposal · sanitized')}</h4>
           <p className="section-note">
-            {t('Recognized proposal fields before card assembly. Formatting and secrets may be changed.')}
+            {t(
+              exploration
+                ? 'Adapter output: assistant text and requested tools. Tool arguments are untrusted until validated.'
+                : 'Recognized proposal fields before card assembly. Formatting and secrets may be changed.',
+            )}
           </p>
           {step.response !== null ? (
-            <pre className="trace-response" tabIndex={0} aria-label={t('Sanitized model proposal')}>
+            <pre
+              className="trace-response"
+              tabIndex={0}
+              aria-label={t(exploration ? 'Sanitized model response' : 'Sanitized model proposal')}
+            >
               {step.response}
             </pre>
           ) : (
             <p className="empty-note">
-              {t('Proposal unavailable. Invalid or oversized response bodies are withheld.')}
+              {t(
+                exploration
+                  ? 'No displayable model response has been received.'
+                  : 'Proposal unavailable. Invalid or oversized response bodies are withheld.',
+              )}
             </p>
           )}
           {step.response_truncated && (

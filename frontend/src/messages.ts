@@ -43,6 +43,11 @@ const russian = {
   'The schema and evidence references passed validation. Cards were assembled by the backend.':
     'Схема и ссылки на доказательства прошли проверку. Карточки собраны бэкендом.',
   'Model proposal · sanitized': 'Предложение модели · очищено',
+  'Model response · sanitized': 'Ответ модели · очищено',
+  'Sanitized model response': 'Очищенный ответ модели',
+  'Adapter output: assistant text and requested tools. Tool arguments are untrusted until validated.':
+    'Ответ адаптера: текст модели и запрошенные инструменты. Аргументы инструментов требуют проверки.',
+  'No displayable model response has been received.': 'Ответ модели для просмотра пока не получен.',
   'Recognized proposal fields before card assembly. Formatting and secrets may be changed.':
     'Разрешённые поля ответа до сборки карточек. Форматирование и секретные значения могут быть изменены.',
   'Sanitized model proposal': 'Очищенное предложение модели',

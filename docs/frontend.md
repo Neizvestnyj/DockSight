@@ -117,6 +117,10 @@ recorded steps, measured duration, and optional provider usage. Selecting a step
 sanitized final proposal before card assembly. Desktop keeps the step list beside its details. Tablet and mobile open
 one pane at a time; **Back to steps** restores keyboard focus to the selected step.
 
+Evidence-collection model steps also show normalized JSON with assistant `content` and requested `tool_calls`, including
+their IDs, names, and redacted arguments. This is adapter output, not an unchanged provider HTTP response. Requested
+calls remain untrusted until the backend validates them; the trace provides no execution control.
+
 Step updates replace their original row by ID and stay attached to that turn. Failed, stopped, and disconnected turns
 retain received steps. An unfinished step is labeled interrupted after the stream ends; its completion and duration are
 not invented. Previous turns and older servers without trace events remain usable and show **Not recorded**.

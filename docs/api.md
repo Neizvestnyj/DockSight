@@ -140,10 +140,13 @@ permitted repair attempt. Clients must retain received steps when the turn fails
 | `started_at`, `finished_at`, `duration_ms` | Server UTC timestamps and monotonic elapsed milliseconds; unfinished values are `null` |
 | `input_tokens`, `output_tokens` | Provider-reported counts, including real zeroes; missing usage is `null` |
 | `code`, `issues` | Safe failure code and at most eight validation codes/paths, without submitted values or unknown field names |
-| `response`, `response_truncated` | Optional sanitized final proposal text and an explicit size-limit flag |
+| `response`, `response_truncated` | Optional sanitized model response text and an explicit size-limit flag |
 
-Exploration text, tool arguments/results, prompts, native replay items, and hidden reasoning are excluded. Final response
-previews contain only schema-recognized proposal fields before server card assembly. Invalid JSON/schema bodies and
+Exploration previews normalize the adapter reply as `content` and `tool_calls` (`id`, `name`, `arguments`), including empty
+content and no-call replies. Tool calls and arguments are untrusted model proposals; the preview grants no permission to
+execute them. Sensitive argument fields are masked, and recognized reasoning fields/blocks are omitted. Tool results,
+prompts, native replay items, and hidden reasoning are excluded. Final response previews contain only schema-recognized
+proposal fields before server card assembly. Invalid final JSON/schema bodies and
 candidates over 64 KiB are withheld; validation codes and paths remain available. String values are redacted before JSON
 serialization. A preview is at most 16 KiB of UTF-8 text, may have changed formatting, and may be clipped mid-JSON.
 `response_truncated=true` also marks an oversized withheld candidate. Never interpret a preview as authoritative Docker

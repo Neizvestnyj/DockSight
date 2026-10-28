@@ -324,14 +324,30 @@ export class DemoClient implements Transport {
     if (this.fault === 'offline') throw new Error('Demo: connection lost before the diagnostic stream opened.');
     const envelope = { schema_version: 1 as const, request_id: crypto.randomUUID(), turn_id: crypto.randomUUID() };
     receive({ ...envelope, type: 'turn.started', session_id: input.session_id ?? crypto.randomUUID() });
-    const trace = demoTrace(envelope, receive);
-    const collected = trace('model', 'collect_evidence');
-    await delay(signal);
-    collected();
     const empty = input.host === 'demo-empty' || this.fault === 'empty';
     const tools = empty
       ? ['list_containers']
       : ['inspect_container', 'get_container_logs', 'list_stacks', 'get_container_env'];
+    const trace = demoTrace(envelope, receive);
+    const collected = trace('model', 'collect_evidence');
+    await delay(signal);
+    collected({
+      response: JSON.stringify(
+        {
+          content: '',
+          tool_calls: tools.map((tool, index) => ({
+            id: `demo-call-${index + 1}`,
+            name: tool,
+            arguments:
+              tool === 'list_containers' || tool === 'list_stacks'
+                ? {}
+                : { container_id: scenarios.find((scenario) => scenario.id === this.scenario)!.container },
+          })),
+        },
+        null,
+        2,
+      ),
+    });
     for (const tool of tools) {
       receive({ ...envelope, type: 'tool.started', tool });
       const finished = trace('tool', tool);

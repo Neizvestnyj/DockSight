@@ -23,7 +23,7 @@ async def test_trace_reports_ordered_measured_steps_without_intermediate_text_or
     model = ScriptedModel(
         [
             ModelReply(
-                "private-intermediate-thought",
+                "<think>private-intermediate-thought</think>Inspect worker",
                 (ToolCall("c1", "inspect_container", {"container_id": "worker"}),),
                 native=({"reasoning": "private-native-replay"},),
                 input_tokens=12,
@@ -51,6 +51,69 @@ async def test_trace_reports_ordered_measured_steps_without_intermediate_text_or
     assert events[-1]["type"] == "turn.completed"
 
 
+async def test_exploration_preview_shows_normalized_text_and_calls_with_sensitive_values_removed() -> None:
+    model = ScriptedModel(
+        [
+            ModelReply(
+                "<think>hidden analysis</think>Inspect configured-secret",
+                (
+                    ToolCall(
+                        "c1",
+                        "inspect_container",
+                        {
+                            "container_id": "worker",
+                            "password": "opaque-value",
+                            "reasoning": "hidden argument",
+                            "headers": {
+                                "Authorization": "Bearer opaque-bearer",
+                                "Proxy-Authorization": "Basic opaque-proxy",
+                                "Cookie": "session=opaque-cookie",
+                                "Set-Cookie": "session=opaque-set-cookie",
+                            },
+                        },
+                    ),
+                ),
+                native=({"encrypted_content": "private replay"},),
+            ),
+            ModelReply("Ready"),
+            ModelReply(final_proposal()),
+        ]
+    )
+    events = await trace_turn(model)
+    step = next(
+        event["step"]
+        for event in events
+        if event["type"] == "trace.step"
+        and event["step"]["operation"] == "collect_evidence"
+        and event["step"]["state"] == "succeeded"
+    )
+    assert step["response"] is not None
+    response = json.loads(step["response"])
+    assert response == {
+        "content": "Inspect [REDACTED]",
+        "tool_calls": [
+            {
+                "id": "c1",
+                "name": "inspect_container",
+                "arguments": {
+                    "container_id": "worker",
+                    "password": "[REDACTED]",
+                    "reasoning": "[OMITTED]",
+                    "headers": {
+                        "Authorization": "[REDACTED]",
+                        "Proxy-Authorization": "[REDACTED]",
+                        "Cookie": "[REDACTED]",
+                        "Set-Cookie": "[REDACTED]",
+                    },
+                },
+            }
+        ],
+    }
+    assert "private replay" not in json.dumps(events)
+    assert "hidden analysis" not in json.dumps(events)
+    assert "opaque-value" not in json.dumps(events)
+
+
 async def test_schema_failure_retains_repair_trace_but_withholds_unrecognized_model_fields() -> None:
     invalid = json.loads(final_proposal())
     invalid["private-reasoning-field"] = "private-reasoning-value"
@@ -62,7 +125,7 @@ async def test_schema_failure_retains_repair_trace_but_withholds_unrecognized_mo
     assert [row["code"] for row in failures] == ["invalid_schema", "invalid_schema"]
     assert failures[0]["issues"] == [{"type": "extra_forbidden", "loc": ["<extra_field>"]}]
     assert any(row["operation"] == "repair_response" for row in rows)
-    assert all(row["response"] is None for row in rows)
+    assert all(row["response"] is None for row in rows if row["operation"] in {"final_response", "repair_response"})
     assert "private-reasoning" not in json.dumps(events)
     assert events[-1]["type"] == "turn.failed"
 
@@ -92,7 +155,11 @@ async def test_trace_redacts_secret_values_before_json_escaping() -> None:
     service = Diagnostics(FakeRuntime(), model, MemorySessions(), Redactor((secret,)))
     events = [event async for event in service.stream("alice", "local", "Inspect")]
     step = next(
-        event["step"] for event in events if event["type"] == "trace.step" and event["step"]["response"] is not None
+        event["step"]
+        for event in events
+        if event["type"] == "trace.step"
+        and event["step"]["operation"] == "final_response"
+        and event["step"]["response"] is not None
     )
     assert json.loads(step["response"])["summary"] == "Observed [REDACTED]"
 

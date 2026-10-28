@@ -74,6 +74,11 @@ test('keeps a demo trace open across completion, supports keyboard selection and
   await expect(trace).toHaveAttribute('open', '');
   await expect(page.getByRole('button', { name: 'Stop diagnosis' })).toHaveCount(0);
   await expect(trace.getByText('Simulated trace · no model request')).toBeVisible();
+  await trace.getByRole('button', { name: /Collecting evidence with the model/ }).click();
+  await expect(trace.getByLabel('Sanitized model response')).toContainText('"tool_calls"');
+  await expect(trace.getByLabel('Sanitized model response')).toContainText('"container_id": "payments-api"');
+  await page.screenshot({ path: `test-results/${info.project.name}-exploration-json.png` });
+  if ((page.viewportSize()?.width ?? 1440) <= 1100) await trace.getByRole('button', { name: 'Back to steps' }).click();
   const final = trace.getByRole('button', { name: /Generating the final response/ });
   await final.focus();
   await page.keyboard.press('Enter');

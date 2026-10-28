@@ -1,4 +1,5 @@
 import json
+import re
 import time
 from datetime import UTC, datetime
 from typing import Final, Literal, cast
@@ -7,12 +8,16 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, ValidationErro
 
 from docksight.application.events import TraceStepEvent
 from docksight.application.ports.models import ModelReply
-from docksight.application.redaction import Redactor
+from docksight.application.redaction import Redactor, secret_name
 from docksight.application.views.schemas import DiagnosisProposal, WidgetProposal
 from docksight.domain.diagnostics import JsonObject, JsonValue
 
 _PREVIEW_BYTES: Final = 16384
 _PREVIEW_INPUT_BYTES: Final = 65536
+_SENSITIVE_HEADERS: Final = frozenset(
+    {"auth", "authentication", "authorization", "proxy-authorization", "cookie", "set-cookie"}
+)
+_REASONING_BLOCK: Final = re.compile(r"<(think|thinking|analysis|reasoning)\b[^>]*>.*?(?:</\1\s*>|\Z)", re.I | re.S)
 
 
 class TraceIssue(BaseModel):
@@ -57,12 +62,45 @@ def schema_issues(error: ValidationError) -> list[TraceIssue]:
 def _redact_values(value: JsonValue, redactor: Redactor) -> JsonValue:
     """Redact string values before JSON escaping can obscure exact configured secrets."""
     if isinstance(value, str):
-        return redactor.text(value)
+        return redactor.text(_REASONING_BLOCK.sub("", value))
     if isinstance(value, list):
         return [_redact_values(item, redactor) for item in value]
     if isinstance(value, dict):
-        return {key: _redact_values(item, redactor) for key, item in value.items()}
+        return {redactor.text(key): _redact_field(key, item, redactor) for key, item in value.items()}
     return value
+
+
+def _redact_field(name: str, value: JsonValue, redactor: Redactor) -> JsonValue:
+    """Withhold reasoning and sensitive argument values while retaining useful field names."""
+    if "reasoning" in name.casefold() or name.casefold() in {"analysis", "thinking", "encrypted_content"}:
+        return "[OMITTED]"
+    if name.casefold().replace("_", "-") in _SENSITIVE_HEADERS or secret_name(name):
+        return "[REDACTED]"
+    return _redact_values(value, redactor)
+
+
+def _encode_preview(value: JsonObject, redactor: Redactor) -> tuple[str | None, bool]:
+    """Bound normalized model output and redact values before JSON escaping or UTF-8 clipping."""
+    try:
+        if len(json.dumps(value, ensure_ascii=False).encode("utf-8")) > _PREVIEW_INPUT_BYTES:
+            return None, True
+        encoded = json.dumps(_redact_values(value, redactor), ensure_ascii=False, indent=2).encode("utf-8")
+    except (RecursionError, ValueError):
+        return None, True
+    return encoded[:_PREVIEW_BYTES].decode("utf-8", errors="ignore"), len(encoded) > _PREVIEW_BYTES
+
+
+def _exploration_preview(reply: ModelReply, redactor: Redactor) -> tuple[str | None, bool]:
+    """Expose assistant text and requested calls without serializing native provider replay data."""
+    return _encode_preview(
+        {
+            "content": reply.content,
+            "tool_calls": [
+                {"id": call.id, "name": call.name, "arguments": call.arguments} for call in reply.tool_calls
+            ],
+        },
+        redactor,
+    )
 
 
 def _proposal_preview(reply: ModelReply, redactor: Redactor) -> tuple[str | None, bool]:
@@ -73,9 +111,7 @@ def _proposal_preview(reply: ModelReply, redactor: Redactor) -> tuple[str | None
         proposal = DiagnosisProposal.model_validate_json(reply.content)
     except ValidationError:
         return None, False
-    public = _redact_values(cast(JsonObject, proposal.model_dump(mode="json")), redactor)
-    encoded = json.dumps(public, ensure_ascii=False, indent=2).encode("utf-8")
-    return encoded[:_PREVIEW_BYTES].decode("utf-8", errors="ignore"), len(encoded) > _PREVIEW_BYTES
+    return _encode_preview(cast(JsonObject, proposal.model_dump(mode="json")), redactor)
 
 
 class DiagnosticTrace:
@@ -106,10 +142,14 @@ class DiagnosticTrace:
         preview: bool = False,
         issues: list[TraceIssue] | None = None,
     ) -> TraceStepEvent:
-        """Finish the active step with measured duration and optional sanitized final output."""
+        """Finish the active step with measured duration and optional sanitized model output."""
         if self.active is None:
             raise RuntimeError("A trace step must start before it finishes")
-        response, clipped = _proposal_preview(reply, self.redactor) if preview and reply else (None, False)
+        response, clipped = (None, False)
+        if reply and self.active.kind == "model":
+            response, clipped = (
+                _proposal_preview(reply, self.redactor) if preview else _exploration_preview(reply, self.redactor)
+            )
         completed = self.active.model_copy(
             update={
                 "state": "failed" if code else "succeeded",

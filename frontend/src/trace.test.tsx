@@ -26,6 +26,37 @@ const step: TraceStep = {
 afterEach(cleanup);
 
 describe('diagnostic trace transport and retention', () => {
+  it('shows the exploration response JSON in the evidence-collection model step', () => {
+    render(
+      <DiagnosticTrace
+        host="local"
+        demo={false}
+        turn={{
+          id: 'exploration',
+          query: 'Inspect',
+          state: 'completed',
+          progress: [],
+          trace: {
+            provider: 'ollama',
+            model: 'qwen',
+            started_at: step.started_at,
+            steps: [
+              {
+                ...step,
+                state: 'succeeded',
+                operation: 'collect_evidence',
+                response: '{"content":"Inspect worker","tool_calls":[]}',
+              },
+            ],
+          },
+        }}
+      />,
+    );
+    fireEvent.click(screen.getByText('Diagnostic trace'));
+    expect(screen.getByLabelText('Sanitized model response').textContent).toBe(
+      '{"content":"Inspect worker","tool_calls":[]}',
+    );
+  });
   it('keeps historical answers usable when no trace was recorded', async () => {
     render(<App />);
     fireEvent.click(await screen.findByText('Diagnostic trace'));
