@@ -33,6 +33,10 @@ actions. Models provide explanations and select from approved tools and widgets.
   summaries, and obvious explanations.
 - In README files and all Markdown except `AGENTS.md`, show commands without `rtk` wrappers such as `rtk proxy`
   or `rtk run`. RTK is an agent output-reading tool and must not be a prerequisite for documented commands.
+- Capture documentation screenshots in English, including visible example questions and model explanations.
+  Keep only screenshots referenced by documentation and needed to explain a distinct workflow. Replace outdated
+  captures and remove unused ones; do not keep redundant locale, breakpoint, or intermediate-state screenshots.
+  Keep test screenshots in ignored test artifacts. Use Demo for repeatable captures without private data and label it.
 - PR/MR descriptions and changelog entries focus on changes and relevant limitations. Omit test counts, verification
   checklists, and statements that tests, linters, or CI passed.
 - Production classes, functions, and methods require English docstrings, including private, nested, and protocol

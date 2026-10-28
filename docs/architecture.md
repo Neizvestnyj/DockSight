@@ -2,6 +2,8 @@
 
 Diagram source: [backend.drawio](diagrams/backend.drawio).
 
+See the [system overview](../README.md#how-it-works) for the diagnostic data flow.
+
 ## Decision
 
 Use one hexagonal application, deployed as a monolith. Group related behavior inside its domain and application
@@ -9,6 +11,11 @@ packages. Keep external technologies in adapters and construct dependencies in o
 
 A single hexagon keeps dependency boundaries explicit without repeating ports and wiring for each feature. Split a
 feature into its own context when its language, rules, or ownership require that separation.
+
+![Hexagonal backend with core-owned ports and technology adapters](diagrams/hexagonal-architecture.png)
+
+Arrows show runtime calls. Source-code dependencies point inward: the core does not import adapters. Memory adapters
+run in the same process as the core.
 
 ## Dependencies
 
