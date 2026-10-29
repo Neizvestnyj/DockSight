@@ -1343,7 +1343,8 @@ textarea {
   color: var(--muted);
   white-space: nowrap;
 }
-.log-toggle svg {
+.log-toggle svg,
+.trace-chevron {
   transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 .log-toggle .collapsed {
@@ -1364,6 +1365,32 @@ textarea {
 .log-disclosure > div {
   min-height: 0;
   overflow: hidden;
+}
+@supports (interpolate-size: allow-keywords) and (interactivity: inert) and selector(details::details-content) {
+  .diagnostic-trace,
+  .raw-evidence {
+    interpolate-size: allow-keywords;
+  }
+  .diagnostic-trace::details-content,
+  .raw-evidence::details-content {
+    display: flow-root;
+    block-size: 0;
+    opacity: 0;
+    overflow: clip;
+    transition:
+      block-size 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      opacity 120ms ease,
+      content-visibility 180ms allow-discrete;
+  }
+  .diagnostic-trace[open]::details-content,
+  .raw-evidence[open]::details-content {
+    block-size: auto;
+    opacity: 1;
+  }
+  .diagnostic-trace:not([open]) > :not(summary),
+  .raw-evidence:not([open]) > :not(summary) {
+    interactivity: inert;
+  }
 }
 .log-collapsed-note {
   display: flex;
@@ -2931,7 +2958,9 @@ textarea {
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
-  *::after {
+  *::after,
+  .diagnostic-trace::details-content,
+  .raw-evidence::details-content {
     animation: none !important;
     transition: none !important;
     scroll-behavior: auto !important;

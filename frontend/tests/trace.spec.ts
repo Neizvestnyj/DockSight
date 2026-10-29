@@ -47,6 +47,43 @@ async function api(page: Page, events: object[]) {
   await page.getByRole('button', { name: 'Investigate', exact: true }).click();
 }
 
+for (const motion of ['no-preference', 'reduce'] as const) {
+  test(`keeps trace and observation disclosures usable with motion preference ${motion}`, async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: motion });
+    await page.goto('/');
+    await page.evaluate(() => document.fonts.ready);
+    for (const selector of ['.diagnostic-trace', '.raw-evidence']) {
+      const disclosure = page.locator(selector);
+      const text = await disclosure.textContent();
+      const summary = disclosure.locator(':scope > summary');
+      await summary.focus();
+      await page.keyboard.press('Enter');
+      await expect(disclosure).toHaveAttribute('open', '');
+      await expect
+        .poll(() => disclosure.evaluate((node) => getComputedStyle(node, '::details-content').opacity))
+        .toBe('1');
+      if (motion === 'reduce')
+        expect(
+          await disclosure.evaluate((node) => getComputedStyle(node, '::details-content').transitionDuration),
+        ).toBe('0s');
+      const openHeight = await disclosure.evaluate((node) => node.getBoundingClientRect().height);
+      await page.keyboard.press('Enter');
+      await summary.click();
+      await summary.click();
+      await expect(disclosure).not.toHaveAttribute('open');
+      await expect
+        .poll(() => disclosure.evaluate((node) => node.getBoundingClientRect().height))
+        .toBeLessThan(openHeight);
+      await page.keyboard.press('Tab');
+      expect(await disclosure.evaluate((node) => node.contains(document.activeElement))).toBe(false);
+      await summary.focus();
+      await page.keyboard.press('Enter');
+      await expect(disclosure).toHaveAttribute('open', '');
+      await expect(disclosure).toHaveText(text!);
+    }
+  });
+}
+
 test('keeps a demo trace open across completion, supports keyboard selection and localized copy', async ({
   page,
 }, info) => {
