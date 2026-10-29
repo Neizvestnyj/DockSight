@@ -2,6 +2,7 @@
 
 ## v0.4.0
 
+- Measure backend line and branch coverage in local and CI test runs, with missing-line output and optional HTML reports.
 - Add an opt-in live end-to-end suite for isolated Docker Compose workloads and configurable local Ollama model matrices,
   with exact-resource card checks, English/Russian narrative checks, retained diagnostic artifacts, and scoped cleanup.
 - Exercise free-form group questions and explicit Compose selection through the real browser, API, Docker, and model.

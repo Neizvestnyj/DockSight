@@ -70,8 +70,22 @@ uv run --project backend lint-imports --config backend/pyproject.toml
 uv run --project backend interrogate -c backend/pyproject.toml backend/src backend/tests examples scripts
 uv run --directory backend complexipy src tests ../examples ../scripts --plain --failed
 uv run --project backend pytest backend/tests --dup-fixtures
-uv run --project backend pytest backend/tests --dead-fixtures
+uv run --project backend pytest backend/tests --dead-fixtures --no-cov
 ```
+
+Backend test runs measure line and branch coverage for the entire `docksight` package, including modules not imported
+by tests. The terminal report lists missing lines and branches and hides fully covered files. Local hooks and CI use
+the same defaults. No minimum coverage threshold is enforced yet. Opt-in external tests stay disabled by default.
+
+From the repository root, generate a browsable report with:
+
+```sh
+uv run --project backend pytest backend/tests --cov-report=html
+```
+
+Open `htmlcov/index.html`. Coverage data and HTML reports are ignored by Git. Use `--no-cov` for debugging or
+collection-only fixture checks. Coverage from a focused test run describes only that run; use the full suite for
+the backend baseline.
 
 For frontend changes:
 

@@ -97,7 +97,7 @@ repos:
 
       - id: dead-fixtures
         name: Check unused pytest fixtures
-        entry: uv run --project backend pytest backend/tests --dead-fixtures -q
+        entry: uv run --project backend pytest backend/tests --dead-fixtures --no-cov -q
         language: system
         pass_filenames: false
         always_run: true
