@@ -73,7 +73,7 @@ test('reads and refreshes facts without LLM calls, then diagnoses in a separate 
   expect(reads).toBe(2);
   expect(requests).toHaveLength(1);
   await facts.getByRole('button', { name: 'Back to investigation' }).click();
-  const historical = page.getByRole('region', { name: 'Container status', exact: true });
+  const historical = page.getByRole('group', { name: 'Container status', exact: true });
   await expect(historical.locator('footer time')).toHaveAttribute('datetime', snapshot.observed_at);
   await expect(historical.getByText('9', { exact: true })).toBeVisible();
   await chooseContainer(page, snapshot.name);

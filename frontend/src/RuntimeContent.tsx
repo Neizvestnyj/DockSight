@@ -3,7 +3,7 @@ import { useLocale } from './locale';
 import { utc } from './format';
 
 /** Render sanitized log strings verbatim in both historical cards and direct Docker reads. */
-export function LogContent({ logs }: { logs: LogBatch }) {
+export function LogContent({ logs, grouped = false }: { logs: LogBatch; grouped?: boolean }) {
   const { t } = useLocale();
   return (
     <>
@@ -11,7 +11,12 @@ export function LogContent({ logs }: { logs: LogBatch }) {
         <span>{t('{count} lines returned', { count: logs.entries.length })}</span>
         <span>{t(logs.truncated ? 'Truncated · partial evidence' : 'Within requested bounds')}</span>
       </div>
-      <div className="logs" tabIndex={0} role="region" aria-label={t('Timestamped container logs')}>
+      <div
+        className="logs"
+        tabIndex={0}
+        role={grouped ? 'group' : 'region'}
+        aria-label={t('Timestamped container logs')}
+      >
         {logs.entries.length ? (
           logs.entries.map((entry, index) => (
             <div className="log-line" key={index}>

@@ -2,6 +2,8 @@
 
 ## v0.4.0
 
+- Present each container's diagnostic state, logs, and environment together, with collapsible logs and links to
+  the original observations; keep separate snapshots and action confirmations intact.
 - Ground Ollama structured replies in schema descriptions and reject placeholder or reference-only cause explanations;
   make the single repair explicit about separate container cards and action constraints.
 - Enforce 90% combined backend line and branch coverage in local hooks and CI, with missing-line output and optional

@@ -49,8 +49,11 @@ async function checkCards(page: Page, answer: Answer, locale: 'en' | 'ru') {
   await expect(page.locator('.widget-container_status')).toHaveCount(states.length);
   await expect(page.locator('.widget-log_anomalies')).toHaveCount(logs.length);
   for (const card of states) {
-    const view = page.locator('.widget-container_status').filter({ hasText: card.snapshot.name });
-    await expect(view.locator('.container-heading strong')).toHaveText(card.snapshot.name);
+    const panel = page
+      .locator('.container-evidence')
+      .filter({ has: page.getByRole('heading', { name: card.snapshot.name, exact: true }) });
+    await expect(panel).toBeVisible();
+    const view = panel.locator('.widget-container_status');
     await expect(view.locator('.image-name code')).toHaveText(card.snapshot.image);
     await expect(view.locator('.fact-strip dd').first()).toHaveText(String(card.snapshot.exit_code));
     if (card.snapshot.state === 'exited') {
@@ -62,8 +65,12 @@ async function checkCards(page: Page, answer: Answer, locale: 'en' | 'ru') {
       ]);
     }
   }
-  for (const [index, card] of logs.entries()) {
-    const view = page.locator('.widget-log_anomalies').nth(index);
+  for (const card of logs) {
+    const member = answer.group!.summary.members!.find((row) => row.id === card.container_id)!;
+    const panel = page
+      .locator('.container-evidence')
+      .filter({ has: page.getByRole('heading', { name: member.name, exact: true }) });
+    const view = panel.locator('.widget-log_anomalies');
     expect(await view.locator('.log-line code').allTextContents()).toEqual(card.logs.entries.map((row) => row.message));
     await view.locator('.source-link').click();
     const observation = page.locator('#evidence-observation');
@@ -78,7 +85,6 @@ async function checkCards(page: Page, answer: Answer, locale: 'en' | 'ru') {
     expect(source.host).toBe('e2e');
     expect(JSON.parse(await observation.locator('.raw-evidence pre').innerText())).toEqual(source.data);
     await expect(observation.locator('time')).toHaveAttribute('datetime', source.observed_at);
-    const member = answer.group!.summary.members!.find((row) => row.id === card.container_id)!;
     await expect(observation).toContainText(member.name);
   }
 }

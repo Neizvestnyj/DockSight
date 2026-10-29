@@ -32,6 +32,76 @@ function ObservedAnswer({ answer }: { answer: Answer }) {
 }
 
 describe('group selection', () => {
+  it('groups shuffled state, logs and environment by historical container without changing answer data', () => {
+    const answer = demoAnswer('dependency');
+    const other = demoAnswer('oom');
+    const state = answer.widgets.find((row) => row.widget_type === 'container_status')!;
+    const logs = answer.widgets.find((row) => row.widget_type === 'log_anomalies')!;
+    answer.widgets = [
+      logs,
+      ...other.widgets.map((row) => ({ ...row, evidence_ids: row.evidence_ids.map((ref) => `other-${ref}`) })),
+      ...answer.widgets.filter((row) => row !== logs),
+    ];
+    answer.evidence.push(...other.evidence.map((row) => ({ ...row, id: `other-${row.id}` })));
+    Object.freeze(answer.widgets);
+    render(<ObservedAnswer answer={answer} />);
+    const panel = screen.getByRole('region', { name: 'Container evidence: checkout-api' });
+    expect(within(panel).getByRole('group', { name: 'Container status' })).toBeVisible();
+    expect(within(panel).getByRole('group', { name: 'Container logs' })).toBeVisible();
+    expect(within(panel).getByRole('group', { name: 'Environment' })).toBeVisible();
+    expect(within(panel).queryByText('report-worker', { exact: true })).toBeNull();
+    expect(within(panel).getByText(state.snapshot.image)).toBeVisible();
+    expect(screen.getByRole('region', { name: 'Container evidence: report-worker' })).toBeVisible();
+  });
+
+  it('keeps identical container IDs from different hosts in separate panels', () => {
+    const answer = demoAnswer('dependency');
+    const state = answer.widgets.find((row) => row.widget_type === 'container_status')!;
+    answer.widgets.push({ ...state, snapshot: { ...state.snapshot, host: 'other-host', name: 'other-worker' } });
+    render(<ObservedAnswer answer={answer} />);
+    expect(screen.getByRole('region', { name: 'Container evidence: checkout-api' })).toBeVisible();
+    expect(screen.getByRole('region', { name: 'Container evidence: other-worker' })).toHaveTextContent('other-host');
+  });
+
+  it('reopens collapsed logs from the explanation and retains the exact observed source', () => {
+    const answer = demoAnswer('dependency');
+    render(<ObservedAnswer answer={answer} />);
+    const panel = screen.getByRole('region', { name: 'Container evidence: checkout-api' });
+    fireEvent.click(within(panel).getByRole('button', { name: 'Collapse logs' }));
+    expect(within(panel).getByRole('button', { name: 'Expand logs' })).toHaveAttribute('aria-expanded', 'false');
+    expect(within(panel).queryByRole('group', { name: 'Timestamped container logs' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'View log evidence' }));
+    expect(within(panel).getByRole('group', { name: 'Timestamped container logs' })).toBeVisible();
+    expect(screen.getByRole('region', { name: 'Evidence observation' })).toHaveTextContent('Docker logs');
+    expect(screen.getByRole('region', { name: 'Evidence observation' })).toHaveFocus();
+  });
+
+  it('names a log-only panel from retained evidence and never invents a state snapshot', () => {
+    const answer = demoAnswer('dependency');
+    answer.widgets = answer.widgets.filter((row) => row.widget_type === 'log_anomalies');
+    render(<ObservedAnswer answer={answer} />);
+    const panel = screen.getByRole('region', { name: 'Container evidence: checkout-api' });
+    expect(within(panel).getByText('State was not included in this answer.')).toBeVisible();
+    expect(within(panel).queryByRole('group', { name: 'Container status' })).toBeNull();
+  });
+
+  it('retains repeated state observations and their distinct timestamps in one container panel', () => {
+    const answer = demoAnswer('dependency');
+    const status = answer.widgets.find((row) => row.widget_type === 'container_status')!;
+    answer.widgets = [
+      { ...status, snapshot: { ...status.snapshot, observed_at: '2026-10-28T10:00:00Z', restart_count: 2 } },
+      { ...status, snapshot: { ...status.snapshot, observed_at: '2026-10-28T10:05:00Z', restart_count: 3 } },
+    ];
+    render(<ObservedAnswer answer={answer} />);
+    const panel = screen.getByRole('region', { name: 'Container evidence: checkout-api' });
+    const states = within(panel).getAllByRole('group', { name: 'Container status' });
+    expect(states).toHaveLength(2);
+    expect(within(states[0]!).getByText('10:00:00 UTC')).toBeVisible();
+    expect(within(states[1]!).getByText('10:05:00 UTC')).toBeVisible();
+    expect(within(states[0]!).getByText('2', { exact: true })).toBeVisible();
+    expect(within(states[1]!).getByText('3', { exact: true })).toBeVisible();
+    expect(within(panel).getByText('No log card was returned for this container.')).toBeVisible();
+  });
   it('distinguishes sources by their historical container even without current inventory', () => {
     const answer = demoAnswer('dependency');
     const state = answer.evidence.find((row) => row.kind === 'container')!;

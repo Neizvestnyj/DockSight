@@ -1,6 +1,7 @@
 import { isMessageKey } from './messages';
 import { useLocale } from './locale';
-import { ArrowUpRight, FileText, Layers, LockKeyhole, Terminal, Box } from 'lucide-react';
+import { useId, useState } from 'react';
+import { ArrowUpRight, ChevronDown, FileText, Layers, LockKeyhole, Terminal, Box } from 'lucide-react';
 import type { Action, Evidence, Widget } from './contracts';
 import { Status } from './ui';
 import { bytes, utc } from './format';
@@ -16,12 +17,26 @@ interface Props {
   review: (action: Action) => void;
   outcomes: Record<string, Action>;
   demo?: boolean;
+  embedded?: boolean;
 }
 
 /** Label widgets with observed source data, keeping narrative out of fact cards. */
-export function WidgetCard({ widget, selected, evidence, inspect, review, outcomes, demo = false }: Props) {
+export function WidgetCard({
+  widget,
+  selected,
+  evidence,
+  inspect,
+  review,
+  outcomes,
+  demo = false,
+  embedded = false,
+}: Props) {
   const { t, locale } = useLocale();
+  const [expanded, setExpanded] = useState(true);
+  const logId = useId();
   const primary = widgetSource(widget, evidence);
+  const observed = evidence.find((row) => row.id === primary);
+  const Heading = embedded ? 'h4' : 'h3';
   const linked = selected === primary;
   const name = t(
     widget.widget_type === 'container_status'
@@ -41,12 +56,32 @@ export function WidgetCard({ widget, selected, evidence, inspect, review, outcom
           ? Layers
           : LockKeyhole;
   return (
-    <section className={`widget widget-${widget.widget_type}${linked ? ' linked' : ''}`} aria-label={name}>
+    <section
+      className={`widget widget-${widget.widget_type}${linked ? ' linked' : ''}${embedded ? ' embedded' : ''}`}
+      role={embedded ? 'group' : undefined}
+      aria-label={name}
+      data-evidence-id={primary}
+    >
       <header className="widget-head">
-        <h3>
+        <Heading>
           <Icon size={16} />
           {name}
-        </h3>
+          {embedded && widget.widget_type === 'container_status' && <Status state={widget.snapshot.state} />}
+        </Heading>
+        {embedded && widget.widget_type === 'log_anomalies' && (
+          <button
+            className="text-button log-toggle"
+            type="button"
+            data-log-toggle
+            aria-label={t(expanded ? 'Collapse logs' : 'Expand logs')}
+            aria-expanded={expanded}
+            aria-controls={logId}
+            onClick={() => setExpanded((value) => !value)}
+          >
+            <ChevronDown size={14} className={expanded ? '' : 'collapsed'} />
+            {t(expanded ? 'Collapse logs' : 'Expand logs')}
+          </button>
+        )}
         {primary && (
           <button
             className="text-button source-link"
@@ -59,12 +94,23 @@ export function WidgetCard({ widget, selected, evidence, inspect, review, outcom
           </button>
         )}
       </header>
+      {embedded && widget.widget_type === 'log_anomalies' && !expanded && (
+        <div className="log-collapsed-note">
+          <span>
+            {t('{count} lines returned', { count: widget.logs.entries.length })} ·{' '}
+            {t(widget.logs.truncated ? 'Truncated · partial evidence' : 'Within requested bounds')}
+          </span>
+          {observed && <time dateTime={observed.observed_at}>{utc(observed.observed_at)}</time>}
+        </div>
+      )}
       {widget.widget_type === 'container_status' && (
         <>
-          <div className="container-heading">
-            <strong>{widget.snapshot.name}</strong>
-            <Status state={widget.snapshot.state} />
-          </div>
+          {!embedded && (
+            <div className="container-heading">
+              <strong>{widget.snapshot.name}</strong>
+              <Status state={widget.snapshot.state} />
+            </div>
+          )}
           <p className="image-name">
             <code>{widget.snapshot.image}</code>
           </p>
@@ -129,15 +175,16 @@ export function WidgetCard({ widget, selected, evidence, inspect, review, outcom
         </>
       )}
       {widget.widget_type === 'log_anomalies' && (
-        <>
-          <LogContent logs={widget.logs} />
+        <div id={logId} hidden={embedded && !expanded}>
+          <LogContent logs={widget.logs} grouped={embedded} />
           <footer className="widget-foot">
             <span>{t('Docker logs · sanitized text')}</span>
+            {observed && <time dateTime={observed.observed_at}>{utc(observed.observed_at)}</time>}
             {widget.logs.truncated && (
               <span className="warning-text">{t('Earlier or later output may be missing')}</span>
             )}
           </footer>
-        </>
+        </div>
       )}
       {widget.widget_type === 'compose_stack' && (
         <div className="stack-list">
@@ -171,7 +218,16 @@ export function WidgetCard({ widget, selected, evidence, inspect, review, outcom
           )}
         </div>
       )}
-      {widget.widget_type === 'env_inspector' && <EnvironmentContent variables={widget.variables} />}
+      {widget.widget_type === 'env_inspector' && (
+        <>
+          <EnvironmentContent variables={widget.variables} />
+          {observed && (
+            <footer className="widget-foot">
+              <time dateTime={observed.observed_at}>{utc(observed.observed_at)}</time>
+            </footer>
+          )}
+        </>
+      )}
     </section>
   );
 }

@@ -33,7 +33,7 @@ test('explains demo controls, localizes every built-in scenario, and keeps empty
   await page.getByLabel('Имитация подключения', { exact: true }).selectOption('stream');
   await expect(page.getByText('Отправьте вопрос, чтобы увидеть ошибку после сбора данных.')).toBeVisible();
   await page.getByLabel('После подтверждения действия', { exact: true }).selectOption('indeterminate');
-  await expect(page.getByRole('region', { name: 'Логи контейнера', exact: true })).toContainText('Получено 0 строк');
+  await expect(page.getByRole('group', { name: 'Логи контейнера', exact: true })).toContainText('Получено 0 строк');
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   await page.getByRole('heading', { name: 'Диагностика контейнера' }).scrollIntoViewIfNeeded();
   await page.screenshot({ path: `test-results/${info.project.name}-demo-clarity.png`, fullPage: true });
@@ -93,7 +93,7 @@ test('detects Russian and preserves evidence, action IDs and draft while switchi
   await expect(page.getByRole('heading', { name: 'Диагностика контейнера' })).toBeVisible();
   await expect(page.locator('html')).toHaveAttribute('lang', 'ru');
   const summary = await page.getByRole('region', { name: 'Объяснение модели' }).locator('p').first().innerText();
-  const logs = await page.getByRole('region', { name: 'Логи контейнера с временными метками' }).innerText();
+  const logs = await page.getByRole('group', { name: 'Логи контейнера с временными метками' }).innerText();
   await page
     .getByRole('textbox', { name: 'Продолжить расследование' })
     .fill('Проверить зависимость без изменения логов');
@@ -105,7 +105,7 @@ test('detects Russian and preserves evidence, action IDs and draft while switchi
   await expect(page.getByRole('textbox', { name: 'Continue the investigation' })).toHaveValue(
     'Проверить зависимость без изменения логов',
   );
-  expect(await page.getByRole('region', { name: 'Timestamped container logs' }).innerText()).toBe(logs);
+  expect(await page.getByRole('group', { name: 'Timestamped container logs' }).innerText()).toBe(logs);
   expect(await page.getByRole('region', { name: 'Model explanation' }).locator('p').first().innerText()).not.toBe(
     summary,
   );
@@ -174,7 +174,7 @@ test('does not translate API summaries, messages, logs, or environment values', 
   await page.getByRole('textbox', { name: 'Спросить DockSight' }).fill('Что произошло?');
   await page.getByRole('button', { name: 'Исследовать', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Объяснение модели' })).toContainText(answer.summary);
-  await expect(page.getByRole('region', { name: 'Логи контейнера с временными метками' })).toHaveText(
+  await expect(page.getByRole('group', { name: 'Логи контейнера с временными метками' })).toHaveText(
     'Нет времениContainer investigation <script>untrusted</script>',
   );
   await expect(page.locator('.env-list dd')).toHaveText('Container status');

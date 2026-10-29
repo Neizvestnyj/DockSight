@@ -15,7 +15,7 @@ describe('read-only container viewing', () => {
     const scenario = vi.spyOn(DemoClient.prototype, 'setScenario');
     render(<App />);
     await screen.findByTitle('payments-api');
-    const originalTime = screen.getByRole('region', { name: 'Container status' }).querySelector('time')!.dateTime;
+    const originalTime = screen.getByRole('group', { name: 'Container status' }).querySelector('time')!.dateTime;
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Keep this follow-up' } });
     fireEvent.click(screen.getByTitle('payments-api'));
     const facts = await screen.findByRole('region', { name: 'Container facts' });
@@ -28,7 +28,7 @@ describe('read-only container viewing', () => {
     expect(scenario).not.toHaveBeenCalled();
     fireEvent.click(within(facts).getByRole('button', { name: 'Back to investigation' }));
     expect(screen.getByRole('textbox')).toHaveValue('Keep this follow-up');
-    expect(screen.getByRole('region', { name: 'Container status' }).querySelector('time')!.dateTime).toBe(originalTime);
+    expect(screen.getByRole('group', { name: 'Container status' }).querySelector('time')!.dateTime).toBe(originalTime);
     expect(screen.getByRole('button', { name: 'Review stop' })).toBeInTheDocument();
   });
 

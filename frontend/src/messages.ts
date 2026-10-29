@@ -8,6 +8,11 @@ export type MessageValues = Record<string, string | number>;
 /** Keep product copy separate from verbatim Docker, model, and server content. */
 const russian = {
   ...demoMessages,
+  'Container evidence: {name}': 'Доказательства контейнера: {name}',
+  'State was not included in this answer.': 'Состояние не включено в этот ответ.',
+  'No log card was returned for this container.': 'Карточка логов для этого контейнера не получена.',
+  'Collapse logs': 'Свернуть логи',
+  'Expand logs': 'Развернуть логи',
   'Investigation scope': 'Область диагностики',
   Automatic: 'Автоматически',
   Scope: 'Область',

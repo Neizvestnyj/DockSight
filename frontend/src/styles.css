@@ -1274,6 +1274,105 @@ textarea {
   border-radius: var(--radius-card);
   overflow: hidden;
 }
+.container-evidence {
+  min-width: 0;
+  margin-bottom: var(--gap);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  overflow: hidden;
+  background: var(--surface);
+}
+.container-evidence.linked {
+  border-color: var(--accent);
+}
+.container-evidence-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px 16px;
+  padding: 16px;
+  background: var(--raised);
+  border-bottom: 1px solid var(--border);
+}
+.container-evidence-heading h3 {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 16px;
+  font-weight: 600;
+}
+.container-evidence-heading > span {
+  font-size: 12px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.container-evidence-note {
+  padding: 12px 16px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.container-evidence .widget.embedded {
+  border: 0;
+  border-radius: 0;
+}
+.container-evidence .widget.embedded + .widget {
+  border-top: 1px solid var(--border);
+}
+.widget.embedded .widget-head {
+  flex-wrap: wrap;
+}
+.widget.embedded .widget-head h4 {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.widget.embedded .widget-head h4 > svg {
+  color: var(--muted);
+}
+.widget.embedded .source-link {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.widget.embedded .log-toggle {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.log-toggle .collapsed {
+  transform: rotate(-90deg);
+}
+.log-collapsed-note {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 16px;
+  font-size: 12px;
+  color: var(--muted);
+  background: var(--raised);
+}
+@media (max-width: 560px) {
+  .widget.embedded.widget-log_anomalies .widget-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .widget.embedded.widget-log_anomalies .source-link {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .widget.embedded .log-toggle {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-self: start;
+    margin-left: 0;
+    min-height: 44px;
+  }
+}
 .facts-column > .widget + .widget {
   margin-top: var(--gap);
 }

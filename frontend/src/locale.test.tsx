@@ -133,7 +133,7 @@ describe('language preference', () => {
       'Docker сообщает, что report-worker был завершён из-за нехватки памяти (OOM)',
     );
     expect(screen.getByRole('combobox', { name: 'Настроенный хост' })).toHaveTextContent('Демо-хост / EU');
-    expect(screen.getByRole('region', { name: 'Логи контейнера' })).toHaveTextContent('Получено 0 строк');
+    expect(screen.getByRole('group', { name: 'Логи контейнера' })).toHaveTextContent('Получено 0 строк');
     expect(screen.queryByRole('checkbox', { name: '200 строк логов' })).not.toBeInTheDocument();
     expect(
       await screen.findByText('Пример данных вымышленного хоста. Подключите API для диагностики своего Docker.'),
