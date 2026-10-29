@@ -511,6 +511,19 @@ textarea {
   width: 180px;
   height: auto;
 }
+.brand-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+.brand-link:hover {
+  background: transparent;
+}
 .brand-sub {
   display: block;
   color: var(--muted);

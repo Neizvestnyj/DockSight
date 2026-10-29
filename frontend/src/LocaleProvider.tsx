@@ -30,7 +30,7 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
   }, []);
   useEffect(() => {
     document.documentElement.lang = locale;
-    document.title = locale === 'ru' ? 'DockSight — Расследования' : 'DockSight — Investigations';
+    document.title = locale === 'ru' ? 'DockSight — Диагностика' : 'DockSight — Diagnostics';
   }, [locale]);
 
   /** Keep switching usable even when storage is disabled or full. */

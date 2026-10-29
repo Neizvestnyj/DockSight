@@ -195,7 +195,16 @@ function Workspace({
   const [scenario, setScenario] = useState<ScenarioId>(demoClient?.scenario ?? 'crash_loop');
   const [menu, setMenu] = useState(false);
   const [help, setHelp] = useState(false);
+  const [composerVisible, setComposerVisible] = useState(false);
   const name = hosts.find((row) => row.id === host)?.name ?? host;
+
+  useEffect(() => {
+    const input = document.getElementById('query');
+    if (!input || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver(([entry]) => setComposerVisible(entry?.isIntersecting ?? false));
+    observer.observe(input);
+    return () => observer.disconnect();
+  }, []);
 
   /** Recheck stale availability before opening its retained observations. */
   function openStatus() {
@@ -317,9 +326,14 @@ function Workspace({
         >
           <Menu size={19} />
         </button>
-        <span className="mobile-brand">
+        <button
+          type="button"
+          className="mobile-brand brand-link"
+          aria-label={t('DockSight: return to diagnosis')}
+          onClick={() => openInvestigation()}
+        >
           <Logo />
-        </span>
+        </button>
         <div className="breadcrumb">
           <button
             className="workspace-trigger"
@@ -365,7 +379,7 @@ function Workspace({
           </div>
           <div className="heading-actions">
             <LanguageSwitch />
-            {!viewingContainer && (
+            {!viewingContainer && !composerVisible && (
               <button className="secondary" aria-label={t('Ask DockSight')} onClick={() => openInvestigation(true)}>
                 <MessageSquarePlus size={15} />
                 {t('Ask DockSight')}
