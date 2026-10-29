@@ -185,4 +185,4 @@ class DiagnosisResponse(Contract):
     cause: CauseAssessment | None = None
     group: GroupInspection | None = None
     evidence: list[EvidenceRef]
-    widgets: list[Widget]
+    widgets: list[Widget] = Field(max_length=16)

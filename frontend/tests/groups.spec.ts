@@ -4,11 +4,9 @@ import { DemoClient, demoAnswer, demoContainer, demoSystemStatus } from '../src/
 import { demoGroupAnswer } from '../src/demoGroup';
 import type { TurnInput } from '../src/contracts';
 
-/** Open the same scope controls in the desktop rail or mobile navigation dialog. */
+/** Locate optional diagnostic scope in the main workspace on every viewport. */
 async function openScope(page: Page) {
-  if ((page.viewportSize()?.width ?? 1440) <= 1100)
-    await page.getByRole('button', { name: 'Open host and containers' }).click();
-  return page.getByLabel('Inventory scope').filter({ visible: true });
+  return page.getByRole('combobox', { name: 'Investigation scope' });
 }
 
 test('diagnoses the whole Compose project and preserves its historical group observations', async ({ page }, info) => {
@@ -34,7 +32,6 @@ test('diagnoses the whole Compose project and preserves its historical group obs
   await page.screenshot({ path: `test-results/${info.project.name}-compose-group.png` });
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   await (await openScope(page)).selectOption('all');
-  if ((page.viewportSize()?.width ?? 1440) <= 1100) await page.getByRole('button', { name: 'Close dialog' }).click();
   await expect(report.locator('.group-member')).toHaveCount(6);
   await expect(page.getByRole('textbox')).toHaveValue('Keep this follow-up draft');
   await page.getByRole('combobox', { name: 'Language' }).selectOption('ru');
@@ -54,10 +51,24 @@ test('keeps empty Swarm discovery explicit without calling the model', async ({ 
 
 test('sends an authenticated exact group target and retries its original scope after a filter change', async ({
   page,
-}) => {
+}, info) => {
   const rows = Array.from({ length: 6 }, (_, index) => demoContainer(index, 'test-host', '2026-10-28T10:00:00Z'));
   const groups = await new DemoClient().stacks('demo-eu', 'compose', new AbortController().signal);
   const answer = demoGroupAnswer(demoAnswer('dependency', 'test-host'), rows, groups[0]!);
+  const second = rows[3]!;
+  const state = answer.evidence.find((row) => row.kind === 'container')!;
+  const log = answer.evidence.find((row) => row.kind === 'logs')!;
+  const status = answer.widgets.find((row) => row.widget_type === 'container_status')!;
+  const logCard = answer.widgets.find((row) => row.widget_type === 'log_anomalies')!;
+  const entries = [{ timestamp: '2026-10-28T10:00:00Z', message: 'Migration failed: database connection refused' }];
+  answer.evidence.push(
+    { ...state, id: 'second-state', container_id: second.id, data: { name: second.name, state: second.state } },
+    { ...log, id: 'second-logs', container_id: second.id, data: { entries, truncated: false } },
+  );
+  answer.widgets.push(
+    { ...status, snapshot: second, evidence_ids: ['second-state'], actions: [], recommendation: null },
+    { ...logCard, container_id: second.id, evidence_ids: ['second-logs'], logs: { entries, truncated: false } },
+  );
   const inputs: TurnInput[] = [];
   await page.route('**/api/v1/**', (route) => {
     const request = route.request();
@@ -104,9 +115,41 @@ test('sends an authenticated exact group target and retries its original scope a
   await expect(page.getByRole('button', { name: 'Retry diagnosis' })).toBeVisible();
   expect(inputs[0]?.group).toEqual({ kind: 'compose', name: 'commerce' });
   await (await openScope(page)).selectOption('all');
-  if ((page.viewportSize()?.width ?? 1440) <= 1100) await page.getByRole('button', { name: 'Close dialog' }).click();
   await page.getByRole('button', { name: 'Retry diagnosis' }).click();
   await expect(page.getByRole('region', { name: 'Group observations' })).toBeVisible();
   expect(inputs).toHaveLength(2);
   expect(inputs[1]?.group).toEqual(inputs[0]?.group);
+  await expect(page.getByRole('region', { name: 'Container status', exact: true })).toHaveCount(2);
+  await expect(page.getByRole('region', { name: 'Container logs', exact: true })).toHaveCount(2);
+  const sources = page.getByRole('region', { name: 'Observation sources' });
+  const member = sources.getByRole('group', { name: 'migration-runner', exact: true });
+  await member.getByRole('button', { name: /^Logs/ }).click();
+  await expect(page.getByRole('region', { name: 'Evidence observation' })).toContainText('migration-runner');
+  await expect(page.getByRole('region', { name: 'Evidence observation' })).toBeFocused();
+  await sources.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: `test-results/${info.project.name}-group-sources.png` });
+});
+
+test('keeps Russian group controls inside the workspace with an accessible consistent action', async ({
+  page,
+}, info) => {
+  await page.goto('/');
+  await page.getByRole('combobox', { name: 'Language' }).selectOption('ru');
+  const scope = page.getByRole('region', { name: 'Область диагностики' });
+  await scope.getByRole('combobox', { name: 'Область диагностики' }).selectOption('compose');
+  await scope.getByRole('combobox', { name: 'Группа', exact: true }).selectOption('commerce');
+  const button = scope.getByRole('button', { name: 'Диагностировать группу' });
+  await expect(button).toBeEnabled();
+  const frame = (await scope.boundingBox())!;
+  const control = (await button.boundingBox())!;
+  expect(control.x).toBeGreaterThanOrEqual(frame.x);
+  expect(control.x + control.width).toBeLessThanOrEqual(frame.x + frame.width + 1);
+  expect(await button.locator('svg').count()).toBe(1);
+  await button.focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('region', { name: 'Наблюдения группы' })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await scope.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: `test-results/${info.project.name}-group-controls-ru.png` });
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 });

@@ -165,7 +165,11 @@ Disconnecting cancels diagnostic work. Streams do not support replay or automati
 
 Before model exploration, exact project/stack names in the question are resolved against Docker metadata. A matching
 Compose project is inspected automatically; otherwise stack names are discovered on a Swarm manager. Exact container
-IDs/names preserve container scope. Ambiguous names require an explicit selection. `resolve_target` progress and trace
+IDs/names preserve container scope. A whole query token with one substitution, insertion, deletion, or adjacent
+transposition can match a known group name of at least six characters, only when no exact resource matches.
+Ambiguous names require an explicit selection. The report always identifies the canonical observed group.
+Malformed or redacted labels outside the target contract are excluded from automatic matching.
+`resolve_target` progress and trace
 events describe this read; it does not spend a model call. Model tools accept full Docker IDs or exact observed names,
 not ID prefixes or evidence IDs. Optional Swarm discovery failures remain explicit without blocking ordinary container
 diagnosis; an explicit Swarm request still fails if its required metadata cannot be read.
@@ -189,7 +193,11 @@ scope, and a clipped member list is not a complete inventory.
 `answer.ready.answer.group` is a server-owned report or `null`, independent of model-selected widgets. It contains the
 summary, its `evidence_id`, optional `inventory_code`, and per-container `logs`: `container_id`, `name`, `state`
 (`collected`, `failed`, `not_collected`), optional evidence reference, and safe error/limit code. Report references remain
-in response evidence even if the model omits their cards. Subsequent inventory refresh does not replace the report.
+in response evidence even if the model omits their cards. The server fills missing state/log cards for the four collected
+problem containers, without duplicating model-selected cards or inventing missing logs. Responses contain at most 16
+widgets: eight model selections and up to eight factual additions. Subsequent inventory refresh does not replace the
+report.
+Added state cards use the latest snapshot collected for that member during the turn.
 
 Optional `cause` separates model-authored `immediate`, nullable `underlying`, `unknowns` (up to four), and supporting
 `evidence_ids`. References are validated and narrative fields are redacted. For example, a database connection refusal

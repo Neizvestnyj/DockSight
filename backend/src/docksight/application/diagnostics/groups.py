@@ -1,7 +1,6 @@
 import json
-import re
-from dataclasses import dataclass, replace
-from typing import Final, Literal, cast
+from dataclasses import replace
+from typing import Final, cast
 
 from pydantic import TypeAdapter
 
@@ -16,74 +15,6 @@ from docksight.domain.runtime import ContainerSnapshot, StackSummary
 _STACKS: Final = TypeAdapter(tuple[StackSummary, ...])
 _SNAPSHOT: Final = TypeAdapter(ContainerSnapshot)
 MAX_GROUP_LOGS: Final = 4
-
-
-@dataclass(frozen=True)
-class TargetResolution:
-    """Retain discovery snapshots and an unambiguous named group for one turn."""
-
-    group: GroupTarget | None
-    containers: tuple[ContainerSnapshot, ...]
-    discovery_code: str | None = None
-
-
-def _mentioned(query: str, name: str) -> bool:
-    """Match an observed resource name without treating container-name prefixes as project references."""
-    return re.search(r"(?<![\w.-])" + re.escape(name) + r"(?![\w-]|\.[\w-])", query, re.IGNORECASE) is not None
-
-
-async def resolve_target(runtime: RuntimeReadPort, host: str, query: str) -> TargetResolution:
-    """Resolve exact known names before model selection, preserving container targets and rejecting ambiguity."""
-    rows = await runtime.containers(host)
-    if any(row.id in query for row in rows):
-        return TargetResolution(None, rows)
-    named_container = any(_mentioned(query, row.name) for row in rows)
-    kind = _requested_kind(query)
-    targets = _compose_targets(rows, query) if kind != "swarm" else []
-    code = None
-    if kind != "compose" and (targets or not named_container):
-        swarm, code = await _swarm_targets(runtime, host, query, kind == "swarm")
-        targets.extend(swarm)
-    return TargetResolution(_unambiguous_target(targets, named_container), rows, code)
-
-
-def _unambiguous_target(targets: list[GroupTarget], named_container: bool) -> GroupTarget | None:
-    """Require explicit selection when observed identities collide across resource types."""
-    if len(targets) > 1 or (targets and named_container):
-        raise DockSightError("ambiguous_target", "Resource name is ambiguous; select one group or exact container", 422)
-    return targets[0] if targets else None
-
-
-def _requested_kind(query: str) -> Literal["compose", "swarm"] | None:
-    """Respect explicit technology names without treating the generic word stack as Swarm."""
-    if re.search(r"\bcompose\b", query, re.IGNORECASE):
-        return "compose"
-    if re.search(r"\bswarm\b", query, re.IGNORECASE):
-        return "swarm"
-    return None
-
-
-def _compose_targets(rows: tuple[ContainerSnapshot, ...], query: str) -> list[GroupTarget]:
-    """Identify exact project-label references without inferring membership from name prefixes."""
-    names = {row.compose_project for row in rows if row.compose_project and _mentioned(query, row.compose_project)}
-    return [GroupTarget(kind="compose", name=name) for name in sorted(names)]
-
-
-async def _swarm_targets(
-    runtime: RuntimeReadPort, host: str, query: str, required: bool
-) -> tuple[list[GroupTarget], str | None]:
-    """Discover stack names on a manager while treating a non-Swarm engine as a supported ordinary host."""
-    try:
-        stacks = await runtime.stacks(host, "swarm")
-    except DockSightError as exc:
-        if required:
-            raise
-        return [], None if exc.code == "unsupported_operation" else exc.code
-    return [
-        GroupTarget(kind="swarm", name=row.name)
-        for row in stacks
-        if row.kind == "swarm" and _mentioned(query, row.name)
-    ], None
 
 
 async def inspect_group(

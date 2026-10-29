@@ -18,6 +18,7 @@ import { useSystemStatus } from './useSystemStatus';
 import { SystemStatusPanel, SystemStatusTrigger } from './SystemStatus';
 import { useInventory } from './useInventory';
 import { useGroups } from './useGroups';
+import { GroupScope } from './GroupScope';
 
 interface ConnectionState {
   client: Transport;
@@ -247,6 +248,21 @@ function Workspace({
     );
   }
 
+  /** Start an explicitly scoped group investigation without changing historical observations. */
+  function diagnoseGroup() {
+    if (!groupScope.group || investigation.running || availability.blockedReason) return;
+    const { kind, name: groupName } = groupScope.group;
+    openInvestigation();
+    void investigation.run(
+      t('Investigate the {kind} group {name}. Check every member and explain the failures.', {
+        kind: kind === 'compose' ? 'Compose' : 'Swarm',
+        name: groupName,
+      }),
+      true,
+      { kind, name: groupName },
+    );
+  }
+
   const sidebarProps = {
     hosts,
     host,
@@ -256,21 +272,6 @@ function Workspace({
     inventory: groupScope.group
       ? inventory.filter((row) => groupScope.group!.container_ids.includes(row.id))
       : inventory,
-    groupScope,
-    diagnosisBlocked: investigation.running || Boolean(availability.blockedReason),
-    diagnoseGroup: () => {
-      if (!groupScope.group || investigation.running || availability.blockedReason) return;
-      const { kind, name: groupName } = groupScope.group;
-      openInvestigation();
-      void investigation.run(
-        t('Investigate the {kind} group {name}. Check every member and explain the failures.', {
-          kind: kind === 'compose' ? 'Compose' : 'Swarm',
-          name: groupName,
-        }),
-        true,
-        { kind, name: groupName },
-      );
-    },
     inventoryError,
     lastRefreshed,
     refreshAcknowledged: Boolean(refreshAcknowledged),
@@ -372,6 +373,13 @@ function Workspace({
             )}
           </div>
         </div>
+        {!viewingContainer && (
+          <GroupScope
+            scope={groupScope}
+            diagnose={diagnoseGroup}
+            blocked={investigation.running || Boolean(availability.blockedReason)}
+          />
+        )}
         {availability.blockedReason && (
           <div className="dependency-notice" role="status">
             <p>{t(availability.blockedReason)}</p>

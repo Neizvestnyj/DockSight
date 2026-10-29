@@ -1,8 +1,8 @@
-import { RefreshCw } from 'lucide-react';
+import { MessageSquarePlus, RefreshCw } from 'lucide-react';
 import { useLocale } from './locale';
 import type { useGroups, GroupKind } from './useGroups';
 
-/** Keep group discovery explicit and distinguish project containers from Swarm task replicas. */
+/** Offer optional explicit scope beside the investigation, leaving named-group chat automatic. */
 export function GroupScope({
   scope,
   diagnose,
@@ -14,11 +14,11 @@ export function GroupScope({
 }) {
   const { t } = useLocale();
   return (
-    <div className="group-scope">
+    <section className="group-scope" aria-label={t('Investigation scope')}>
       <label>
-        {t('Inventory scope')}
+        {t('Investigation scope')}
         <select value={scope.kind} onChange={(event) => scope.changeKind(event.target.value as GroupKind)}>
-          <option value="all">{t('All containers')}</option>
+          <option value="all">{t('Automatic')}</option>
           <option value="compose">{t('Compose projects')}</option>
           <option value="swarm">{t('Swarm stacks')}</option>
         </select>
@@ -46,6 +46,7 @@ export function GroupScope({
               disabled={!scope.group || blocked || scope.loading || scope.error}
               onClick={diagnose}
             >
+              <MessageSquarePlus size={15} />
               {t('Diagnose group')}
             </button>
             <button
@@ -71,6 +72,9 @@ export function GroupScope({
           {scope.group?.truncated && <p className="warning-text">{t('Group inventory may be incomplete.')}</p>}
         </>
       )}
-    </div>
+      <p className="scope-help">
+        {t('Optional. Name a project or stack in your question; DockSight selects it automatically.')}
+      </p>
+    </section>
   );
 }

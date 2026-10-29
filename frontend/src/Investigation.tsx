@@ -18,8 +18,8 @@ import { EvidenceInspector, WidgetCard } from './Widgets';
 import type { useInvestigation } from './useInvestigation';
 import { DiagnosticTrace } from './DiagnosticTrace';
 import { GroupReport } from './GroupReport';
-
-const evidenceNames = { container: 'State', logs: 'Logs', env: 'Env', stats: 'Metrics', stack: 'Stack' } as const;
+import { EvidenceTrail } from './EvidenceTrail';
+import { evidenceResource } from './evidence';
 
 interface Props {
   investigation: ReturnType<typeof useInvestigation>;
@@ -261,7 +261,6 @@ export function Investigation({
                 inspect={inspect}
                 review={setReview}
                 outcomes={outcomes}
-                containers={containers}
                 demo={demo}
               />
             )}
@@ -379,7 +378,6 @@ function AnswerGrid({
   inspect,
   review,
   outcomes,
-  containers,
   demo,
 }: {
   answer: Answer;
@@ -387,7 +385,6 @@ function AnswerGrid({
   inspect: (id: string) => void;
   review: (action: Action) => void;
   outcomes: Record<string, Action>;
-  containers: Container[];
   demo: boolean;
 }) {
   const { t } = useLocale();
@@ -421,25 +418,10 @@ function AnswerGrid({
           <h2>{t('Evidence trail')}</h2>
           <span>{t('{count} references', { count: answer.evidence.length })}</span>
         </div>
-        <div className="evidence-picker">
-          {answer.evidence.map((row, index) => (
-            <button
-              key={row.id}
-              onClick={() => inspect(row.id)}
-              className={selected === row.id ? 'selected' : ''}
-              aria-pressed={selected === row.id}
-              aria-label={t('Inspect {kind} observation {count}', {
-                kind: t(evidenceNames[row.kind]),
-                count: index + 1,
-              })}
-            >
-              {t(evidenceNames[row.kind])}
-            </button>
-          ))}
-        </div>
+        <EvidenceTrail answer={answer} selected={selected} inspect={inspect} />
         <EvidenceInspector
           evidence={evidence}
-          containerName={containers.find((row) => row.id === evidence?.container_id)?.name}
+          resourceName={evidence ? evidenceResource(evidence, answer).name : undefined}
         />
         {answer.widgets
           .filter((row) => row.widget_type === 'compose_stack' || row.widget_type === 'env_inspector')

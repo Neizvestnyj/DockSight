@@ -29,6 +29,7 @@ class ViewAssembler:
 
     async def build(self, proposal: DiagnosisProposal, context: EvidenceContext, actor: str) -> DiagnosisResponse:
         """Validate references and assemble cards without trusting model-supplied runtime values."""
+        cards = _group_cards(proposal.widgets, context)
         extra = [row.evidence_id for row in context.group.logs if row.evidence_id] if context.group else []
         references: list[str] = list(
             dict.fromkeys(
@@ -37,13 +38,13 @@ class ViewAssembler:
                     *(proposal.cause.evidence_ids if proposal.cause else []),
                     *([context.group.evidence_id] if context.group else []),
                     *extra,
-                    *(ref for card in proposal.widgets for ref in card.evidence_ids),
+                    *(ref for card in cards for ref in card.evidence_ids),
                 ]
             )
         )
         if any(ref not in context.evidence for ref in references):
             raise DockSightError("invalid_evidence", "Diagnosis references unknown evidence", 502)
-        widgets = [await self._card(card, context, actor) for card in proposal.widgets]
+        widgets = [await self._card(card, context, actor) for card in cards]
 
         return DiagnosisResponse(
             summary=proposal.summary,
@@ -95,6 +96,35 @@ class ViewAssembler:
             await self.prepare(actor, snapshot.host, snapshot.id, operation)
             for operation in allowed_operations(snapshot.state)
         ]
+
+
+def _group_cards(proposed: list[WidgetProposal], context: EvidenceContext) -> list[WidgetProposal]:
+    """Keep up to four collected problem containers visible even when a model omits their detail cards."""
+    cards = list(proposed)
+    if context.group is None:
+        return cards
+    for member in context.group.logs[:4]:
+        _member_cards(cards, context, member.container_id, member.evidence_id)
+    return cards
+
+
+def _member_cards(
+    cards: list[WidgetProposal], context: EvidenceContext, container_id: str, log_ref: str | None
+) -> None:
+    """Fill only details backed by an actual snapshot or a successful log read."""
+    refs = [ref for ref, row in context.snapshots.items() if row.id == container_id]
+    if not refs:
+        return
+    status_ref = max(enumerate(refs), key=lambda pair: (context.snapshots[pair[1]].observed_at, pair[0]))[1]
+    _include_card(cards, "container_status", status_ref, refs)
+    if log_ref:
+        _include_card(cards, "log_anomalies", log_ref, refs)
+
+
+def _include_card(cards: list[WidgetProposal], kind: str, ref: str, resource_refs: list[str]) -> None:
+    """Retain model recommendations while filling missing factual cards without duplicates."""
+    if not any(card.widget_type == kind and set(card.evidence_ids).intersection(resource_refs) for card in cards):
+        cards.append(WidgetProposal.model_validate({"widget_type": kind, "evidence_ids": [ref]}))
 
 
 def _stack_card(refs: list[str], context: EvidenceContext) -> ComposeStackCard:

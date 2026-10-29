@@ -15,8 +15,6 @@ import {
 import type { Container, Host } from './contracts';
 import { Logo, Status } from './ui';
 import { utc } from './format';
-import { GroupScope } from './GroupScope';
-import type { useGroups } from './useGroups';
 
 interface Props {
   hosts: Host[];
@@ -40,9 +38,6 @@ interface Props {
   about: () => void;
   connect: () => void;
   returnDemo: () => void;
-  groupScope: ReturnType<typeof useGroups>;
-  diagnoseGroup: () => void;
-  diagnosisBlocked: boolean;
 }
 
 /** Keep configured hosts and Docker inventory in the same scoped navigation on every device. */
@@ -68,9 +63,6 @@ export function Sidebar({
   about,
   connect,
   returnDemo,
-  groupScope,
-  diagnoseGroup,
-  diagnosisBlocked,
 }: Props) {
   const { t } = useLocale();
   const hostSelectId = useId();
@@ -127,7 +119,6 @@ export function Sidebar({
           <Plus size={17} />
         </button>
       </div>
-      <GroupScope scope={groupScope} diagnose={diagnoseGroup} blocked={diagnosisBlocked} />
       <section className="inventory">
         <header>
           <h2>{t('Containers')}</h2>

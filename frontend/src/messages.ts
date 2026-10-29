@@ -8,7 +8,12 @@ export type MessageValues = Record<string, string | number>;
 /** Keep product copy separate from verbatim Docker, model, and server content. */
 const russian = {
   ...demoMessages,
-  'Inventory scope': 'Область просмотра',
+  'Investigation scope': 'Область диагностики',
+  Automatic: 'Автоматически',
+  Scope: 'Область',
+  'Observation sources': 'Источники наблюдений по ресурсам',
+  'Optional. Name a project or stack in your question; DockSight selects it automatically.':
+    'Выбор необязателен. Укажите проект или стек в вопросе — DockSight определит группу автоматически.',
   'All containers': 'Все контейнеры',
   'Compose projects': 'Проекты Compose',
   'Swarm stacks': 'Стеки Swarm',

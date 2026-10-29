@@ -7,10 +7,77 @@ import { answerSchema } from './contracts';
 import { demoAnswer } from './demo';
 import { GroupReport } from './GroupReport';
 import { LocaleProvider } from './LocaleProvider';
+import { Investigation } from './Investigation';
+import { useInvestigation } from './useInvestigation';
+import { WidgetCard } from './Widgets';
+import type { Answer } from './contracts';
 
 afterEach(cleanup);
 
+/** Render an immutable completed turn without a live transport or provider. */
+function ObservedAnswer({ answer }: { answer: Answer }) {
+  const client = new DemoClient();
+  const investigation = useInvestigation(client, 'demo-eu', answer);
+  return (
+    <Investigation
+      investigation={investigation}
+      client={client}
+      demo={false}
+      containers={[]}
+      draft=""
+      setDraft={() => undefined}
+      host="demo-eu"
+    />
+  );
+}
+
 describe('group selection', () => {
+  it('distinguishes sources by their historical container even without current inventory', () => {
+    const answer = demoAnswer('dependency');
+    const state = answer.evidence.find((row) => row.kind === 'container')!;
+    const status = answer.widgets.find((row) => row.widget_type === 'container_status')!;
+    answer.evidence.push({
+      ...state,
+      id: 'other-state',
+      container_id: 'f'.repeat(64),
+      data: { ...state.data, name: 'monitoring-grafana-1' },
+    });
+    answer.widgets.push({
+      ...status,
+      snapshot: { ...status.snapshot, id: 'f'.repeat(64), name: 'monitoring-grafana-1' },
+      evidence_ids: ['other-state'],
+      actions: [],
+    });
+    render(<ObservedAnswer answer={answer} />);
+    const worker = screen.getByRole('group', { name: 'checkout-api' });
+    const grafana = screen.getByRole('group', { name: 'monitoring-grafana-1' });
+    expect(within(worker).getByRole('button', { name: /^State/ })).toBeVisible();
+    expect(within(worker).getByRole('button', { name: /^Logs/ })).toBeVisible();
+    fireEvent.click(within(grafana).getByRole('button', { name: /^State/ }));
+    const observation = screen.getByRole('region', { name: 'Evidence observation' });
+    expect(observation).toHaveTextContent('monitoring-grafana-1');
+    expect(observation).toHaveFocus();
+  });
+
+  it('opens the container observation when a status card references group evidence first', () => {
+    const answer = demoAnswer('dependency');
+    const status = answer.widgets.find((row) => row.widget_type === 'container_status')!;
+    const state = answer.evidence.find((row) => row.kind === 'container')!;
+    const stack = answer.evidence.find((row) => row.kind === 'stack')!;
+    const inspect = vi.fn();
+    render(
+      <WidgetCard
+        widget={{ ...status, evidence_ids: [stack.id, state.id] }}
+        evidence={answer.evidence}
+        selected={null}
+        inspect={inspect}
+        review={() => undefined}
+        outcomes={{}}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'View container status source' }));
+    expect(inspect).toHaveBeenCalledWith(state.id);
+  });
   it('keeps local-container log outcomes visible beside Swarm service members', () => {
     const answer = demoAnswer('dependency');
     const log = answer.evidence.find((row) => row.kind === 'logs')!;

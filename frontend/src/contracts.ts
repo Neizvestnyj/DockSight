@@ -148,7 +148,7 @@ export const answerSchema = z
     cause: causeSchema.nullish(),
     group: groupInspectionSchema.nullish(),
     evidence: z.array(evidenceSchema),
-    widgets: z.array(widgetSchema).max(8),
+    widgets: z.array(widgetSchema).max(16),
   })
   .superRefine((answer, context) => {
     const byId = new Map(answer.evidence.map((row) => [row.id, row]));

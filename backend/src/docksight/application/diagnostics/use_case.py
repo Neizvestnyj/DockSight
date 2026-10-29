@@ -9,8 +9,8 @@ from uuid import uuid4
 from pydantic import ValidationError
 
 from docksight.application.diagnostics.context import EvidenceContext
-from docksight.application.diagnostics.groups import resolve_target
 from docksight.application.diagnostics.prompts import SYSTEM_PROMPT, final_prompt
+from docksight.application.diagnostics.scope import resolve_target
 from docksight.application.diagnostics.tools import DiagnosticTools, tool_specs
 from docksight.application.diagnostics.trace import DiagnosticTrace, schema_issues
 from docksight.application.events import TurnEvent

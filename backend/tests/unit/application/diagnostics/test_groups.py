@@ -5,7 +5,7 @@ import pytest
 
 from docksight.adapters.outbound.memory.sessions import MemorySessions
 from docksight.application.diagnostics.context import EvidenceContext
-from docksight.application.diagnostics.groups import resolve_target
+from docksight.application.diagnostics.scope import resolve_target
 from docksight.application.diagnostics.tools import DiagnosticTools
 from docksight.application.diagnostics.use_case import Diagnostics
 from docksight.application.ports.models import ModelReply, ToolCall
@@ -228,6 +228,7 @@ async def test_plain_question_resolves_the_exact_compose_name_before_model_explo
     answer = next(event["answer"] for event in events if event["type"] == "answer.ready")
     assert answer["group"]["summary"]["name"] == "infra"
     assert len(answer["group"]["summary"]["members"]) == 6
+    assert len(answer["widgets"]) == 7
     assert any("database unavailable" in message.content for message in model.requests[0][0] if message.role == "tool")
     assert events[-1]["type"] == "turn.completed"
 
@@ -240,6 +241,74 @@ async def test_evidence_ids_cannot_be_interpreted_as_docker_id_prefixes() -> Non
         await tools.execute(ToolCall("wrong", "inspect_container", {"container_id": "e1"}))
     with pytest.raises(DockSightError, match=r"data\.id or the exact container name"):
         await tools.execute(ToolCall("prefix", "inspect_container", {"container_id": "abcd"}))
+
+
+@pytest.mark.parametrize("explicit", [False, True])
+async def test_two_failed_members_keep_separate_cards_when_model_only_selects_the_last_one(explicit: bool) -> None:
+    class TwoFailures(GroupRuntime):
+        """Represent independent backend and monitoring failures in one observed Compose project."""
+
+        def __init__(self) -> None:
+            """Keep two failures with distinct exact identities and source content."""
+            super().__init__()
+            self.rows = tuple(
+                replace(row, name=name, compose_project="vintoria-infra")
+                for row, name in zip(self.rows[:2], ("backend-1", "grafana-1"), strict=True)
+            )
+
+        async def stacks(self, host: str, kind: str) -> tuple[StackSummary, ...]:
+            """Reuse observed member data under the canonical project label."""
+            return tuple(replace(row, name="vintoria-infra", total=2) for row in await super().stacks(host, kind))
+
+        async def logs(self, host: str, container_id: str, lines: int, max_bytes: int) -> LogBatch:
+            """Return distinct sanitized facts for each exact requested resource."""
+            return LogBatch((replace(self.log_batch.entries[0], message=container_id[:1] + " failure"),))
+
+    model = ScriptedModel(
+        [
+            ModelReply("Ready"),
+            ModelReply(
+                json.dumps(
+                    {
+                        "summary": "The monitoring container failed",
+                        "uncertain": True,
+                        "evidence_ids": ["e5"],
+                        "widgets": [
+                            {"widget_type": "container_status", "evidence_ids": ["e1", "e4"]},
+                            {"widget_type": "log_anomalies", "evidence_ids": ["e5"]},
+                        ],
+                    }
+                )
+            ),
+        ]
+    )
+    events = [
+        event
+        async for event in Diagnostics(TwoFailures(), model, MemorySessions(), Redactor()).stream(
+            "alice",
+            "local",
+            "Check vintoria-infta?",
+            group=GroupTarget(kind="compose", name="vintoria-infra") if explicit else None,
+        )
+    ]
+    assert events[-1]["type"] == "turn.completed"
+    answer = next(event["answer"] for event in events if event["type"] == "answer.ready")
+    assert answer["group"]["summary"]["total"] == 2
+    assert answer["group"]["summary"]["running"] == 0
+    assert len(answer["widgets"]) == 4
+    states = {
+        row["snapshot"]["name"]: row["snapshot"]
+        for row in answer["widgets"]
+        if row["widget_type"] == "container_status"
+    }
+    assert set(states) == {"backend-1", "grafana-1"}
+    assert (states["backend-1"]["state"], states["backend-1"]["exit_code"]) == ("exited", 1)
+    assert (states["grafana-1"]["state"], states["grafana-1"]["exit_code"]) == ("exited", 1)
+    logs = [row for row in answer["widgets"] if row["widget_type"] == "log_anomalies"]
+    assert {(row["container_id"], row["logs"]["entries"][0]["message"]) for row in logs} == {
+        ("1" * 64, "1 failure"),
+        ("2" * 64, "2 failure"),
+    }
 
 
 async def test_scope_failure_finishes_its_tool_progress_without_calling_the_model() -> None:
