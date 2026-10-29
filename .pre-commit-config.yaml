@@ -6,6 +6,11 @@ repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
+      - id: no-commit-to-branch
+        args: [--branch, master]
+        stages: [pre-commit]
+        always_run: true
+        fail_fast: true
       - id: trailing-whitespace
       - id: end-of-file-fixer
       - id: check-yaml
@@ -42,14 +47,14 @@ repos:
 
       - id: ruff-check
         name: Lint Python
-        entry: uv run --project backend ruff check backend examples
+        entry: uv run --project backend ruff check backend examples scripts
         language: system
         pass_filenames: false
         always_run: true
 
       - id: ruff-format
         name: Check Python formatting
-        entry: uv run --project backend ruff format --check backend examples
+        entry: uv run --project backend ruff format --check backend examples scripts
         language: system
         pass_filenames: false
         always_run: true
@@ -70,14 +75,14 @@ repos:
 
       - id: docstrings
         name: Check function and class docstrings
-        entry: uv run --project backend interrogate -c backend/pyproject.toml backend/src backend/tests examples
+        entry: uv run --project backend interrogate -c backend/pyproject.toml backend/src backend/tests examples scripts
         language: system
         pass_filenames: false
         always_run: true
 
       - id: complexity
         name: Check cognitive complexity
-        entry: uv run --directory backend complexipy src tests ../examples --plain --failed
+        entry: uv run --directory backend complexipy src tests ../examples ../scripts --plain --failed
         language: system
         pass_filenames: false
         always_run: true

@@ -6,6 +6,7 @@ import { Status } from './ui';
 import { bytes, utc } from './format';
 import { EnvironmentContent, LogContent } from './RuntimeContent';
 import { CardActions } from './CardActions';
+import { widgetSource } from './evidence';
 
 interface Props {
   widget: Widget;
@@ -20,10 +21,7 @@ interface Props {
 /** Label widgets with observed source data, keeping narrative out of fact cards. */
 export function WidgetCard({ widget, selected, evidence, inspect, review, outcomes, demo = false }: Props) {
   const { t, locale } = useLocale();
-  const primary =
-    widget.widget_type === 'log_anomalies'
-      ? evidence.find((row) => row.kind === 'logs' && widget.evidence_ids.includes(row.id))?.id
-      : widget.evidence_ids[0];
+  const primary = widgetSource(widget, evidence);
   const linked = selected === primary;
   const name = t(
     widget.widget_type === 'container_status'
@@ -179,7 +177,7 @@ export function WidgetCard({ widget, selected, evidence, inspect, review, outcom
 }
 
 /** Show a selected server observation as safe text with its exact provenance. */
-export function EvidenceInspector({ evidence, containerName }: { evidence?: Evidence; containerName?: string }) {
+export function EvidenceInspector({ evidence, resourceName }: { evidence?: Evidence; resourceName?: string }) {
   const { t } = useLocale();
   const sources = {
     container: 'Docker inspect',
@@ -206,9 +204,9 @@ export function EvidenceInspector({ evidence, containerName }: { evidence?: Evid
               <dd>{evidence.host}</dd>
             </div>
             <div>
-              <dt>{t('Container')}</dt>
+              <dt>{t(evidence.container_id ? 'Container' : 'Scope')}</dt>
               <dd title={evidence.container_id ?? undefined}>
-                {containerName ?? (evidence.container_id ? `${evidence.container_id.slice(0, 12)}…` : t('Host scope'))}
+                {resourceName ?? (evidence.container_id ? `${evidence.container_id.slice(0, 12)}…` : t('Host scope'))}
               </dd>
             </div>
             <div>
@@ -224,6 +222,7 @@ export function EvidenceInspector({ evidence, containerName }: { evidence?: Evid
             <summary>{t('Inspect observation data')}</summary>
             <pre tabIndex={0}>{JSON.stringify(evidence.data, null, 2)}</pre>
             <p className="evidence-id">
+              <span>{t('Observation ID')}</span>
               <code>{evidence.id}</code>
             </p>
           </details>

@@ -9,7 +9,10 @@ actions. Models provide explanations and select from approved tools and widgets.
 - Follow `docs/architecture.md` and keep `docs/api.md` aligned with the implementation.
 - Stay on the current branch unless the user explicitly approves a branch switch. Never run `git switch`,
   `git checkout`, or any equivalent branch-changing operation without that approval. Backend or frontend ownership
-  does not authorize switching branches. Commit task changes on the current branch unless the user directs otherwise.
+  does not authorize switching branches. Commit task changes on the current feature branch unless the user directs otherwise.
+- Never commit directly on `master` or push any ref to remote `master`, including explicit refspecs and deletions.
+  If the current branch is `master`, ask for approval to create or switch to a feature branch before committing.
+  Do not bypass branch guards with `--no-verify`, `SKIP`, alternate hook paths, or disabled hooks.
 - Use `master` as the base branch and `feature/<lowercase-kebab-case>` for new features when the user approves creating
   or switching to a branch.
 - Run shell commands through `rtk`. On Windows, prefer `rtk read`, `rtk rg`, and `rtk proxy` for commands that need
@@ -31,6 +34,12 @@ actions. Models provide explanations and select from approved tools and widgets.
   Product UI copy may be localized through the English/Russian catalog; keep external evidence text verbatim.
 - Keep Markdown brief and factual. Document decisions, contracts, and commands. Omit promotional language, repeated
   summaries, and obvious explanations.
+- In README files and all Markdown except `AGENTS.md`, show commands without `rtk` wrappers such as `rtk proxy`
+  or `rtk run`. RTK is an agent output-reading tool and must not be a prerequisite for documented commands.
+- Capture documentation screenshots in English, including visible example questions and model explanations.
+  Keep only screenshots referenced by documentation and needed to explain a distinct workflow. Replace outdated
+  captures and remove unused ones; do not keep redundant locale, breakpoint, or intermediate-state screenshots.
+  Keep test screenshots in ignored test artifacts. Use Demo for repeatable captures without private data and label it.
 - PR/MR descriptions and changelog entries focus on changes and relevant limitations. Omit test counts, verification
   checklists, and statements that tests, linters, or CI passed.
 - Production classes, functions, and methods require English docstrings, including private, nested, and protocol
@@ -109,12 +118,16 @@ actions. Models provide explanations and select from approved tools and widgets.
   credentials and explicit authorization.
 - Isolate Docker integration fixtures with labels and unique names. Cleanup must address only resources created by that
   fixture; never use global prune.
-- Install pre-commit and commit-msg hooks with `uv run --project backend pre-commit install`. Run `uv run --project
-  backend pre-commit run --all-files` before committing implementation work. Hooks enforce formatting, types,
-  architecture, docstrings, complexity, tests, Dockerfile rules, secret detection, and Conventional Commits. CI runs the
-  same checks through `uv`.
-- Start the backend at `0.1.0`. Before releases, decide whether behavior warrants a version and changelog update.
-  Documentation-only changes need neither.
+- Install pre-commit, commit-msg, and pre-push hooks with `uv run --project backend python scripts/git_hooks.py install`.
+  Run `uv run --project backend pre-commit run --all-files` before committing implementation work.
+  Hooks enforce branch protection, formatting, types, architecture, docstrings, complexity, tests, Dockerfile rules,
+  secret detection, and Conventional Commits. CI runs the code checks through `uv`; branch guards apply locally.
+- Update `CHANGELOG.md` at the end of every task that changes repository files, before committing or reporting completion.
+  Cover the delivered behavior, documentation, or development workflow; consolidate related changes and avoid duplicates.
+- Keep updating the same version section while work continues on the same feature branch. Do not create a version per task
+  or commit. Mark an unfinished release as `Unreleased`; choose a new version when preparing a separate release.
+- Keep release notes short, specific, and understandable to users. Group changes by outcome rather than listing commits.
+  Documentation and workflow changes require a changelog update but do not by themselves require a version bump.
 
 ## Frontend
 

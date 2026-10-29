@@ -3,7 +3,7 @@ from uuid import UUID
 
 from pydantic import Field, StrictBool
 
-from docksight.application.views.schemas import Contract
+from docksight.application.views.schemas import Contract, GroupTarget
 from docksight.domain.actions import Operation
 
 type HostId = Annotated[str, Field(pattern=r"^[a-z0-9][a-z0-9_-]{0,63}$")]
@@ -16,6 +16,7 @@ class ChatTurn(Contract):
     host: HostId
     query: str = Field(min_length=1, max_length=4000)
     session_id: UUID | None = None
+    group: GroupTarget | None = None
 
 
 class ActionPrepare(Contract):

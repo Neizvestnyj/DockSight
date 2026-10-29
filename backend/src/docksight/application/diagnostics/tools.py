@@ -1,16 +1,18 @@
-import json
+import re
 from dataclasses import replace
 from typing import Final, Literal, cast
 
 from pydantic import Field, TypeAdapter, ValidationError
 
 from docksight.application.diagnostics.context import EvidenceContext
+from docksight.application.diagnostics.groups import group_result, inspect_group
+from docksight.application.diagnostics.logs import fit_logs, log_data
 from docksight.application.ports.models import ToolCall, ToolSpec
 from docksight.application.ports.runtime import RuntimeReadPort
-from docksight.application.views.schemas import Contract
+from docksight.application.views.schemas import Contract, GroupTarget
 from docksight.domain.diagnostics import JsonObject, JsonValue
 from docksight.domain.errors import DockSightError
-from docksight.domain.runtime import ContainerSnapshot, LogBatch, LogEntry, StackSummary
+from docksight.domain.runtime import ContainerSnapshot, StackSummary
 
 
 class NoArgs(Contract):
@@ -22,7 +24,10 @@ class NoArgs(Contract):
 class ContainerArgs(Contract):
     """Validate a Docker container identifier without accepting a host override."""
 
-    container_id: str = Field(pattern=r"^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$")
+    container_id: str = Field(
+        pattern=r"^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$",
+        description="Use the full data.id or exact observed container name, never an evidence_id.",
+    )
 
 
 class StackArgs(Contract):
@@ -41,41 +46,10 @@ _TOOLS: Final[dict[str, tuple[type[Contract], str]]] = {
         "Read explicitly allowlisted non-secret environment values",
     ),
     "list_stacks": (StackArgs, "Read Compose groups or Swarm service summaries on a manager"),
+    "inspect_group": (GroupTarget, "Inspect a complete Compose project or Swarm stack and bounded local failure logs"),
 }
 _SNAPSHOT: Final = TypeAdapter(ContainerSnapshot)
-_LOGS: Final = TypeAdapter(LogBatch)
 _STACKS: Final = TypeAdapter(tuple[StackSummary, ...])
-
-
-def _log_data(logs: LogBatch) -> JsonObject:
-    """Serialize sanitized log evidence using the same representation as its byte budget."""
-    return cast(JsonObject, _LOGS.dump_python(logs, mode="json"))
-
-
-def _log_prefix(logs: LogBatch, characters: int) -> LogBatch:
-    """Retain a prefix of messages, counting empty entries toward the bound."""
-    entries: list[LogEntry] = []
-    for entry in logs.entries:
-        if characters <= 0:
-            break
-        entries.append(replace(entry, message=entry.message[: characters - 1]))
-        characters -= len(entry.message) + 1
-    return LogBatch(tuple(entries), truncated=True)
-
-
-def _fit_logs(logs: LogBatch, budget: int) -> LogBatch:
-    """Fit useful log content to the remaining JSON bytes, including escaping and metadata."""
-    if len(json.dumps(_log_data(logs), ensure_ascii=False).encode()) <= budget:
-        return logs
-    low, high = 0, sum(len(entry.message) + 1 for entry in logs.entries)
-    while low < high:
-        middle = (low + high + 1) // 2
-        candidate = _log_prefix(logs, middle)
-        if len(json.dumps(_log_data(candidate), ensure_ascii=False).encode()) <= budget:
-            low = middle
-        else:
-            high = middle - 1
-    return _log_prefix(logs, low)
 
 
 def tool_specs() -> tuple[ToolSpec, ...]:
@@ -96,6 +70,8 @@ class DiagnosticTools:
         host: str,
         log_lines: int = 200,
         log_bytes: int = 65536,
+        group: GroupTarget | None = None,
+        inventory: tuple[ContainerSnapshot, ...] | None = None,
     ) -> None:
         """Bind one host, evidence context, and bounded log read settings."""
         self.runtime = runtime
@@ -103,6 +79,8 @@ class DiagnosticTools:
         self.host = host
         self.log_lines = log_lines
         self.log_bytes = log_bytes
+        self.group = group
+        self.inventory = inventory
 
     async def execute(self, call: ToolCall) -> JsonObject:
         """Reject unknown tools or arguments before dispatching a bounded runtime read."""
@@ -113,6 +91,8 @@ class DiagnosticTools:
             args = definition[0].model_validate(call.arguments)
         except ValidationError as exc:
             raise DockSightError("invalid_tool_arguments", "Tool arguments do not match its schema", 422) from exc
+        if isinstance(args, GroupTarget):
+            return await self._group(args)
         if isinstance(args, NoArgs):
             return await self._containers()
         if isinstance(args, StackArgs):
@@ -130,7 +110,7 @@ class DiagnosticTools:
 
     async def _containers(self) -> JsonObject:
         """Record bounded inventory and report truncation when evidence capacity is reached."""
-        rows = await self.runtime.containers(self.host)
+        rows = await self._inventory()
         results: list[JsonValue] = []
         for snapshot in rows[:32]:
             try:
@@ -147,9 +127,30 @@ class DiagnosticTools:
             results.append({"evidence_id": item.id, "data": item.data})
         return {"containers": results, "truncated": len(results) < len(rows)}
 
+    async def _inventory(self) -> tuple[ContainerSnapshot, ...]:
+        """Reuse this turn's discovery snapshots and keep any group read scoped before applying limits."""
+        rows = self.inventory if self.inventory is not None else await self.runtime.containers(self.host)
+        if self.context.group:
+            rows = tuple(row for row in rows if row.id in self.context.group.summary.container_ids)
+        return rows
+
+    async def _group(self, target: GroupTarget) -> JsonObject:
+        """Bind model-discovered groups and reuse an already collected report within this turn."""
+        if self.group and target != self.group:
+            raise DockSightError("resource_outside_group", "Resource is outside the selected group", 422)
+        if self.context.group:
+            current = self.context.group.summary
+            if (target.kind, target.name) != (current.kind, current.name):
+                raise DockSightError("resource_outside_group", "Resource is outside the selected group", 422)
+            return group_result(self.context)
+        return await inspect_group(self.runtime, self.context, self.host, target, self.log_lines, self.log_bytes)
+
     async def _container(self, tool: str, container_id: str) -> JsonObject:
         """Resolve one container before collecting its allowlisted evidence."""
-        snapshot = await self.runtime.inspect(self.host, container_id)
+        exact_id = await self._resource_id(container_id)
+        snapshot = await self.runtime.inspect(self.host, exact_id)
+        if self.context.group and snapshot.id not in self.context.group.summary.container_ids:
+            raise DockSightError("resource_outside_group", "Resource is outside the selected group", 422)
         data = cast(JsonObject, _SNAPSHOT.dump_python(snapshot, mode="json"))
         if tool == "get_container_stats":
             snapshot = replace(snapshot, metrics=await self.runtime.stats(self.host, snapshot.id))
@@ -160,11 +161,11 @@ class DiagnosticTools:
         elif tool == "get_container_logs":
             container = self.context.record("container", self.host, data, snapshot)
             logs = await self.runtime.logs(self.host, snapshot.id, self.log_lines, self.log_bytes)
-            logs = _fit_logs(logs, self.context.remaining_bytes)
+            logs = fit_logs(logs, self.context.remaining_bytes)
             item = self.context.record(
                 "logs",
                 self.host,
-                _log_data(logs),
+                log_data(logs),
                 snapshot,
                 logs,
             )
@@ -178,3 +179,15 @@ class DiagnosticTools:
             item = self.context.record("container", self.host, data, snapshot)
 
         return {"evidence_id": item.id, "data": item.data}
+
+    async def _resource_id(self, value: str) -> str:
+        """Accept full Docker IDs or discovered exact names, never arbitrary ID prefixes or evidence aliases."""
+        if re.fullmatch(r"[a-f0-9]{64}", value):
+            return value
+        rows = self.inventory if self.inventory is not None else await self.runtime.containers(self.host)
+        target = next((row for row in rows if row.name == value), None)
+        if target:
+            return target.id
+        raise DockSightError(
+            "invalid_resource_reference", "Use data.id or the exact container name, not evidence_id", 422
+        )

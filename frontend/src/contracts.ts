@@ -34,12 +34,57 @@ export const logSchema = z.object({
   entries: z.array(z.object({ message: z.string(), timestamp: z.string().nullable() })),
   truncated: z.boolean(),
 });
-const stackSchema = z.object({
+export const groupTargetSchema = z.strictObject({
+  kind: z.enum(['compose', 'swarm']),
+  name: z
+    .string()
+    .min(1)
+    .max(128)
+    .regex(/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/),
+});
+export const stackSchema = z.object({
   name: z.string(),
   kind: z.enum(['compose', 'swarm']),
   total: z.number().int().nonnegative(),
   running: z.number().int().nonnegative(),
   container_ids: z.array(z.string()),
+  members: z
+    .array(
+      z.object({
+        id: z.string(),
+        name: z.string(),
+        kind: z.enum(['container', 'service']),
+        state: z.string(),
+        total: z.number().int().nonnegative(),
+        running: z.number().int().nonnegative(),
+        exit_code: z.number().int().nullable(),
+      }),
+    )
+    .max(200)
+    .optional(),
+  truncated: z.boolean().optional(),
+});
+const causeSchema = z.strictObject({
+  immediate: z.string().min(1).max(600),
+  underlying: z.string().min(1).max(600).nullable(),
+  unknowns: z.array(z.string().min(1).max(240)).max(4),
+  evidence_ids: z.array(z.string()).min(1).max(10),
+});
+export const groupInspectionSchema = z.strictObject({
+  summary: stackSchema,
+  evidence_id: z.string(),
+  inventory_code: z.string().nullable().optional(),
+  logs: z
+    .array(
+      z.strictObject({
+        container_id: z.string(),
+        name: z.string(),
+        state: z.enum(['collected', 'failed', 'not_collected']),
+        evidence_id: z.string().nullable(),
+        code: z.string().nullable(),
+      }),
+    )
+    .max(200),
 });
 const references = { evidence_ids: z.array(z.string()) };
 export const widgetSchema = z.discriminatedUnion('widget_type', [
@@ -95,13 +140,35 @@ export const evidenceSchema = z.object({
   observed_at: z.string(),
   data: z.record(z.string(), z.unknown()),
 });
-export const answerSchema = z.object({
-  schema_version: z.literal(1),
-  summary: z.string(),
-  uncertain: z.boolean(),
-  evidence: z.array(evidenceSchema),
-  widgets: z.array(widgetSchema).max(8),
-});
+export const answerSchema = z
+  .object({
+    schema_version: z.literal(1),
+    summary: z.string(),
+    uncertain: z.boolean(),
+    cause: causeSchema.nullish(),
+    group: groupInspectionSchema.nullish(),
+    evidence: z.array(evidenceSchema),
+    widgets: z.array(widgetSchema).max(16),
+  })
+  .superRefine((answer, context) => {
+    const byId = new Map(answer.evidence.map((row) => [row.id, row]));
+    if (answer.cause?.evidence_ids.some((id) => !byId.has(id)))
+      context.addIssue({ code: 'custom', path: ['cause'], message: 'Cause references unavailable evidence.' });
+    if (!answer.group) return;
+    const source = byId.get(answer.group.evidence_id);
+    if (source?.kind !== 'stack')
+      context.addIssue({ code: 'custom', path: ['group'], message: 'Group requires stack evidence.' });
+    for (const row of answer.group.logs) {
+      if (row.state !== 'collected') continue;
+      const log = row.evidence_id ? byId.get(row.evidence_id) : undefined;
+      if (log?.kind !== 'logs' || log.container_id !== row.container_id || log.host !== source?.host)
+        context.addIssue({
+          code: 'custom',
+          path: ['group', 'logs'],
+          message: 'Log coverage is outside its evidence scope.',
+        });
+    }
+  });
 const envelope = { schema_version: z.literal(1), request_id: z.string(), turn_id: z.string() };
 export const traceStepSchema = z
   .object({
@@ -197,17 +264,22 @@ export type Action = z.infer<typeof actionSchema>;
 export type Widget = z.infer<typeof widgetSchema>;
 export type Evidence = z.infer<typeof evidenceSchema>;
 export type Answer = z.infer<typeof answerSchema>;
+export type GroupTarget = z.infer<typeof groupTargetSchema>;
+export type Stack = z.infer<typeof stackSchema>;
+export type GroupInspection = z.infer<typeof groupInspectionSchema>;
 export type TurnEvent = z.infer<typeof eventSchema>;
 export type TraceStep = z.infer<typeof traceStepSchema>;
 export interface TurnInput {
   host: string;
   query: string;
   session_id?: string;
+  group?: GroupTarget;
 }
 export interface Transport {
   systemStatus(host: string | null, signal: AbortSignal): Promise<SystemStatus>;
   hosts(signal: AbortSignal): Promise<Host[]>;
   containers(host: string, signal: AbortSignal): Promise<Container[]>;
+  stacks(host: string, kind: GroupTarget['kind'], signal: AbortSignal): Promise<Stack[]>;
   container(host: string, id: string, signal: AbortSignal): Promise<Container>;
   logs(host: string, id: string, signal: AbortSignal): Promise<LogBatch>;
   stats(host: string, id: string, signal: AbortSignal): Promise<Metrics>;

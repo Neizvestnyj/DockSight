@@ -5,20 +5,20 @@ Diagram source: [backend.drawio](diagrams/backend.drawio).
 Base path: `/api/v1`. All API routes require `Authorization: Bearer TOKEN`. `/health/live`, `/health/ready`, `/docs`,
 and `/openapi.json` are public.
 
-| Method | Path                                           | Result                                               |
-|--------|------------------------------------------------|------------------------------------------------------|
-| GET    | `/hosts`                                       | Configured host IDs and display names                |
-| GET    | `/system/status?host=local`                     | Safe configuration and independent availability checks |
-| GET    | `/hosts/{host}/containers`                     | Up to 200 inspected containers                       |
-| GET    | `/hosts/{host}/containers/{id}`                | Sanitized snapshot                                   |
-| GET    | `/hosts/{host}/containers/{id}/logs?lines=200` | Bounded timestamped logs                             |
-| GET    | `/hosts/{host}/containers/{id}/stats`          | CPU/memory observations; unavailable values are null |
-| GET    | `/hosts/{host}/stacks?kind=compose`            | Compose groups; `swarm` requires a manager           |
-| GET    | `/widgets/schema`                              | Versioned JSON Schema for response cards             |
-| POST   | `/chat/turns`                                  | Diagnostic SSE stream                                |
-| POST   | `/actions`                                     | Prepare an action without executing it               |
-| GET    | `/actions/{id}`                                | Current action outcome                               |
-| POST   | `/actions/{id}/execute`                        | Explicitly confirmed execution                       |
+| Method | Path                                           | Result                                                 |
+|--------|------------------------------------------------|--------------------------------------------------------|
+| GET    | `/hosts`                                       | Configured host IDs and display names                  |
+| GET    | `/system/status?host=local`                    | Safe configuration and independent availability checks |
+| GET    | `/hosts/{host}/containers`                     | Up to 200 inspected containers                         |
+| GET    | `/hosts/{host}/containers/{id}`                | Sanitized snapshot                                     |
+| GET    | `/hosts/{host}/containers/{id}/logs?lines=200` | Bounded timestamped logs                               |
+| GET    | `/hosts/{host}/containers/{id}/stats`          | CPU/memory observations; unavailable values are null   |
+| GET    | `/hosts/{host}/stacks?kind=compose`            | Compose groups; `swarm` requires a manager             |
+| GET    | `/widgets/schema`                              | Versioned JSON Schema for response cards               |
+| POST   | `/chat/turns`                                  | Diagnostic SSE stream                                  |
+| POST   | `/actions`                                     | Prepare an action without executing it                 |
+| GET    | `/actions/{id}`                                | Current action outcome                                 |
+| POST   | `/actions/{id}/execute`                        | Explicitly confirmed execution                         |
 
 Errors contain `code`, `message`, and a request ID where available. Validation errors omit submitted values. Request
 bodies are limited to 16 KiB. Host IDs resolve through server configuration; callers cannot submit connection URLs. At
@@ -133,14 +133,14 @@ and server UTC `started_at`; unavailable identity fields are `null`. `trace.step
 These events accompany model calls, budget-eligible tool calls, and schema/evidence validation, including the single
 permitted repair attempt. Clients must retain received steps when the turn fails or the connection ends.
 
-| Step field | Contract |
-| --- | --- |
-| `id`, `kind`, `operation` | Turn-scoped ID; `model`, `tool`, or `validation`; approved tool name or application phase |
-| `state` | `running`, `succeeded`, or `failed`; receiving model output does not imply successful validation |
-| `started_at`, `finished_at`, `duration_ms` | Server UTC timestamps and monotonic elapsed milliseconds; unfinished values are `null` |
-| `input_tokens`, `output_tokens` | Provider-reported counts, including real zeroes; missing usage is `null` |
-| `code`, `issues` | Safe failure code and at most eight validation codes/paths, without submitted values or unknown field names |
-| `response`, `response_truncated` | Optional sanitized model response text and an explicit size-limit flag |
+| Step field                                 | Contract                                                                                                    |
+|--------------------------------------------|-------------------------------------------------------------------------------------------------------------|
+| `id`, `kind`, `operation`                  | Turn-scoped ID; `model`, `tool`, or `validation`; approved tool name or application phase                   |
+| `state`                                    | `running`, `succeeded`, or `failed`; receiving model output does not imply successful validation            |
+| `started_at`, `finished_at`, `duration_ms` | Server UTC timestamps and monotonic elapsed milliseconds; unfinished values are `null`                      |
+| `input_tokens`, `output_tokens`            | Provider-reported counts, including real zeroes; missing usage is `null`                                    |
+| `code`, `issues`                           | Safe failure code and at most eight validation codes/paths, without submitted values or unknown field names |
+| `response`, `response_truncated`           | Optional sanitized model response text and an explicit size-limit flag                                      |
 
 Exploration previews normalize the adapter reply as `content` and `tool_calls` (`id`, `name`, `arguments`), including empty
 content and no-call replies. Tool calls and arguments are untrusted model proposals; the preview grants no permission to
@@ -152,13 +152,60 @@ serialization. A preview is at most 16 KiB of UTF-8 text, may have changed forma
 `response_truncated=true` also marks an oversized withheld candidate. Never interpret a preview as authoritative Docker
 data or execute a proposed action directly from it.
 
-Configured budgets allow at most 30 model calls, 100 tool executions, and two validation steps, yielding at most 132
+Configured budgets allow at most 30 model calls, 100 tool executions, two validation steps, and one scope-discovery step,
+yielding at most 133
 trace steps. Calls beyond the tool budget still receive paired `tool_limit` results for provider replay and existing
 tool-progress events; they perform no runtime read and add no execution trace step. Trace events share the request's
 authentication and host scope, add no provider requests, are not persisted, and do not support replay.
 
 SSE comments provide heartbeats. Failures after streaming starts remain HTTP 200 and are represented by `turn.failed`.
 Disconnecting cancels diagnostic work. Streams do not support replay or automatic reconnection.
+
+## Group targets and cause assessment
+
+Before model exploration, exact project/stack names in the question are resolved against Docker metadata. A matching
+Compose project is inspected automatically; otherwise stack names are discovered on a Swarm manager. Exact container
+IDs/names preserve container scope. A whole query token with one substitution, insertion, deletion, or adjacent
+transposition can match a known group name of at least six characters, only when no exact resource matches.
+Ambiguous names require an explicit selection. The report always identifies the canonical observed group.
+Malformed or redacted labels outside the target contract are excluded from automatic matching.
+`resolve_target` progress and trace
+events describe this read; it does not spend a model call. Model tools accept full Docker IDs or exact observed names,
+not ID prefixes or evidence IDs. Optional Swarm discovery failures remain explicit without blocking ordinary container
+diagnosis; an explicit Swarm request still fails if its required metadata cannot be read.
+
+`POST /chat/turns` also accepts an optional `group`: `{"kind":"compose","name":"infra"}` or
+`{"kind":"swarm","name":"infra"}`. The name identifies an observed group on the configured host. Group objects
+reject extra fields, including host overrides. Explicit targets are inspected before model exploration; a failed group
+read produces `turn.failed` without falling back to an individual container. Start a separate session when changing scope.
+
+The read-only `inspect_group` tool provides the same workflow for model-discovered targets. It collects a group summary
+and logs for at most four local problem containers, at most 200 configured lines and 4 KiB per read. Collected payloads
+and evidence references reach the model together. Failed and omitted reads remain distinct. Tool calls keep their normal
+progress and trace events. Group collection never prepares or executes a group-wide mutation.
+
+Stack summaries add `members` and `truncated`. Compose members are containers with state and exit code. Swarm members
+are services, grouped by `com.docker.stack.namespace`; totals count desired/running task replicas. Standalone services
+are excluded. Service/task reads and container identities are bounded to 200. Local container logs do not cover remote
+Swarm nodes. Inventory caps and evidence-budget clipping set `truncated`; counts remain observed totals for the retained
+scope, and a clipped member list is not a complete inventory.
+
+`answer.ready.answer.group` is a server-owned report or `null`, independent of model-selected widgets. It contains the
+summary, its `evidence_id`, optional `inventory_code`, and per-container `logs`: `container_id`, `name`, `state`
+(`collected`, `failed`, `not_collected`), optional evidence reference, and safe error/limit code. Report references remain
+in response evidence even if the model omits their cards. The server fills missing state/log cards for the four collected
+problem containers, without duplicating model-selected cards or inventing missing logs. Responses contain at most 16
+widgets: eight model selections and up to eight factual additions. Subsequent inventory refresh does not replace the
+report.
+Added state cards use the latest snapshot collected for that member during the turn.
+
+Optional `cause` separates model-authored `immediate`, nullable `underlying`, `unknowns` (up to four), and supporting
+`evidence_ids`. References are validated and narrative fields are redacted. For example, a database connection refusal
+can explain startup failure while the reason for database unavailability remains unknown. The existing `uncertain`
+field remains available for older clients and responses.
+Final narrative values follow the question language (English/Russian), unless the operator explicitly asks for another
+language. Log entries, environment values, identifiers, and schema keys remain verbatim. Machine-code-only immediate
+causes are rejected through the existing single repair attempt.
 
 ## Actions
 

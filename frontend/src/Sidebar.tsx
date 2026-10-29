@@ -69,7 +69,14 @@ export function Sidebar({
   return (
     <>
       <div className="brand">
-        <Logo />
+        <button
+          type="button"
+          className="brand-link"
+          aria-label={t('DockSight: return to diagnosis')}
+          onClick={openInvestigation}
+        >
+          <Logo />
+        </button>
         <span className="brand-sub">{t('Docker diagnostics')}</span>
       </div>
       <div className="host-switch">
@@ -106,7 +113,7 @@ export function Sidebar({
       <div className="workspace-nav">
         <Activity size={16} />
         <button className="text-button" onClick={openInvestigation}>
-          {t('Investigations')}
+          {t('Diagnostics')}
         </button>
         <button
           className="icon-button"
@@ -179,6 +186,7 @@ export function Sidebar({
                   <span>{container.name}</span>
                 </span>
                 <Status state={container.state} />
+                {container.compose_project && <span className="container-group">{container.compose_project}</span>}
               </button>
             ))}
           </div>

@@ -1,0 +1,130 @@
+# Contributing
+
+## Development setup
+
+Use Python 3.14, uv, Node.js 24 LTS, and Git. The backend supports Python 3.12+; CI covers 3.12, 3.13, and 3.14.
+Docker and a model provider are needed for real diagnostics, but not for unit tests or the browser demo.
+
+From the repository root:
+
+```sh
+uv sync --project backend --locked
+npm --prefix frontend ci
+uv run --project backend python scripts/git_hooks.py install
+```
+
+Follow the [quick start](README.md#quick-start) to run the application. See [configuration](docs/configuration.md)
+for provider credentials and remote hosts. Never commit `.env` files, tokens, private keys, or raw Docker inspect output.
+The installer preserves custom hooks and stops if an active hook and its `.legacy` backup both exist.
+Resolve that conflict without deleting needed hooks before reinstalling.
+
+## Making changes
+
+- Start branches from `master`; use `feature/<lowercase-kebab-case>` for features.
+- Never commit directly on `master` or push to remote `master`. Submit changes through a pull request.
+  Hooks reject local commits on `master` and every outgoing update to `refs/heads/master`, including deletions.
+  Do not bypass these guards. Re-run the installation command after moving the checkout or recreating its Python environment.
+- Keep changes focused. Explain the problem, resulting behavior, and relevant limitations in the pull request.
+- Use English Conventional Commit headers of at most 72 characters, such as `docs: simplify the quick start`.
+- Update [API contracts](docs/api.md) when transport behavior changes and [architecture](docs/architecture.md)
+  when boundaries change.
+- Before finishing a task or committing, update [CHANGELOG.md](CHANGELOG.md), including documentation and workflow changes.
+  Keep entries brief and group related outcomes. Reuse the current version section for ongoing work on the same branch;
+  do not create a version per task or commit. Mark unfinished releases as `Unreleased`. Documentation alone needs no bump.
+
+Keep Python and Markdown prose within 120 characters per line. Use UTF-8 without BOM and LF line endings.
+Write documentation, comments, docstrings, and runtime messages in English; product copy belongs in the English/Russian
+catalog. Production functions and classes, including private helpers, need brief docstrings. Test helpers and fixtures
+need docstrings; descriptive `test_*` names need one only for additional context.
+
+## Code boundaries
+
+- Backend code lives in `backend/src/docksight/`. Domain code uses the standard library; application code owns ports
+  and use cases; adapters own HTTP, Docker, and provider integration. Bootstrap selects implementations.
+- Frontend code lives in `frontend/` and uses React with strict TypeScript. Validate API data at the transport boundary.
+- Models receive read-only tools. Runtime values, permissions, target validation, and action execution remain server-owned.
+- Keep credentials in browser memory and secrets out of logs. Never automatically retry an ambiguous Docker mutation.
+
+See [backend architecture](docs/architecture.md) and [frontend contracts](docs/frontend.md) before changing those boundaries.
+
+## Checks
+
+Run the shared hooks before submitting changes:
+
+```sh
+uv run --project backend pre-commit run --all-files
+```
+
+Hooks cover formatting, Markdown, Dockerfile rules, secret detection, Python types, architecture, docstrings, complexity,
+tests, and fixture usage. The first run downloads hook environments. Keep `uv` on the Git process's PATH.
+
+For focused backend checks:
+
+```sh
+uv run --project backend ruff check backend examples scripts
+uv run --project backend ruff format --check backend examples scripts
+uv run --project backend pyright --project backend
+uv run --project backend lint-imports --config backend/pyproject.toml
+uv run --project backend interrogate -c backend/pyproject.toml backend/src backend/tests examples scripts
+uv run --directory backend complexipy src tests ../examples ../scripts --plain --failed
+uv run --project backend pytest backend/tests --dup-fixtures
+uv run --project backend pytest backend/tests --dead-fixtures
+```
+
+For frontend changes:
+
+```sh
+npm --prefix frontend run check
+npm --prefix frontend test
+npm --prefix frontend run build
+npm --prefix frontend run test:browser
+```
+
+Browser tests require installed Chrome and run against the production preview with mocked HTTP responses. Build first.
+Set `PLAYWRIGHT_PORT` if the default preview port is occupied. Reports and failure screenshots are temporary test artifacts.
+
+## Protecting master on GitHub
+
+In repository Settings, protect `master` with a branch rule requiring pull requests and the Backend and Frontend checks.
+Apply the rule to administrators as well, disable force pushes, and prevent branch deletion. A solo maintainer can require
+pull requests without requiring another reviewer's approval. Local hooks can be bypassed; server-side protection enforces
+the policy for every client. CI runs after a push and cannot reject an already accepted update.
+
+The local branch guard is excluded from the CI hook run so checks still run on `master` after a pull request merge.
+
+## Tests that use external services
+
+Unit and contract tests must mock provider HTTP calls. Mirror source paths in unit tests:
+`docksight/<path>/<name>.py` maps to `backend/tests/unit/<path>/test_<name>.py`. Group integration tests by contract.
+Test behavior and failure boundaries. Duplicate fixture return values are review hints, not proof of duplicate purpose.
+
+External tests are opt-in. The following examples use PowerShell environment-variable syntax.
+
+For Docker integration tests, start Docker and pull `python:3.12-alpine`, then run:
+
+```powershell
+$env:DOCKSIGHT_TEST_DOCKER = "1"
+uv run --project backend pytest backend/tests/integration -m docker
+Remove-Item Env:DOCKSIGHT_TEST_DOCKER
+```
+
+Fixtures must use unique names and labels and remove only resources they create. Never use global prune.
+To check a built backend image, also set `DOCKSIGHT_TEST_BACKEND_IMAGE=docksight-backend:local` as an environment variable
+and run `backend/tests/integration/test_image.py` with the Docker test flag enabled.
+
+Live model tests require `DOCKSIGHT_TEST_LIVE_MODEL=1` and a configured provider. Cloud tests make paid API calls;
+run them only with supplied credentials and explicit authorization. They are disabled in CI.
+Diagnostic cases live in `backend/tests/fixtures/diagnostics.json`.
+
+Remote read tests require `DOCKSIGHT_TEST_REMOTE=1`, `DOCKSIGHT_HOSTS_FILE`, and `DOCKSIGHT_TEST_HOST`.
+They must not mutate the remote environment.
+
+## Documentation images
+
+Capture the running application in English, including example questions and model explanations. Use Demo for repeatable
+screens without private data and label simulated observations. Keep only screenshots referenced by documentation and
+needed to explain a distinct workflow. Replace outdated captures and delete unused ones; breakpoint and locale checks
+belong in temporary test artifacts.
+
+Edit backend diagrams in [backend.drawio](docs/diagrams/backend.drawio), preserving named pages and the shared hand-drawn
+style. Update the PNG preview and its documentation link together. See [export commands](docs/diagrams/README.md).

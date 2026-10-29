@@ -5,6 +5,7 @@ import {
   hostsSchema,
   logSchema,
   metricsSchema,
+  stackSchema,
   systemStatusSchema,
   type Transport,
   type TurnInput,
@@ -102,6 +103,19 @@ export class ApiClient implements Transport {
         'Container response is outside the selected scope.',
       )
       .parse(await (await this.send(containerPath(host, id), { signal })).json());
+  }
+
+  /** Discover Compose projects or manager-owned Swarm stacks without generation. */
+  async stacks(host: string, kind: 'compose' | 'swarm', signal: AbortSignal) {
+    const rows = z
+      .array(stackSchema)
+      .parse(
+        await (
+          await this.send(`/hosts/${encodeURIComponent(host)}/stacks?${new URLSearchParams({ kind })}`, { signal })
+        ).json(),
+      );
+    if (rows.some((row) => row.kind !== kind)) throw new Error('Group response is outside the selected scope.');
+    return rows;
   }
 
   /** Read at most 200 sanitized log lines without invoking the model. */

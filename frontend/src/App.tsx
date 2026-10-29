@@ -17,6 +17,8 @@ import { ContainerView } from './ContainerView';
 import { useSystemStatus } from './useSystemStatus';
 import { SystemStatusPanel, SystemStatusTrigger } from './SystemStatus';
 import { useInventory } from './useInventory';
+import { useGroups } from './useGroups';
+import { GroupScope } from './GroupScope';
 
 interface ConnectionState {
   client: Transport;
@@ -179,6 +181,7 @@ function Workspace({
     demoClient && showExample && host === 'demo-eu' ? demoClient.remember(demoAnswer('crash_loop', host)) : undefined,
   );
   const investigation = useInvestigation(client, host, initial);
+  const groupScope = useGroups(client, host);
   const availability = useSystemStatus(client, host, !hostLoading, !demo);
   const [statusOpen, setStatusOpen] = useState(false);
   const { inventory, loading, fetching, inventoryError, lastRefreshed, refreshAcknowledged, refresh } = useInventory(
@@ -192,7 +195,16 @@ function Workspace({
   const [scenario, setScenario] = useState<ScenarioId>(demoClient?.scenario ?? 'crash_loop');
   const [menu, setMenu] = useState(false);
   const [help, setHelp] = useState(false);
+  const [composerVisible, setComposerVisible] = useState(false);
   const name = hosts.find((row) => row.id === host)?.name ?? host;
+
+  useEffect(() => {
+    const input = document.getElementById('query');
+    if (!input || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver(([entry]) => setComposerVisible(entry?.isIntersecting ?? false));
+    observer.observe(input);
+    return () => observer.disconnect();
+  }, []);
 
   /** Recheck stale availability before opening its retained observations. */
   function openStatus() {
@@ -245,13 +257,30 @@ function Workspace({
     );
   }
 
+  /** Start an explicitly scoped group investigation without changing historical observations. */
+  function diagnoseGroup() {
+    if (!groupScope.group || investigation.running || availability.blockedReason) return;
+    const { kind, name: groupName } = groupScope.group;
+    openInvestigation();
+    void investigation.run(
+      t('Investigate the {kind} group {name}. Check every member and explain the failures.', {
+        kind: kind === 'compose' ? 'Compose' : 'Swarm',
+        name: groupName,
+      }),
+      true,
+      { kind, name: groupName },
+    );
+  }
+
   const sidebarProps = {
     hosts,
     host,
     hostLoading,
     hostError,
     retryHosts,
-    inventory,
+    inventory: groupScope.group
+      ? inventory.filter((row) => groupScope.group!.container_ids.includes(row.id))
+      : inventory,
     inventoryError,
     lastRefreshed,
     refreshAcknowledged: Boolean(refreshAcknowledged),
@@ -297,9 +326,14 @@ function Workspace({
         >
           <Menu size={19} />
         </button>
-        <span className="mobile-brand">
+        <button
+          type="button"
+          className="mobile-brand brand-link"
+          aria-label={t('DockSight: return to diagnosis')}
+          onClick={() => openInvestigation()}
+        >
           <Logo />
-        </span>
+        </button>
         <div className="breadcrumb">
           <button
             className="workspace-trigger"
@@ -345,7 +379,7 @@ function Workspace({
           </div>
           <div className="heading-actions">
             <LanguageSwitch />
-            {!viewingContainer && (
+            {!viewingContainer && !composerVisible && (
               <button className="secondary" aria-label={t('Ask DockSight')} onClick={() => openInvestigation(true)}>
                 <MessageSquarePlus size={15} />
                 {t('Ask DockSight')}
@@ -353,6 +387,13 @@ function Workspace({
             )}
           </div>
         </div>
+        {!viewingContainer && (
+          <GroupScope
+            scope={groupScope}
+            diagnose={diagnoseGroup}
+            blocked={investigation.running || Boolean(availability.blockedReason)}
+          />
+        )}
         {availability.blockedReason && (
           <div className="dependency-notice" role="status">
             <p>{t(availability.blockedReason)}</p>
@@ -424,6 +465,7 @@ function Workspace({
             setDraft={setDraft}
             host={host}
             blocked={Boolean(availability.blockedReason)}
+            group={groupScope.group ? { kind: groupScope.group.kind, name: groupScope.group.name } : undefined}
           />
         </div>
       </main>

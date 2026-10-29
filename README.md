@@ -1,181 +1,107 @@
 # DockSight
 
-DockSight explains Docker container problems using runtime state, logs, and metrics. It can restart or stop a container
-after explicit user confirmation. This repository contains the backend, a browser frontend, and an HTTP demo client.
+![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
+![React](https://img.shields.io/badge/React-20232A?logo=react&logoColor=61DAFB)
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
 
-## Run locally
+**Docker troubleshooting with AI explanations and runtime evidence.**
 
-Requires Python 3.12+, uv, Docker Engine/Desktop, and a tool-capable model server. Development and the backend image use
-Python 3.14. CI also tests 3.12 and 3.13. Python 3.11 cannot parse the project's type aliases and generic function
-syntax. Run commands from the repository root.
+Find out why a container keeps restarting, ran out of memory, or failed to start. DockSight brings Docker state,
+logs, and model explanations into one workspace, with restart and stop actions you review and confirm.
+
+![DockSight explaining a container restart loop alongside Docker state, logs, and evidence](docs/screenshots/investigation.jpg)
+
+*Demo workspace with simulated observations. No Docker connection or model is required to try it.*
+
+- **Follow the evidence.** Inspect container state, logs, metrics, allowlisted environment values, and Compose context.
+- **Ask follow-up questions.** Investigate a problem in a session scoped to one Docker host.
+- **Choose your model.** Use Ollama locally, OpenAI, Anthropic, or a compatible API.
+- **Review before acting.** Models have read-only tools; restart and stop require separate confirmation.
+- **Work in English or Russian.** Switch the interface language without losing the active investigation.
+
+## Quick start
+
+Clone the repository and run the commands below from its root:
+
+```sh
+git clone https://github.com/Neizvestnyj/DockSight.git
+cd DockSight
+```
+
+### Try the demo
+
+Requires [Node.js 24 LTS](https://nodejs.org/).
+
+```sh
+npm --prefix frontend ci
+npm --prefix frontend run dev
+```
+
+Open the printed URL, normally [localhost:5173](http://localhost:5173). Choose a scenario such as **Crash loop** or
+**Out of memory**, inspect its evidence, and review a simulated action. Demo never changes Docker resources.
+
+### Connect your Docker environment
+
+Also requires [Python 3.12+](https://www.python.org/), [uv](https://docs.astral.sh/uv/),
+[Docker Engine or Desktop](https://docs.docker.com/get-started/get-docker/), and [Ollama](https://ollama.com/).
+Development uses Python 3.14. Start Docker and Ollama before continuing.
+
+**1. Prepare the backend.** The commands below use PowerShell; on Linux/macOS, replace `Copy-Item` with `cp`.
 
 ```powershell
 uv sync --project backend --locked
 Copy-Item .env.example .env
 uv run --project backend python -c "import secrets; print(secrets.token_urlsafe(32))"
+ollama pull qwen3.5:9b
 ```
 
-Replace `DOCKSIGHT_API_TOKEN` in `.env` with the generated value. Start Ollama and ensure `qwen3.5:9b` is available, or
-use a configuration from `examples/providers/`. OpenAI and Anthropic also accept their standard API-key environment
-variables. Choose a model that supports tools and structured output.
+Set `DOCKSIGHT_API_TOKEN` in `.env` to the generated token. Keep the other defaults for local Ollama, or choose
+[another provider](docs/configuration.md#model-providers).
 
-```powershell
+**2. Start the backend in one terminal.**
+
+```sh
 uv run --project backend uvicorn docksight.main:create_app --factory --host 127.0.0.1 --port 8000 --workers 1
 ```
 
-Open [API documentation](http://127.0.0.1:8000/docs) and enter the token through Authorize. Health endpoints check
-application readiness without contacting Docker or a model. Provider requests happen only during diagnostic turns.
+**3. Keep the frontend running in another terminal** using the demo commands above. Choose **Connect API**, keep
+`/api/v1`, and enter the same token. Select a host and container, then ask what went wrong. The token stays in browser
+memory. Interactive API documentation is available at [localhost:8000/docs](http://localhost:8000/docs).
 
-On Linux/macOS, use `cp .env.example .env` instead of `Copy-Item`.
+For a reproducible failure and confirmed restart, follow the [working example](docs/examples.md#docker-example).
 
-## Browser frontend
+## How it works
 
-Requires Node.js 24 LTS. From the repository root:
+The backend collects Docker observations, asks the model to explain them, validates its evidence references, and returns
+typed UI cards. Runtime values and permissions come from the backend. Confirmed actions use a separate execution path.
 
-```powershell
-rtk proxy npm --prefix frontend ci
-rtk proxy npm --prefix frontend run dev
-```
+![Diagnostic data flow between the browser, backend, Docker, and model](docs/diagrams/system-overview.png)
 
-Open the printed local URL. The initial workspace is explicitly labeled Demo and uses local fixtures; it requires
-neither Docker nor a model. Use the scenario selector for examples and **Test error states** for simulated failures.
-
-For real observations, start the backend above, choose **Connect API**, keep `/api/v1`, and enter the backend bearer
-token. Vite forwards `/api` to `http://127.0.0.1:8000` in development and local preview. A remote API base must use HTTPS
-and allow the frontend origin in `DOCKSIGHT_CORS_ORIGINS`. The browser keeps the token only in memory.
-
-The language selector follows the browser's language preferences by default and supports English and Russian overrides.
-It remembers only the language preference. Logs, environment values, resource names, and API/model text stay verbatim.
-
-```powershell
-rtk proxy npm --prefix frontend run check
-rtk proxy npm --prefix frontend test
-rtk proxy npm --prefix frontend run build
-rtk proxy npm --prefix frontend run preview -- --port 4173
-rtk proxy npm --prefix frontend run test:browser
-```
-
-Browser checks use an installed Chrome. The Frontend workflow runs checks, tests, a production build, and browser
-scenarios on pull requests to `master`, pushes to `master`, and manual dispatches.
-See [frontend design and operation](docs/frontend.md) for contracts, deployment, and limitations.
-
-## System overview
-
-This view follows a diagnostic question. The backend collects Docker facts, asks a model to explain them, and checks
-the response before returning it to the user.
-
-![Diagnostic data flow between the client, backend, Docker, and model](docs/diagrams/system-overview.png)
-
-**Restart/stop follows a separate path:** user confirms a prepared command, the backend rechecks the target, and Docker
-executes the operation. The model has read-only tools.
-
-Responses contain an explanation and structured data for container status, logs, environment values, or stack summaries.
-A UI can display this data as cards. Available commands have server-issued action IDs and require a separate
-confirmation request.
-
-Read the [code dependency map](docs/architecture.md#dependencies),
-[diagnostic sequence](docs/api.md#diagnostic-stream), and [confirmed action sequence](docs/api.md#actions).
-
-## Backend architecture
-
-Use cases and domain rules form the core. Inbound adapters call use cases; outbound adapters implement the ports owned
-by the application. `bootstrap.py` selects and connects the implementations.
-
-![Hexagonal backend with core-owned ports and technology adapters](docs/diagrams/hexagonal-architecture.png)
-
-Arrows show runtime calls. Source-code dependencies point inward: the core does not import adapters. Memory adapters
-run in the same process as the core.
-
-[Edit backend diagrams](docs/diagrams/backend.drawio) · [Dependency rules](docs/architecture.md#dependencies)
-
-## Working example
-
-The demo worker exits on its first start and runs after a confirmed restart. Its retry marker is stored in a dedicated
-demo volume.
-
-```powershell
-docker compose -f examples/compose.yaml up -d
-uv run --project backend python examples/demo.py diagnose
-```
-
-Review the diagnosis, evidence, and `actions` in the returned card. Copy an action ID and confirm it explicitly:
-
-```powershell
-uv run --project backend python examples/demo.py execute ACTION_ID --confirm --key review-restart-1
-uv run --project backend python examples/demo.py state ACTION_ID
-docker compose -f examples/compose.yaml ps -a
-```
-
-Reuse the same idempotency key when retrying that execution request. To reset the example, `docker compose -f
-examples/compose.yaml down -v` removes only this demo stack and its state volume.
+Sessions and action records are temporary. Use one backend worker; restarting it clears that state. DockSight provides
+diagnosis and confirmed container actions; it has no persistent monitoring history or stack deployment workflow.
 
 ## Configuration
 
-Settings use the `DOCKSIGHT_` prefix and can be loaded from the root `.env`. Array settings use JSON, for example
-`DOCKSIGHT_ENV_ALLOWLIST=["APP_ENV"]`.
+Settings are loaded from environment variables or the root `.env` file.
 
-| Setting                              | Default                  | Purpose                                               |
-|--------------------------------------|--------------------------|-------------------------------------------------------|
-| `PROVIDER` / `MODEL`                 | `ollama` / `qwen3.5:9b`  | Independent provider and model selection              |
-| `MODEL_BASE_URL` / `MODEL_API_KEY`   | Provider default / unset | Server endpoint and credentials                       |
-| `MODEL_STRUCTURED_OUTPUT`            | `native`                 | Compatible adapter also supports `tool`               |
-| `OLLAMA_CONTEXT_LENGTH`              | `16384` tokens           | Native Ollama context for prompts, tools, and replies |
-| `HOSTS_FILE`                         | unset                    | Configured hosts; see `examples/hosts.yaml`           |
-| `ENV_ALLOWLIST` / `CORS_ORIGINS`     | `[]` / `[]`              | Explicit environment fields and browser origins       |
-| `MAX_MODEL_CALLS` / `MAX_TOOL_CALLS` | `6` / `12`               | Per-turn budgets, including finalization and repair   |
-| `MODEL_TIMEOUT` / `TURN_TIMEOUT`     | `60` / `180` seconds     | Request and total turn deadlines                      |
-| `LOG_LINES` / `LOG_BYTES`            | `200` / `65536`          | Log response bounds                                   |
+| Variable | Purpose |
+|----------|---------|
+| `DOCKSIGHT_API_TOKEN` | Required bearer token, at least 24 characters |
+| `DOCKSIGHT_PROVIDER` | `ollama` (default), `openai`, `anthropic`, or `compatible` |
+| `DOCKSIGHT_MODEL` | Model name; defaults to `qwen3.5:9b` |
+| `DOCKSIGHT_MODEL_BASE_URL` | Custom model endpoint |
+| `DOCKSIGHT_MODEL_API_KEY` | Credentials for the selected provider |
+| `DOCKSIGHT_HOSTS_FILE` | YAML configuration for local, SSH, or mTLS Docker hosts |
 
-Local Docker follows the current context and Docker environment variables. SSH uses the Docker SDK's Paramiko transport,
-SSH agent/config, and verified `~/.ssh/known_hosts`. Use `ProxyCommand` for jump hosts. TCP hosts require mTLS. Inspect
-and environment fields are allowlisted; log redaction is best effort. Cloud providers receive the sanitized evidence
-selected by the diagnostic loop.
+See [configuration and deployment](docs/configuration.md) for provider examples, CORS, limits, and Docker connections.
 
-SSH connection, banner, authentication, and channel waits use bounded timeouts. DNS resolution, SSH agent operations,
-and external `ProxyCommand` processes also depend on system-level limits.
+## Documentation
 
-Native Ollama requests set an explicit context window. A small server default can truncate the original query and tool
-results. Increase `DOCKSIGHT_OLLAMA_CONTEXT_LENGTH` for larger inventories or logs; larger contexts need more memory.
-
-## Development
-
-```powershell
-uv run --project backend pre-commit install
-uv run --project backend pre-commit run --all-files
-```
-
-The installed hooks check files, Markdown, Dockerfile, secrets, Python quality, architecture, docstrings, cognitive
-complexity, tests, and Conventional Commit messages. Initial setup downloads the hook environments; subsequent runs
-reuse them. `uv` is required on the Git process's PATH. Python and Markdown prose use a 120-character line limit;
-cognitive complexity is limited to 10. Descriptive test names need docstrings only when extra context is useful.
-
-Run individual backend checks with:
-
-```powershell
-uv run --project backend ruff check backend examples
-uv run --project backend ruff format --check backend examples
-uv run --project backend pyright --project backend
-uv run --project backend lint-imports --config backend/pyproject.toml
-uv run --project backend interrogate -c backend/pyproject.toml backend/src backend/tests examples
-uv run --directory backend complexipy src tests ../examples --plain --failed
-uv run --project backend pytest backend/tests
-```
-
-Docker tests are opt-in. Pull `python:3.12-alpine` first, then set `DOCKSIGHT_TEST_DOCKER=1` and run `pytest
-backend/tests/integration -m docker` through `uv run --project backend`. They remove only containers they create. Live
-model tests use `DOCKSIGHT_TEST_LIVE_MODEL=1` and the configured provider; cloud tests make paid API calls and are never
-enabled in CI. Diagnostic cases are stored in `backend/tests/fixtures/diagnostics.json`. Remote read tests use
-`DOCKSIGHT_TEST_REMOTE=1`, `DOCKSIGHT_HOSTS_FILE`, and `DOCKSIGHT_TEST_HOST`. They never mutate the remote environment.
-
-Build the backend image with `docker build -f backend/Dockerfile -t docksight-backend:local .`. It uses Python 3.14 on
-Debian slim and runs as UID 10001. Slim retains glibc compatibility for native dependency wheels; Alpine uses musl and
-is reserved for the small demo worker. Mount host configuration and credentials read-only; grant the socket's group
-explicitly if using a local Docker socket. When containerized, Ollama's endpoint must be reachable from the container,
-for example through `host.docker.internal` on Docker Desktop. Set `DOCKSIGHT_TEST_BACKEND_IMAGE=docksight-backend:local`
-alongside the Docker test flag to run the built-image health check.
-
-Use one backend worker. Sessions, action records, and idempotency state live in bounded memory and disappear on restart.
-An indeterminate action fences its target until the operator checks Docker and restarts the backend. Environment
-editing and stack deployment are not included.
-
-[Architecture](docs/architecture.md) · [API contract](docs/api.md)
+- [Documentation index](docs/README.md) — guides and technical references.
+- [Usage examples](docs/examples.md) — browser investigation and a reproducible Docker failure.
+- [HTTP API](docs/api.md) — authentication, reads, diagnostic streams, and confirmed actions.
+- [Architecture](docs/architecture.md) — backend boundaries and diagrams.
+- [Contributing](CONTRIBUTING.md) — development setup, checks, and contribution guidelines.
+- [Changelog](CHANGELOG.md) — release changes.

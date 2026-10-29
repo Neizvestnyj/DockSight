@@ -6,9 +6,16 @@ import pytest
 
 from docksight.application.diagnostics.context import EvidenceContext
 from docksight.application.views.assembler import ViewAssembler
-from docksight.application.views.schemas import ActionView, ContainerStatusCard, DiagnosisProposal
+from docksight.application.views.schemas import (
+    ActionView,
+    ContainerStatusCard,
+    DiagnosisProposal,
+    GroupInspection,
+    GroupLogResult,
+)
 from docksight.domain.actions import Operation
 from docksight.domain.errors import DockSightError
+from docksight.domain.runtime import StackSummary
 from tests.fakes import snapshot
 
 
@@ -109,3 +116,57 @@ async def test_container_card_rejects_mixed_hosts() -> None:
     )
     with pytest.raises(DockSightError, match="one exact container"):
         await ViewAssembler().build(proposal, context, "alice")
+
+
+async def test_cause_references_must_resolve_even_when_the_summary_has_no_references() -> None:
+    proposal = DiagnosisProposal.model_validate(
+        {
+            "summary": "Failure",
+            "uncertain": True,
+            "evidence_ids": [],
+            "widgets": [],
+            "cause": {
+                "immediate": "Database connection failed",
+                "underlying": None,
+                "unknowns": ["Database availability"],
+                "evidence_ids": ["invented"],
+            },
+        }
+    )
+    with pytest.raises(DockSightError, match="unknown evidence"):
+        await ViewAssembler().build(proposal, EvidenceContext(), "alice")
+
+
+async def test_added_group_status_uses_the_latest_observation_and_its_action_policy() -> None:
+    old = snapshot()
+    latest = replace(old, state="running", observed_at=old.observed_at + timedelta(seconds=1))
+    summary = StackSummary("infra", "compose", 1, 0, (old.id,))
+    context = EvidenceContext()
+    context.record("stack", "local", {}, stacks=(summary,))
+    context.record("container", "local", {}, old)
+    context.record("container", "local", {}, latest)
+    context.group = GroupInspection(
+        summary=summary,
+        evidence_id="e1",
+        logs=[GroupLogResult(container_id=old.id, name=old.name, state="failed", code="runtime_unavailable")],
+    )
+
+    async def prepare(actor: str, host: str, container_id: str, operation: Operation) -> ActionView:
+        """Expose the operation selected by the observed state without executing a mutation."""
+        return ActionView(
+            id=str(uuid4()),
+            host=host,
+            container_id=container_id,
+            operation=operation,
+            expires_at=latest.observed_at + timedelta(minutes=5),
+            state="prepared",
+            message="Confirm",
+        )
+
+    proposal = DiagnosisProposal(summary="Observed", uncertain=True, evidence_ids=["e1"], widgets=[])
+    answer = await ViewAssembler(prepare).build(proposal, context, "alice")
+    card = answer.widgets[0]
+    assert isinstance(card, ContainerStatusCard)
+    assert card.snapshot == latest
+    assert card.evidence_ids == ["e3"]
+    assert {action.operation for action in card.actions} == {"restart", "stop"}

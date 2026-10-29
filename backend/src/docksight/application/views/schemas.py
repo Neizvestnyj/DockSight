@@ -1,3 +1,4 @@
+import re
 from datetime import datetime
 from typing import Annotated, Literal, Self
 
@@ -12,6 +13,52 @@ class Contract(BaseModel):
     """Forbid unrecognized fields in application and HTTP data contracts."""
 
     model_config = ConfigDict(extra="forbid")
+
+
+class GroupTarget(Contract):
+    """Select one observed Compose project or Swarm stack on the current host."""
+
+    kind: Literal["compose", "swarm"]
+    name: str = Field(min_length=1, max_length=128, pattern=r"^[a-zA-Z0-9][a-zA-Z0-9_.-]*$")
+
+
+class GroupLogResult(Contract):
+    """Report what was actually collected for a local problem container."""
+
+    container_id: str
+    name: str
+    state: Literal["collected", "failed", "not_collected"]
+    evidence_id: str | None = None
+    code: str | None = None
+
+
+class GroupInspection(Contract):
+    """Keep server-owned member counts and bounded log coverage separate from model claims."""
+
+    summary: StackSummary
+    evidence_id: str
+    logs: list[GroupLogResult] = Field(max_length=200)
+    inventory_code: str | None = None
+
+
+class CauseAssessment(Contract):
+    """Separate an evidence-backed immediate failure from deeper explanations and unknowns."""
+
+    immediate: str = Field(
+        min_length=1,
+        max_length=600,
+        description="A human-readable explanation in the operator's language, never a machine error code.",
+    )
+    underlying: str | None = Field(default=None, min_length=1, max_length=600)
+    unknowns: list[Annotated[str, Field(min_length=1, max_length=240)]] = Field(default_factory=list, max_length=4)
+    evidence_ids: list[str] = Field(min_length=1, max_length=10)
+
+    @model_validator(mode="after")
+    def readable_cause(self) -> Self:
+        """Reject identifier-only explanations so the single repair can request useful prose."""
+        if re.fullmatch(r"[a-z][a-z0-9]*(?:_[a-z0-9]+)+", self.immediate):
+            raise ValueError("An immediate cause must be a human-readable explanation, not a machine error code")
+        return self
 
 
 class WidgetProposal(Contract):
@@ -39,6 +86,7 @@ class DiagnosisProposal(Contract):
     summary: str = Field(min_length=1, max_length=2000)
     evidence_ids: list[str] = Field(max_length=20)
     uncertain: bool
+    cause: CauseAssessment | None = None
     widgets: list[WidgetProposal] = Field(max_length=8)
 
     @model_validator(mode="after")
@@ -134,5 +182,7 @@ class DiagnosisResponse(Contract):
     schema_version: Literal[1] = 1
     summary: str
     uncertain: bool
+    cause: CauseAssessment | None = None
+    group: GroupInspection | None = None
     evidence: list[EvidenceRef]
-    widgets: list[Widget]
+    widgets: list[Widget] = Field(max_length=16)
