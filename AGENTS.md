@@ -122,8 +122,12 @@ actions. Models provide explanations and select from approved tools and widgets.
   Run `uv run --project backend pre-commit run --all-files` before committing implementation work.
   Hooks enforce branch protection, formatting, types, architecture, docstrings, complexity, tests, Dockerfile rules,
   secret detection, and Conventional Commits. CI runs the code checks through `uv`; branch guards apply locally.
-- Start the backend at `0.1.0`. Before releases, decide whether behavior warrants a version and changelog update.
-  Documentation-only changes need neither.
+- Update `CHANGELOG.md` at the end of every task that changes repository files, before committing or reporting completion.
+  Cover the delivered behavior, documentation, or development workflow; consolidate related changes and avoid duplicates.
+- Keep updating the same version section while work continues on the same feature branch. Do not create a version per task
+  or commit. Mark an unfinished release as `Unreleased`; choose a new version when preparing a separate release.
+- Keep release notes short, specific, and understandable to users. Group changes by outcome rather than listing commits.
+  Documentation and workflow changes require a changelog update but do not by themselves require a version bump.
 
 ## Frontend
 

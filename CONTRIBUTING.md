@@ -27,7 +27,10 @@ Resolve that conflict without deleting needed hooks before reinstalling.
 - Keep changes focused. Explain the problem, resulting behavior, and relevant limitations in the pull request.
 - Use English Conventional Commit headers of at most 72 characters, such as `docs: simplify the quick start`.
 - Update [API contracts](docs/api.md) when transport behavior changes and [architecture](docs/architecture.md)
-  when boundaries change. Record release changes in [CHANGELOG.md](CHANGELOG.md); documentation alone needs no version bump.
+  when boundaries change.
+- Before finishing a task or committing, update [CHANGELOG.md](CHANGELOG.md), including documentation and workflow changes.
+  Keep entries brief and group related outcomes. Reuse the current version section for ongoing work on the same branch;
+  do not create a version per task or commit. Mark unfinished releases as `Unreleased`. Documentation alone needs no bump.
 
 Keep Python and Markdown prose within 120 characters per line. Use UTF-8 without BOM and LF line endings.
 Write documentation, comments, docstrings, and runtime messages in English; product copy belongs in the English/Russian
