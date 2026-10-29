@@ -17,6 +17,9 @@ jobs:
           cache-dependency-glob: backend/uv.lock
       - run: uv sync --project backend --locked
       - run: uv run --project backend pre-commit run --all-files
+        env:
+          # Branch guards apply locally; CI also validates master after PR merges.
+          SKIP: no-commit-to-branch
       - run: uv run --project backend pytest backend/tests/integration -m docker
         env:
           DOCKSIGHT_TEST_DOCKER: "1"

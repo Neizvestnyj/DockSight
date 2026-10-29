@@ -10,15 +10,20 @@ From the repository root:
 ```sh
 uv sync --project backend --locked
 npm --prefix frontend ci
-uv run --project backend pre-commit install
+uv run --project backend python scripts/git_hooks.py install
 ```
 
 Follow the [quick start](README.md#quick-start) to run the application. See [configuration](docs/configuration.md)
 for provider credentials and remote hosts. Never commit `.env` files, tokens, private keys, or raw Docker inspect output.
+The installer preserves custom hooks and stops if an active hook and its `.legacy` backup both exist.
+Resolve that conflict without deleting needed hooks before reinstalling.
 
 ## Making changes
 
 - Start branches from `master`; use `feature/<lowercase-kebab-case>` for features.
+- Never commit directly on `master` or push to remote `master`. Submit changes through a pull request.
+  Hooks reject local commits on `master` and every outgoing update to `refs/heads/master`, including deletions.
+  Do not bypass these guards. Re-run the installation command after moving the checkout or recreating its Python environment.
 - Keep changes focused. Explain the problem, resulting behavior, and relevant limitations in the pull request.
 - Use English Conventional Commit headers of at most 72 characters, such as `docs: simplify the quick start`.
 - Update [API contracts](docs/api.md) when transport behavior changes and [architecture](docs/architecture.md)
@@ -53,12 +58,12 @@ tests, and fixture usage. The first run downloads hook environments. Keep `uv` o
 For focused backend checks:
 
 ```sh
-uv run --project backend ruff check backend examples
-uv run --project backend ruff format --check backend examples
+uv run --project backend ruff check backend examples scripts
+uv run --project backend ruff format --check backend examples scripts
 uv run --project backend pyright --project backend
 uv run --project backend lint-imports --config backend/pyproject.toml
-uv run --project backend interrogate -c backend/pyproject.toml backend/src backend/tests examples
-uv run --directory backend complexipy src tests ../examples --plain --failed
+uv run --project backend interrogate -c backend/pyproject.toml backend/src backend/tests examples scripts
+uv run --directory backend complexipy src tests ../examples ../scripts --plain --failed
 uv run --project backend pytest backend/tests --dup-fixtures
 uv run --project backend pytest backend/tests --dead-fixtures
 ```
@@ -74,6 +79,15 @@ npm --prefix frontend run test:browser
 
 Browser tests require installed Chrome and run against the production preview with mocked HTTP responses. Build first.
 Set `PLAYWRIGHT_PORT` if the default preview port is occupied. Reports and failure screenshots are temporary test artifacts.
+
+## Protecting master on GitHub
+
+In repository Settings, protect `master` with a branch rule requiring pull requests and the Backend and Frontend checks.
+Apply the rule to administrators as well, disable force pushes, and prevent branch deletion. A solo maintainer can require
+pull requests without requiring another reviewer's approval. Local hooks can be bypassed; server-side protection enforces
+the policy for every client. CI runs after a push and cannot reject an already accepted update.
+
+The local branch guard is excluded from the CI hook run so checks still run on `master` after a pull request merge.
 
 ## Tests that use external services
 

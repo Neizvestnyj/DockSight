@@ -9,7 +9,10 @@ actions. Models provide explanations and select from approved tools and widgets.
 - Follow `docs/architecture.md` and keep `docs/api.md` aligned with the implementation.
 - Stay on the current branch unless the user explicitly approves a branch switch. Never run `git switch`,
   `git checkout`, or any equivalent branch-changing operation without that approval. Backend or frontend ownership
-  does not authorize switching branches. Commit task changes on the current branch unless the user directs otherwise.
+  does not authorize switching branches. Commit task changes on the current feature branch unless the user directs otherwise.
+- Never commit directly on `master` or push any ref to remote `master`, including explicit refspecs and deletions.
+  If the current branch is `master`, ask for approval to create or switch to a feature branch before committing.
+  Do not bypass branch guards with `--no-verify`, `SKIP`, alternate hook paths, or disabled hooks.
 - Use `master` as the base branch and `feature/<lowercase-kebab-case>` for new features when the user approves creating
   or switching to a branch.
 - Run shell commands through `rtk`. On Windows, prefer `rtk read`, `rtk rg`, and `rtk proxy` for commands that need
@@ -115,10 +118,10 @@ actions. Models provide explanations and select from approved tools and widgets.
   credentials and explicit authorization.
 - Isolate Docker integration fixtures with labels and unique names. Cleanup must address only resources created by that
   fixture; never use global prune.
-- Install pre-commit and commit-msg hooks with `uv run --project backend pre-commit install`. Run `uv run --project
-  backend pre-commit run --all-files` before committing implementation work. Hooks enforce formatting, types,
-  architecture, docstrings, complexity, tests, Dockerfile rules, secret detection, and Conventional Commits. CI runs the
-  same checks through `uv`.
+- Install pre-commit, commit-msg, and pre-push hooks with `uv run --project backend python scripts/git_hooks.py install`.
+  Run `uv run --project backend pre-commit run --all-files` before committing implementation work.
+  Hooks enforce branch protection, formatting, types, architecture, docstrings, complexity, tests, Dockerfile rules,
+  secret detection, and Conventional Commits. CI runs the code checks through `uv`; branch guards apply locally.
 - Start the backend at `0.1.0`. Before releases, decide whether behavior warrants a version and changelog update.
   Documentation-only changes need neither.
 
