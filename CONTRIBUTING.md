@@ -116,6 +116,34 @@ Live model tests require `DOCKSIGHT_TEST_LIVE_MODEL=1` and a configured provider
 run them only with supplied credentials and explicit authorization. They are disabled in CI.
 Diagnostic cases live in `backend/tests/fixtures/diagnostics.json`.
 
+### Live Docker and local-model end-to-end suite
+
+This separate suite runs the real HTTP/SSE API, Docker adapter, and Ollama adapter. It creates a unique Compose project
+per case with pinned images and an internal network, publishes no container ports, and exposes only fixture resources
+to the model. Setup and cleanup are restricted to the run's ownership labels. The API uses a random in-memory token,
+an ephemeral loopback port, and isolated settings; it does not read your `.env` or call your running backend.
+
+Start Docker and local Ollama, install the desired models yourself, then run from the repository root:
+
+```sh
+uv run --project backend pytest backend/tests/integration/live_e2e --live-e2e --e2e-model qwen3.5:9b --e2e-model ministral-3:8b-instruct-2512-q4_K_M -vv -s
+```
+
+Repeat `--e2e-model` to add models. `--e2e-model-url` accepts loopback endpoints only. Models are never downloaded by the
+suite; missing models fail preflight. Docker pulls missing pinned fixture images. Run cases sequentially, without xdist.
+Ollama aliases marked as remote/cloud models are rejected before fixture setup or generation.
+The workloads cover a refused database connection and invalid Grafana alerting configuration alongside healthy nginx,
+an actual memory-limited OOM kill, a crash loop, truncated logs, and an exit 137 without an OOM kill.
+
+Select a smaller matrix with repeated `--e2e-case` options: `compose-explicit`, `compose-chat`, `compose-typo`, `oom`,
+`crash-loop`, `truncated-logs`, or `unknown-exit`. Assertions check runtime facts, resource identities, card coverage,
+observed log content, and evidence references rather than exact model prose. This suite covers the backend HTTP path;
+the browser suite above covers frontend rendering separately.
+
+Public SSE responses and allowlisted fixture facts are saved under `.test-artifacts/live-e2e/` for successful and failed
+diagnoses. These files are ignored by Git and contain no API token or request headers. Ordinary test runs skip live
+diagnoses before any Docker/model access. The existing fake-runtime live-model tests remain separate.
+
 Remote read tests require `DOCKSIGHT_TEST_REMOTE=1`, `DOCKSIGHT_HOSTS_FILE`, and `DOCKSIGHT_TEST_HOST`.
 They must not mutate the remote environment.
 

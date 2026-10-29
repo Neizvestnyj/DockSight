@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Add an opt-in live end-to-end suite for isolated Docker Compose workloads and configurable local Ollama model matrices,
+  with exact-resource card checks, retained diagnostic artifacts, and ownership-scoped cleanup.
+
 ## v0.3.0
 
 - Diagnose Compose projects and Swarm stacks with participant status, bounded failure logs, and explicit coverage gaps.

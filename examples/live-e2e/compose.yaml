@@ -1,0 +1,64 @@
+x-worker: &worker
+  image: python:3.12-alpine@sha256:b658b05ce9c4eb97ec6fc19424818a1f31993659c2b505a532f470e83807815d
+  entrypoint: [python, -u, /e2e/workload.py]
+  volumes:
+    - ./workload.py:/e2e/workload.py:ro
+  labels:
+    com.docksight.e2e: ${DOCKSIGHT_E2E_OWNER:?Set a unique run owner}
+  environment:
+    APP_ENV: live-e2e
+  mem_limit: 64m
+  memswap_limit: 64m
+  cpus: 0.5
+  restart: "no"
+  networks: [fixture]
+
+services:
+  backend:
+    <<: *worker
+    command: [dependency]
+  grafana:
+    image: grafana/grafana:13.2@sha256:ac461fb352abc50da10a51c7d02462e9c05488f11f53f14b3ad79a8145f638a0
+    environment:
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_PLUGINS_PREINSTALL_DISABLED: "true"
+    volumes:
+      - ./alerting.yaml:/etc/grafana/provisioning/alerting/fixture.yaml:ro
+    labels:
+      com.docksight.e2e: ${DOCKSIGHT_E2E_OWNER:?Set a unique run owner}
+    mem_limit: 512m
+    cpus: 1
+    restart: "no"
+    networks: [fixture]
+  nginx:
+    image: nginx:1.28-alpine@sha256:a8b39bd9cf0f83869a2162827a0caf6137ddf759d50a171451b335cecc87d236
+    labels:
+      com.docksight.e2e: ${DOCKSIGHT_E2E_OWNER:?Set a unique run owner}
+    mem_limit: 64m
+    cpus: 0.5
+    networks: [fixture]
+    healthcheck:
+      test: [CMD, nginx, -t]
+      interval: 1s
+      timeout: 2s
+      retries: 10
+  oom:
+    <<: *worker
+    command: [oom]
+  crash:
+    <<: *worker
+    command: [crash]
+    restart: on-failure
+  logs:
+    <<: *worker
+    command: [logs]
+  unknown:
+    <<: *worker
+    command: [unknown]
+
+networks:
+  fixture:
+    internal: true
+    labels:
+      com.docksight.e2e: ${DOCKSIGHT_E2E_OWNER:?Set a unique run owner}
