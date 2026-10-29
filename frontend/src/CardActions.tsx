@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowUpRight, ChevronDown } from 'lucide-react';
+import { ArrowUpRight, ChevronDown, SlidersHorizontal } from 'lucide-react';
 import type { Action } from './contracts';
 import { useLocale } from './locale';
 import { stateLabel } from './messages';
@@ -51,7 +51,7 @@ export function CardActions({
   return (
     <div className="actions">
       {suggested && (
-        <button className="secondary small" onClick={() => review(outcomes[suggested.id] ?? suggested)}>
+        <button className="secondary small action-trigger" onClick={() => review(outcomes[suggested.id] ?? suggested)}>
           {label(suggested)}
           <ArrowUpRight size={13} />
         </button>
@@ -71,13 +71,14 @@ export function CardActions({
           }}
         >
           <summary
-            className="secondary small"
+            className="secondary small action-trigger"
             ref={trigger}
             onClick={(event) => {
               event.preventDefault();
               setOpen(!open);
             }}
           >
+            <SlidersHorizontal size={14} aria-hidden="true" />
             {t('Actions')}
             <ChevronDown size={13} />
           </summary>

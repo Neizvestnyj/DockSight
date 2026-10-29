@@ -20,6 +20,9 @@ test('ordinary operations stay in Actions with keyboard dismissal and confirmati
   await page.getByRole('combobox', { name: 'Scenario' }).selectOption('running');
   const card = page.getByRole('group', { name: 'Container status', exact: true });
   const trigger = card.locator('.card-actions-menu summary');
+  expect((await trigger.boundingBox())!.height).toBeGreaterThanOrEqual(
+    (page.viewportSize()?.width ?? 1440) <= 560 ? 44 : 32,
+  );
   await expect(card.getByRole('button', { name: 'Review restart' })).toHaveCount(0);
   await expect(card.getByRole('button', { name: 'Review stop' })).toHaveCount(0);
   await trigger.focus();

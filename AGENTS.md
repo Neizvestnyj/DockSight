@@ -116,6 +116,10 @@ actions. Models provide explanations and select from approved tools and widgets.
   `pytest --dup-fixtures`; duplicate return values are review hints, not proof that fixtures have the same purpose.
 - Mock provider HTTP calls in automated tests. Live model calls are opt-in; cloud smoke tests require supplied
   credentials and explicit authorization.
+- Choose live Docker/local-model end-to-end runs and additional scenarios according to integration risk. Frontend-only
+  presentation changes normally need relevant browser checks, not live model runs. Reconsider live coverage when changing
+  provider/tool orchestration, evidence assembly, API contracts, or client behavior that affects real diagnoses. State
+  which live checks were run or omitted and why; a backend change alone does not require the whole live matrix.
 - Isolate Docker integration fixtures with labels and unique names. Cleanup must address only resources created by that
   fixture; never use global prune.
 - Install pre-commit, commit-msg, and pre-push hooks with `uv run --project backend python scripts/git_hooks.py install`.
@@ -145,4 +149,5 @@ actions. Models provide explanations and select from approved tools and widgets.
   Never retry a Docker mutation automatically. Require separate confirmation of the exact server-prepared target.
 - Run `rtk proxy npm --prefix frontend run check`, `rtk proxy npm --prefix frontend test`, and
   `rtk proxy npm --prefix frontend run build`. Run browser checks against the production preview with
-  `rtk proxy npm --prefix frontend run test:browser` when changing layout or user flows.
+  `rtk proxy npm --prefix frontend run test:browser` when changing layout or user flows; select relevant specs for focused
+  changes and broaden the run when shared behavior or unresolved failures justify it.

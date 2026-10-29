@@ -33,6 +33,7 @@ export function WidgetCard({
 }: Props) {
   const { t, locale } = useLocale();
   const [expanded, setExpanded] = useState(true);
+  const logsOpen = !embedded || expanded;
   const logId = useId();
   const primary = widgetSource(widget, evidence);
   const observed = evidence.find((row) => row.id === primary);
@@ -94,13 +95,17 @@ export function WidgetCard({
           </button>
         )}
       </header>
-      {embedded && widget.widget_type === 'log_anomalies' && !expanded && (
-        <div className="log-collapsed-note">
-          <span>
-            {t('{count} lines returned', { count: widget.logs.entries.length })} ·{' '}
-            {t(widget.logs.truncated ? 'Truncated · partial evidence' : 'Within requested bounds')}
-          </span>
-          {observed && <time dateTime={observed.observed_at}>{utc(observed.observed_at)}</time>}
+      {embedded && widget.widget_type === 'log_anomalies' && (
+        <div className="log-disclosure" data-open={!logsOpen} aria-hidden={logsOpen}>
+          <div>
+            <div className="log-collapsed-note">
+              <span>
+                {t('{count} lines returned', { count: widget.logs.entries.length })} ·{' '}
+                {t(widget.logs.truncated ? 'Truncated · partial evidence' : 'Within requested bounds')}
+              </span>
+              {observed && <time dateTime={observed.observed_at}>{utc(observed.observed_at)}</time>}
+            </div>
+          </div>
         </div>
       )}
       {widget.widget_type === 'container_status' && (
@@ -175,15 +180,17 @@ export function WidgetCard({
         </>
       )}
       {widget.widget_type === 'log_anomalies' && (
-        <div id={logId} hidden={embedded && !expanded}>
-          <LogContent logs={widget.logs} grouped={embedded} />
-          <footer className="widget-foot">
-            <span>{t('Docker logs · sanitized text')}</span>
-            {observed && <time dateTime={observed.observed_at}>{utc(observed.observed_at)}</time>}
-            {widget.logs.truncated && (
-              <span className="warning-text">{t('Earlier or later output may be missing')}</span>
-            )}
-          </footer>
+        <div id={logId} className="log-disclosure" data-open={logsOpen} aria-hidden={!logsOpen} inert={!logsOpen}>
+          <div>
+            <LogContent logs={widget.logs} grouped={embedded} />
+            <footer className="widget-foot">
+              <span>{t('Docker logs · sanitized text')}</span>
+              {observed && <time dateTime={observed.observed_at}>{utc(observed.observed_at)}</time>}
+              {widget.logs.truncated && (
+                <span className="warning-text">{t('Earlier or later output may be missing')}</span>
+              )}
+            </footer>
+          </div>
         </div>
       )}
       {widget.widget_type === 'compose_stack' && (
