@@ -37,11 +37,9 @@ export function EvidenceTrail({
               className={selected === row.id ? 'selected' : ''}
               aria-pressed={selected === row.id}
               aria-controls="evidence-observation"
+              title={`${t('Observation ID')}: ${row.id}`}
             >
-              <span>
-                {t(evidenceNames[row.kind])}
-                <code>{row.id}</code>
-              </span>
+              <span>{t(evidenceNames[row.kind])}</span>
               <time dateTime={row.observed_at}>{utc(row.observed_at)}</time>
             </button>
           ))}

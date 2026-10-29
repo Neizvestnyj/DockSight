@@ -222,6 +222,7 @@ export function EvidenceInspector({ evidence, resourceName }: { evidence?: Evide
             <summary>{t('Inspect observation data')}</summary>
             <pre tabIndex={0}>{JSON.stringify(evidence.data, null, 2)}</pre>
             <p className="evidence-id">
+              <span>{t('Observation ID')}</span>
               <code>{evidence.id}</code>
             </p>
           </details>

@@ -12,6 +12,7 @@ const russian = {
   Automatic: 'Автоматически',
   Scope: 'Область',
   'Observation sources': 'Источники наблюдений по ресурсам',
+  'Observation ID': 'ID наблюдения',
   'Optional. Name a project or stack in your question; DockSight selects it automatically.':
     'Выбор необязателен. Укажите проект или стек в вопросе — DockSight определит группу автоматически.',
   'All containers': 'Все контейнеры',

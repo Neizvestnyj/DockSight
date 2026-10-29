@@ -1507,7 +1507,10 @@ textarea {
   max-height: 360px;
   overflow-y: auto;
   margin-bottom: 16px;
-  padding: 2px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--surface);
   scrollbar-width: thin;
 }
 .evidence-resource {
@@ -1549,14 +1552,6 @@ textarea {
   align-items: center;
   gap: 8px;
   min-width: 0;
-}
-.evidence-picker code {
-  max-width: 9ch;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 11px;
-  color: var(--muted);
 }
 .evidence-picker time {
   font-size: 11px;
@@ -1614,6 +1609,10 @@ textarea {
   margin: 12px 0;
 }
 .evidence-id {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
   overflow-wrap: anywhere;
 }
 .evidence-id code {
