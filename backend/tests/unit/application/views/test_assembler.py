@@ -19,6 +19,37 @@ from docksight.domain.runtime import StackSummary
 from tests.fakes import snapshot
 
 
+async def test_identical_proposals_do_not_duplicate_cards_or_action_preparation() -> None:
+    context = EvidenceContext()
+    context.record("container", "local", {}, snapshot())
+    proposal = DiagnosisProposal.model_validate(
+        {
+            "summary": "Observed",
+            "uncertain": True,
+            "evidence_ids": ["e1"],
+            "widgets": [{"widget_type": "container_status", "evidence_ids": ["e1"]}] * 2,
+        }
+    )
+    prepared: list[Operation] = []
+
+    async def prepare(actor: str, host: str, container_id: str, operation: Operation) -> ActionView:
+        """Track preparation once for each permitted operation on the observed target."""
+        prepared.append(operation)
+        return ActionView(
+            id=str(uuid4()),
+            host=host,
+            container_id=container_id,
+            operation=operation,
+            expires_at=snapshot().observed_at + timedelta(minutes=5),
+            state="prepared",
+            message="Confirm",
+        )
+
+    answer = await ViewAssembler(prepare).build(proposal, context, "alice")
+    assert len(answer.widgets) == 1
+    assert prepared == ["restart"]
+
+
 @pytest.mark.parametrize(
     ("state", "suggested", "permitted", "expected"),
     [

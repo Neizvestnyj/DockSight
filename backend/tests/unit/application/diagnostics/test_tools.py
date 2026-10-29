@@ -5,9 +5,75 @@ import pytest
 from docksight.application.diagnostics.context import EvidenceContext
 from docksight.application.diagnostics.tools import DiagnosticTools
 from docksight.application.ports.models import ToolCall
+from docksight.application.views.schemas import GroupTarget
 from docksight.domain.errors import DockSightError
 from docksight.domain.runtime import LogBatch, LogEntry
-from tests.fakes import FakeRuntime
+from tests.fakes import DiscoveryRuntime, FakeRuntime
+
+
+async def test_group_selection_rejects_invented_candidates_without_recording_evidence() -> None:
+    context = EvidenceContext()
+    target = GroupTarget(kind="compose", name="vintoria-infra")
+    tools = DiagnosticTools(DiscoveryRuntime(), context, "local", candidates=(target,))
+    with pytest.raises(DockSightError, match="observed group"):
+        await tools.execute(
+            ToolCall("invented", "request_group_selection", {"candidates": [{"kind": "compose", "name": "invented"}]})
+        )
+    assert context.selection is None
+    assert not context.evidence
+
+
+async def test_group_selection_cannot_override_an_explicit_scope() -> None:
+    target = GroupTarget(kind="compose", name="vintoria-infra")
+    context = EvidenceContext()
+    tools = DiagnosticTools(DiscoveryRuntime(), context, "local", group=target, candidates=(target,))
+    with pytest.raises(DockSightError) as failure:
+        await tools.execute(ToolCall("choose", "request_group_selection", {"candidates": [target.model_dump()]}))
+    assert failure.value.code == "scope_already_selected"
+    assert context.selection is None
+
+
+@pytest.mark.parametrize("exact", [False, True])
+async def test_inferred_group_cannot_bypass_a_nearly_identical_observed_identity(exact: bool) -> None:
+    runtime = DiscoveryRuntime()
+    target = GroupTarget(kind="compose", name="vintoria-infra")
+    sibling = GroupTarget(kind="compose", name="vintoria-infrb")
+    context = EvidenceContext()
+    tools = DiagnosticTools(
+        runtime,
+        context,
+        "local",
+        candidates=(target, sibling),
+        query="Check vintoria-infra" if exact else "Что не так \u0441 винтория инфра?",
+    )
+    await tools.execute(ToolCall("group", "inspect_group", target.model_dump()))
+    if exact:
+        assert context.selection is None
+        assert context.group is not None
+        assert set(runtime.reads) == {"1" * 64, "2" * 64}
+    else:
+        assert context.selection is not None
+        assert context.selection.candidates == [target, sibling]
+        assert context.group is None
+        assert not runtime.reads
+
+
+@pytest.mark.parametrize(
+    "candidates",
+    [
+        [],
+        [{"kind": "compose", "name": "same"}] * 2,
+        [{"kind": "compose", "name": f"project-{index}"} for index in range(33)],
+        [{"kind": "compose", "name": "valid", "host": "other"}],
+    ],
+)
+async def test_group_selection_rejects_unbounded_duplicate_or_cross_host_options(
+    candidates: list[dict[str, str]],
+) -> None:
+    tools = DiagnosticTools(DiscoveryRuntime(), EvidenceContext(), "local")
+    with pytest.raises(DockSightError) as failure:
+        await tools.execute(ToolCall("choose", "request_group_selection", {"candidates": candidates}))
+    assert failure.value.code == "invalid_tool_arguments"
 
 
 @pytest.mark.parametrize("message", ["x" * 60000, '\\"\n' * 20000, "Ж😀" * 20000], ids=["long", "escaped", "unicode"])

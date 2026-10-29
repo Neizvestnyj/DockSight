@@ -42,6 +42,16 @@ export const groupTargetSchema = z.strictObject({
     .max(128)
     .regex(/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/),
 });
+export const groupSelectionSchema = z.strictObject({
+  candidates: z
+    .array(groupTargetSchema)
+    .min(1)
+    .max(32)
+    .refine(
+      (rows) => new Set(rows.map((row) => `${row.kind}:${row.name}`)).size === rows.length,
+      'Group candidates must be distinct.',
+    ),
+});
 export const stackSchema = z.object({
   name: z.string(),
   kind: z.enum(['compose', 'swarm']),
@@ -208,6 +218,7 @@ export const eventSchema = z.discriminatedUnion('type', [
   z.object({ ...envelope, type: z.literal('tool.started'), tool: z.string() }),
   z.object({ ...envelope, type: z.literal('tool.completed'), tool: z.string(), ok: z.boolean() }),
   z.object({ ...envelope, type: z.literal('answer.ready'), answer: answerSchema }),
+  z.strictObject({ ...envelope, type: z.literal('clarification.required'), selection: groupSelectionSchema }),
   z.object({ ...envelope, type: z.literal('turn.completed') }),
   z.object({
     ...envelope,
@@ -265,6 +276,7 @@ export type Widget = z.infer<typeof widgetSchema>;
 export type Evidence = z.infer<typeof evidenceSchema>;
 export type Answer = z.infer<typeof answerSchema>;
 export type GroupTarget = z.infer<typeof groupTargetSchema>;
+export type GroupSelection = z.infer<typeof groupSelectionSchema>;
 export type Stack = z.infer<typeof stackSchema>;
 export type GroupInspection = z.infer<typeof groupInspectionSchema>;
 export type TurnEvent = z.infer<typeof eventSchema>;

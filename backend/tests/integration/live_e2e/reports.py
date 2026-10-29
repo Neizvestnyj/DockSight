@@ -16,7 +16,13 @@ def report_path(artifacts: Path, model: str, case: Case, language: str, path: st
 
 
 def record_run(
-    target: Path, lab: ComposeLab, model: str, started: str, payload: dict[str, Any], events: list[dict[str, Any]]
+    target: Path,
+    lab: ComposeLab,
+    model: str,
+    started: str,
+    payload: dict[str, Any],
+    events: list[dict[str, Any]],
+    clarification_events: list[dict[str, Any]] | None = None,
 ) -> None:
     """Retain successful and failed public responses without credentials or raw inspect documents."""
     target.write_text(
@@ -28,6 +34,7 @@ def record_run(
                 "input": payload,
                 "fixture": lab.facts(),
                 "events": events,
+                "clarification_events": clarification_events or [],
             },
             ensure_ascii=False,
             indent=2,

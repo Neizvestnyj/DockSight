@@ -11,7 +11,7 @@ import pytest
 from pydantic import SecretStr
 
 from tests.integration.live_e2e.cases import Case, Language
-from tests.integration.live_e2e.checks import check_answer
+from tests.integration.live_e2e.checks import check_answer, check_selection
 from tests.integration.live_e2e.lab import ROOT, ComposeLab, run_command
 from tests.integration.live_e2e.reports import record_run, report_path
 from tests.integration.live_e2e.server import live_api
@@ -50,6 +50,7 @@ def test_live_browser(
     started = datetime.now(UTC).isoformat()
     payload: dict[str, Any] = {}
     events: list[dict[str, Any]] = []
+    clarification_events: list[dict[str, Any]] = []
     with live_api(lab, model_name, model_endpoint, (f"http://127.0.0.1:{port}",)) as api:
         token = SecretStr(api.headers["Authorization"].removeprefix("Bearer "))
         options = {
@@ -59,6 +60,8 @@ def test_live_browser(
                 {
                     "project": lab.project,
                     "explicit": case.explicit,
+                    "clarify": case.spelling == "ambiguous",
+                    "peer_project": lab.peer_project,
                     "language": language,
                     "query": case.query(lab.project, "", language),
                     "output": str(target),
@@ -69,12 +72,16 @@ def test_live_browser(
             _run_browser(browser_ready, options, token)
             recorded = json.loads(target.read_text(encoding="utf-8"))
             payload, events = recorded["input"], recorded["events"]
+            clarification_events = recorded.get("clarification_events", [])
+            if case.spelling == "ambiguous":
+                check_selection(clarification_events, lab)
             check_answer(events, lab, case, language)
         finally:
             if target.is_file():
                 recorded = json.loads(target.read_text(encoding="utf-8"))
                 payload, events = recorded.get("input") or {}, recorded["events"]
-            record_run(target, lab, model_name, started, payload, events)
+                clarification_events = recorded.get("clarification_events", [])
+            record_run(target, lab, model_name, started, payload, events, clarification_events)
 
 
 def _run_browser(node: str, options: dict[str, str], token: SecretStr) -> None:

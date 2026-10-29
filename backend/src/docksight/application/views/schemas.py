@@ -35,6 +35,19 @@ class GroupTarget(Contract):
     name: str = Field(min_length=1, max_length=128, pattern=r"^[a-zA-Z0-9][a-zA-Z0-9_.-]*$")
 
 
+class GroupSelection(Contract):
+    """Ask the operator to select from distinct observed groups on the current host."""
+
+    candidates: list[GroupTarget] = Field(min_length=1, max_length=32)
+
+    @model_validator(mode="after")
+    def unique_candidates(self) -> Self:
+        """Keep repeated options from implying independent observed resources."""
+        if len({(row.kind, row.name) for row in self.candidates}) != len(self.candidates):
+            raise ValueError("Group candidates must be distinct")
+        return self
+
+
 class GroupLogResult(Contract):
     """Report what was actually collected for a local problem container."""
 

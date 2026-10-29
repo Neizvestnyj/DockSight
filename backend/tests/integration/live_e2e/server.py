@@ -47,7 +47,7 @@ class FixtureRuntime(DockerRuntime):
     def __init__(self, lab: ComposeLab) -> None:
         """Keep user workloads outside model-visible inventory and prohibit product mutations."""
         super().__init__((HostConfig(id="e2e", name="Live E2E"),), Redactor(), ("APP_ENV",), timeout=10)
-        self.ids = frozenset(row.id for row in lab.containers.values())
+        self.ids = frozenset(row.id for row in (*lab.containers.values(), *lab.peers.values()))
         self.project = lab.project
 
     def _require_fixture(self, container_id: str) -> None:

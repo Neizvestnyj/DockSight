@@ -1,4 +1,21 @@
-from docksight.application.diagnostics.prompts import final_prompt
+import json
+
+from docksight.application.diagnostics.prompts import final_prompt, group_catalog
+from docksight.application.views.schemas import GroupTarget
+
+
+def test_group_catalog_bounds_names_without_hiding_omitted_candidates() -> None:
+    candidates = tuple(GroupTarget(kind="compose", name=f"project-{index}") for index in range(33))
+    catalog = json.loads(group_catalog(candidates))
+    assert catalog["truncated"] is True
+    assert len(catalog["available_groups"]) == 32
+    assert catalog["available_groups"] == [row.model_dump() for row in candidates[:32]]
+
+
+def test_explicit_answer_language_overrides_transliterated_names() -> None:
+    assert "in English" in final_prompt("What is wrong with винтория инфра? Please answer in English.")
+    assert "in English" in final_prompt("Что случилось? Ответь на английском.")
+    assert "in Russian" in final_prompt("What happened? Please answer in Russian.")
 
 
 def test_finalization_requires_russian_prose_for_a_russian_operator_question() -> None:

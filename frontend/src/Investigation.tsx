@@ -21,6 +21,7 @@ import { GroupReport } from './GroupReport';
 import { EvidenceTrail } from './EvidenceTrail';
 import { containerWidgetGroups, evidenceResource, widgetSource } from './evidence';
 import { ContainerEvidence } from './ContainerEvidence';
+import { GroupClarification } from './GroupClarification';
 
 interface Props {
   investigation: ReturnType<typeof useInvestigation>;
@@ -256,6 +257,17 @@ export function Investigation({
                   </button>
                 </div>
               </section>
+            )}
+            {turn.state === 'awaiting_selection' && turn.selection && (
+              <GroupClarification
+                selection={turn.selection}
+                host={host}
+                disabled={running || blocked}
+                choose={(target) => {
+                  setView(null);
+                  void run(turn.query, false, target);
+                }}
+              />
             )}
             <DiagnosticTrace key={turn.id} turn={turn} host={host} demo={demo} />
             {answer?.group && <GroupReport report={answer.group} evidence={answer.evidence} inspect={inspect} />}

@@ -30,12 +30,16 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
         return
     names = metafunc.config.getoption("e2e_model") or ["disabled"]
     selected = metafunc.config.getoption("e2e_case")
-    cases = [row for row in CASES if not selected or row.name in selected]
-    if metafunc.function.__name__ == "test_live_browser":
-        cases = [row for row in cases if row.name in {"compose-explicit", "compose-chat"}]
+    cases = _selected_cases(selected, metafunc.function.__name__ == "test_live_browser")
     metafunc.parametrize("model_name", names)
     metafunc.parametrize("case", cases, ids=lambda row: row.name)
     metafunc.parametrize("language", metafunc.config.getoption("e2e_language") or ["en", "ru"])
+
+
+def _selected_cases(names: list[str] | None, browser: bool) -> list[Case]:
+    """Restrict browser scenarios to group flows without changing HTTP scenario selection."""
+    cases = [row for row in CASES if not names or row.name in names]
+    return [row for row in cases if row.group and not row.typo] if browser else cases
 
 
 @pytest.fixture(scope="session")

@@ -9,12 +9,12 @@ from uuid import uuid4
 from pydantic import ValidationError
 
 from docksight.application.diagnostics.context import EvidenceContext
-from docksight.application.diagnostics.prompts import SYSTEM_PROMPT, final_prompt, repair_feedback
+from docksight.application.diagnostics.prompts import SYSTEM_PROMPT, final_prompt, group_catalog, repair_feedback
 from docksight.application.diagnostics.scope import resolve_target
 from docksight.application.diagnostics.tools import DiagnosticTools, tool_specs
 from docksight.application.diagnostics.trace import DiagnosticTrace, schema_issues
 from docksight.application.events import TurnEvent
-from docksight.application.ports.models import ModelMessage, ModelPort, ToolCall
+from docksight.application.ports.models import ModelMessage, ModelPort, ModelReply, ToolCall
 from docksight.application.ports.runtime import RuntimeReadPort
 from docksight.application.ports.state import Session, SessionStore
 from docksight.application.redaction import Redactor
@@ -137,28 +137,11 @@ class Diagnostics:
             ModelMessage("user", self.redactor.text(query)),
         ]
         context = EvidenceContext()
-        inventory = None
+        tools = DiagnosticTools(self.runtime, context, session.host, self.log_lines, self.log_bytes, group, query=query)
         if group is None:
-            yield {"type": "tool.started", "turn_id": trace.turn_id, "tool": "resolve_target"}
-            yield trace.begin("tool", "resolve_target")
-            resolved = await _before_deadline(deadline, lambda: resolve_target(self.runtime, session.host, query))
-            inventory, group = resolved.containers, resolved.group
-            yield trace.finish(code=resolved.discovery_code)
-            yield {
-                "type": "tool.completed",
-                "turn_id": trace.turn_id,
-                "tool": "resolve_target",
-                "ok": resolved.discovery_code is None,
-            }
-            if resolved.discovery_code:
-                messages.append(
-                    ModelMessage(
-                        "system",
-                        "Swarm discovery failed. Its stack inventory is unknown; do not infer absence. "
-                        "Container observations remain usable.",
-                    )
-                )
-        tools = DiagnosticTools(self.runtime, context, session.host, self.log_lines, self.log_bytes, group, inventory)
+            async for event in self._discover(query, tools, messages, deadline, trace):
+                yield event
+        group = tools.group
         if group:
             call = ToolCall("selected-group", "inspect_group", group.model_dump())
             messages.append(ModelMessage("assistant", "", (call,)))
@@ -166,6 +149,28 @@ class Diagnostics:
                 yield event
         async for event in self._explore(messages, tools, deadline, trace, int(group is not None)):
             yield event
+        if context.selection:
+            yield {
+                "type": "clarification.required",
+                "turn_id": trace.turn_id,
+                "selection": cast(JsonObject, context.selection.model_dump(mode="json")),
+            }
+            yield {"type": "turn.completed", "turn_id": trace.turn_id}
+            return
+        async for event in self._answer_turn(query, messages, context, session, deadline, trace):
+            yield event
+        yield {"type": "turn.completed", "turn_id": trace.turn_id}
+
+    async def _answer_turn(
+        self,
+        query: str,
+        messages: list[ModelMessage],
+        context: EvidenceContext,
+        session: Session,
+        deadline: float,
+        trace: DiagnosticTrace,
+    ) -> AsyncGenerator[TurnEvent]:
+        """Retain validated answers in history without recording unresolved clarification turns."""
         messages.append(ModelMessage("user", final_prompt(query)))
         async for event in self._finalize(messages, context, session.actor, deadline, trace):
             if event["type"] == "answer.ready":
@@ -176,7 +181,33 @@ class Diagnostics:
                     ]
                 )
             yield event
-        yield {"type": "turn.completed", "turn_id": trace.turn_id}
+
+    async def _discover(
+        self, query: str, tools: DiagnosticTools, messages: list[ModelMessage], deadline: float, trace: DiagnosticTrace
+    ) -> AsyncGenerator[TurnEvent]:
+        """Retain discovered identities and expose group choices before model-selected evidence reads."""
+        yield {"type": "tool.started", "turn_id": trace.turn_id, "tool": "resolve_target"}
+        yield trace.begin("tool", "resolve_target")
+        resolved = await _before_deadline(deadline, lambda: resolve_target(self.runtime, tools.host, query))
+        tools.inventory, tools.group, tools.candidates = resolved.containers, resolved.group, resolved.candidates
+        tools.context.selection = resolved.selection
+        yield trace.finish(code=resolved.discovery_code)
+        yield {
+            "type": "tool.completed",
+            "turn_id": trace.turn_id,
+            "tool": "resolve_target",
+            "ok": resolved.discovery_code is None,
+        }
+        if resolved.discovery_code:
+            messages.append(
+                ModelMessage(
+                    "system",
+                    "Swarm discovery failed. Its stack inventory is unknown; "
+                    "do not infer absence. Container observations remain usable.",
+                )
+            )
+        if tools.group is None and tools.candidates:
+            messages.append(ModelMessage("system", group_catalog(tools.candidates)))
 
     async def _explore(
         self,
@@ -187,20 +218,55 @@ class Diagnostics:
         used: int = 0,
     ) -> AsyncGenerator[TurnEvent]:
         """Collect evidence within shared model, tool, and wall-clock budgets."""
+        if tools.context.selection:
+            return
         tool_calls = used
         for _ in range(self.max_model_calls - 2):
             yield trace.begin("model", "collect_evidence")
             reply = await _before_deadline(deadline, lambda: self.model.complete(messages, tool_specs()))
             yield trace.finish(reply=reply)
             messages.append(ModelMessage("assistant", reply.content, reply.tool_calls, native=reply.native))
-            if not reply.tool_calls:
+            if self._exploration_complete(reply, tools, messages):
                 break
-            for call in reply.tool_calls:
-                async for event in self._record_tool(call, tools, messages, deadline, tool_calls, trace):
-                    yield event
-                tool_calls += 1
-            if tool_calls >= self.max_tool_calls:
+            async for event in self._tool_batch(reply.tool_calls, tools, messages, deadline, tool_calls, trace):
+                yield event
+            tool_calls += len(reply.tool_calls)
+            if tools.context.selection or tool_calls >= self.max_tool_calls:
                 break
+
+    def _exploration_complete(self, reply: ModelReply, tools: DiagnosticTools, messages: list[ModelMessage]) -> bool:
+        """Keep prose-only clarification from skipping evidence collection within the existing model budget."""
+        if reply.tool_calls:
+            return False
+        if tools.context.evidence or not any(row.name in reply.content for row in tools.candidates):
+            return True
+        messages.append(
+            ModelMessage(
+                "system",
+                "No runtime evidence has been collected. Resolve the operator's group using a tool call: "
+                "inspect_group for the one plausible catalog identity, or request_group_selection for plausible "
+                "alternatives. Transliteration and spaces are allowed interpretations; an unrelated catalog name "
+                "is not an alternative merely because it exists. "
+                "Do not ask for confirmation in prose or invent evidence.",
+            )
+        )
+        return False
+
+    async def _tool_batch(
+        self,
+        calls: tuple[ToolCall, ...],
+        tools: DiagnosticTools,
+        messages: list[ModelMessage],
+        deadline: float,
+        used: int,
+        trace: DiagnosticTrace,
+    ) -> AsyncGenerator[TurnEvent]:
+        """Stop a reply's remaining reads as soon as the operator must clarify its scope."""
+        for offset, call in enumerate(calls):
+            async for event in self._record_tool(call, tools, messages, deadline, used + offset, trace):
+                yield event
+            if tools.context.selection:
+                return
 
     async def _record_tool(
         self,

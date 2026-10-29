@@ -1,5 +1,6 @@
 import json
 from dataclasses import replace
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -7,8 +8,8 @@ from docksight.adapters.outbound.memory.sessions import MemorySessions
 from docksight.application.diagnostics.use_case import Diagnostics
 from docksight.application.ports.models import ModelReply, ToolCall
 from docksight.application.redaction import Redactor
-from docksight.domain.runtime import ContainerSnapshot
-from tests.fakes import FakeRuntime, ScriptedModel
+from docksight.domain.runtime import ContainerSnapshot, StackSummary
+from tests.fakes import DiscoveryRuntime, FakeRuntime, ScriptedModel
 
 
 def proposal(evidence_id: str = "e1") -> str:
@@ -21,6 +22,83 @@ def proposal(evidence_id: str = "e1") -> str:
             "widgets": [{"widget_type": "container_status", "evidence_ids": [evidence_id], "action": None}],
         }
     )
+
+
+async def test_observed_namespace_collision_requests_selection_without_calling_the_model() -> None:
+    runtime = DiscoveryRuntime()
+    model = ScriptedModel([])
+    with patch.object(runtime, "stacks", AsyncMock(return_value=(StackSummary("vintoria-infra", "swarm", 1, 0),))):
+        events = [
+            event
+            async for event in Diagnostics(runtime, model, MemorySessions(), Redactor()).stream(
+                "alice",
+                "local",
+                "What happened to vintoria-infra?",
+            )
+        ]
+    assert events[-1]["type"] == "turn.completed"
+    selection = next(event["selection"] for event in events if event["type"] == "clarification.required")
+    assert {row["kind"] for row in selection["candidates"]} == {"compose", "swarm"}
+    assert not any(event["type"] == "answer.ready" for event in events)
+    assert not runtime.reads
+    assert not model.requests
+
+
+@pytest.mark.parametrize("query", ["Что не так \u0441 винтория инфра?", "Check the vintoria infrastructure group"])
+async def test_agent_selects_an_observed_group_from_noncanonical_spelling(query: str) -> None:
+    runtime = DiscoveryRuntime()
+    model = ScriptedModel(
+        [
+            ModelReply("", (ToolCall("group", "inspect_group", {"kind": "compose", "name": "vintoria-infra"}),)),
+            ModelReply("Ready"),
+            ModelReply(
+                json.dumps({"summary": "Two members failed", "uncertain": True, "evidence_ids": ["e1"], "widgets": []})
+            ),
+        ]
+    )
+    events = [
+        event
+        async for event in Diagnostics(runtime, model, MemorySessions(), Redactor()).stream("alice", "local", query)
+    ]
+    catalog = [message.content for message in model.requests[0][0] if '"available_groups"' in message.content]
+    assert len(catalog) == 1
+    assert {row["name"] for row in json.loads(catalog[0])["available_groups"]} == {"vintoria-infra", "other-project"}
+    assert events[-1]["type"] == "turn.completed"
+    answer = next(event["answer"] for event in events if event["type"] == "answer.ready")
+    assert answer["group"]["summary"]["name"] == "vintoria-infra"
+    assert len(answer["widgets"]) == 4
+    assert set(runtime.reads) == {"1" * 64, "2" * 64}
+
+
+@pytest.mark.parametrize("prose_first", [False, True])
+async def test_agent_group_selection_ends_without_finalization_or_later_tool_calls(prose_first: bool) -> None:
+    runtime = DiscoveryRuntime()
+    candidates = [{"kind": "compose", "name": name} for name in ("vintoria-infra", "other-project")]
+    model = ScriptedModel(
+        [
+            *([ModelReply("Please choose vintoria-infra or other-project")] if prose_first else []),
+            ModelReply(
+                "",
+                (
+                    ToolCall("choose", "request_group_selection", {"candidates": candidates}),
+                    ToolCall("outside", "get_container_logs", {"container_id": "3" * 64}),
+                ),
+            ),
+        ]
+    )
+    events = [
+        event
+        async for event in Diagnostics(runtime, model, MemorySessions(), Redactor()).stream(
+            "alice", "local", "Check that infrastructure project"
+        )
+    ]
+    selections = [event for event in events if event["type"] == "clarification.required"]
+    assert len(selections) == 1
+    assert selections[0]["selection"]["candidates"] == list(reversed(candidates))
+    assert events[-1]["type"] == "turn.completed"
+    assert not any(event["type"] == "answer.ready" for event in events)
+    assert not runtime.reads
+    assert len(model.requests) == 1 + int(prose_first)
 
 
 async def test_diagnosis_uses_real_snapshots_and_never_exposes_write_tools() -> None:
@@ -104,6 +182,10 @@ async def test_mixed_container_repair_explains_failure_and_valid_evidence_groups
     assert feedback["container_evidence_groups"] == [["e1"], ["e2"]]
     assert feedback["log_evidence_ids"] == []
     assert feedback["stack_evidence_ids"] == []
+    assert feedback["separate_card_examples"] == [
+        {"widget_type": "container_status", "evidence_ids": ["e1"]},
+        {"widget_type": "container_status", "evidence_ids": ["e2"]},
+    ]
     answer = next(event["answer"] for event in events if event["type"] == "answer.ready")
     assert [card["snapshot"]["id"] for card in answer["widgets"]] == ["a" * 64, "b" * 64]
     assert events[-1]["type"] == "turn.completed"

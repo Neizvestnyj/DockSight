@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, renderHook, screen, waitFor, within } 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DemoClient } from './demo';
 import { useGroups } from './useGroups';
-import { answerSchema } from './contracts';
+import { answerSchema, eventSchema } from './contracts';
 import { demoAnswer } from './demo';
 import { GroupReport } from './GroupReport';
 import { LocaleProvider } from './LocaleProvider';
@@ -32,6 +32,46 @@ function ObservedAnswer({ answer }: { answer: Answer }) {
 }
 
 describe('group selection', () => {
+  it('retains a typed group clarification after completion without manufacturing an answer', async () => {
+    const client = new DemoClient();
+    vi.spyOn(client, 'diagnose').mockImplementation(async (_input, receive) => {
+      const envelope = { schema_version: 1 as const, request_id: 'r', turn_id: 't' };
+      receive({
+        ...envelope,
+        type: 'clarification.required',
+        selection: {
+          candidates: [
+            { kind: 'compose', name: 'vintoria-infra' },
+            { kind: 'swarm', name: 'vintoria-infra' },
+          ],
+        },
+      });
+      receive({ ...envelope, type: 'turn.completed' });
+    });
+    const { result } = renderHook(() => useInvestigation(client, 'demo-eu'));
+    await act(async () => result.current.run('Which infrastructure?'));
+    expect(result.current.turns[0]?.state).toBe('awaiting_selection');
+    expect(result.current.turns[0]?.selection?.candidates).toHaveLength(2);
+    expect(result.current.turns[0]?.answer).toBeUndefined();
+    expect(result.current.running).toBe(false);
+  });
+
+  it('rejects duplicate or host-overriding group choices at the event boundary', () => {
+    const candidate = { kind: 'compose', name: 'vintoria-infra' };
+    const event = {
+      schema_version: 1,
+      request_id: 'r',
+      turn_id: 't',
+      type: 'clarification.required',
+      selection: { candidates: [candidate] },
+    };
+    expect(eventSchema.safeParse(event).success).toBe(true);
+    expect(eventSchema.safeParse({ ...event, selection: { candidates: [candidate, candidate] } }).success).toBe(false);
+    expect(
+      eventSchema.safeParse({ ...event, selection: { candidates: [{ ...candidate, host: 'foreign' }] } }).success,
+    ).toBe(false);
+  });
+
   it('groups shuffled state, logs and environment by historical container without changing answer data', () => {
     const answer = demoAnswer('dependency');
     const other = demoAnswer('oom');

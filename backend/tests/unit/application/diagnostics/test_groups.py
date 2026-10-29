@@ -369,8 +369,10 @@ async def test_scope_resolution_respects_kind_and_sentence_punctuation() -> None
     assert (await resolve_target(DualRuntime(), "local", "Inspect the Compose project infra.")).group == GroupTarget(
         kind="compose", name="infra"
     )
-    with pytest.raises(DockSightError, match="ambiguous"):
-        await resolve_target(DualRuntime(), "local", "What happened to infra?")
+    ambiguous = await resolve_target(DualRuntime(), "local", "What happened to infra?")
+    assert ambiguous.group is None
+    assert ambiguous.selection is not None
+    assert len(ambiguous.selection.candidates) == 2
     assert (await resolve_target(GroupRuntime(), "local", "Diagnose infra.")).group == GroupTarget(
         kind="compose", name="infra"
     )

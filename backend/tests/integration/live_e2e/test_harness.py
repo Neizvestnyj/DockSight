@@ -10,10 +10,36 @@ from docker.errors import DockerException
 from pydantic import SecretStr
 
 from docksight.application.views.schemas import DiagnosisResponse
-from tests.integration.live_e2e.checks import check_language, check_narrative
+from tests.integration.live_e2e.checks import check_language, check_narrative, check_selection
 from tests.integration.live_e2e.lab import OWNER_LABEL, ROOT, ComposeLab, require_owner, run_command
 from tests.integration.live_e2e.server import local_model_url, require_local_models
 from tests.integration.live_e2e.test_browser import _run_browser
+
+
+@pytest.mark.parametrize("violation", ["invented", "missing", "answer", "read", "failure"])
+def test_clarification_checks_reject_invented_missing_or_prematurely_inspected_scope(violation: str) -> None:
+    lab = object.__new__(ComposeLab)
+    lab.project, lab.peer_project = "infra-a", "infra-b"
+    candidates = [{"kind": "compose", "name": name} for name in (lab.project, lab.peer_project)]
+    events = [
+        {"type": "turn.started"},
+        {"type": "clarification.required", "selection": {"candidates": candidates}},
+        {"type": "turn.completed"},
+    ]
+    check_selection(events, lab)
+    if violation == "invented":
+        candidates[1]["name"] = "invented"
+    elif violation == "missing":
+        candidates.pop()
+    else:
+        injected = {
+            "answer": {"type": "answer.ready"},
+            "read": {"type": "tool.started", "tool": "get_container_logs"},
+            "failure": {"type": "turn.failed"},
+        }[violation]
+        events.insert(1, injected)
+    with pytest.raises(AssertionError):
+        check_selection(events, lab)
 
 
 @pytest.mark.parametrize(
@@ -124,6 +150,18 @@ def test_cleanup_requires_the_exact_run_owner() -> None:
         require_owner({OWNER_LABEL: "another-run"}, "own-run")
     with pytest.raises(RuntimeError, match="Refusing"):
         require_owner({}, "own-run")
+
+
+def test_peer_compose_setup_rejects_an_existing_namespace_before_calling_the_cli() -> None:
+    lab = object.__new__(ComposeLab)
+    lab.client = Mock()
+    lab.client.containers.list.return_value = [Mock()]
+    with pytest.raises(RuntimeError, match="reuse"):
+        lab._compose("existing-peer", ("backend",))
+    lab.client.containers.list.assert_called_once_with(
+        all=True,
+        filters={"label": "com.docker.compose.project=existing-peer"},
+    )
 
 
 @pytest.mark.parametrize("field", ["remote_model", "remote_host"])

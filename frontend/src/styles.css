@@ -37,6 +37,74 @@
   font-variant-numeric: tabular-nums;
 }
 
+.group-clarification {
+  margin: 24px 0;
+  padding: 20px;
+  border: 1px solid var(--control);
+  border-radius: var(--radius-card);
+  background: var(--raised);
+}
+.clarification-heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.clarification-heading > svg {
+  color: var(--accent);
+}
+.clarification-heading h2 {
+  font-size: 16px;
+  font-weight: 600;
+}
+.clarification-heading > span {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.group-clarification > p {
+  margin: 8px 0 16px;
+  color: var(--muted);
+}
+.group-choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: 12px;
+}
+.group-choices > button {
+  min-width: 0;
+  min-height: 64px;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px;
+  white-space: normal;
+  text-align: left;
+  border-color: var(--control);
+}
+.group-choices > button:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.group-choices small,
+.group-choices strong {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.group-choices small {
+  margin-bottom: 4px;
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--muted);
+}
+.group-choices strong {
+  font-weight: 500;
+  font-size: 14px;
+}
+.group-choices > button > svg {
+  color: var(--accent);
+  flex-shrink: 0;
+}
 .diagnostic-trace {
   margin: 20px 0 24px;
   border-block: 1px solid var(--border);

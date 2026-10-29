@@ -181,14 +181,19 @@ Ollama aliases marked as remote/cloud models are rejected before fixture setup o
 The workloads cover a refused database connection and invalid Grafana alerting configuration alongside healthy nginx,
 an actual memory-limited OOM kill, a crash loop, truncated logs, and an exit 137 without an OOM kill.
 
-Select a smaller matrix with repeated `--e2e-case` options: `compose-explicit`, `compose-chat`, `compose-typo`, `oom`,
-`crash-loop`, `truncated-logs`, or `unknown-exit`. Both English and Russian run by default; repeat `--e2e-language en`
+Select a smaller matrix with repeated `--e2e-case` options: `compose-explicit`, `compose-chat`, `compose-typo`,
+`compose-spaced`, `compose-cyrillic`, `compose-ambiguous`, `oom`, `crash-loop`, `truncated-logs`, or `unknown-exit`.
+Both English and Russian run by default; repeat `--e2e-language en`
 or `--e2e-language ru` to restrict the matrix. Assertions check runtime facts, exact resource identities, card coverage,
 observed log content, and evidence references rather than exact model prose. A script-based language check covers each
 summary, cause, unresolved detail, and action recommendation independently, excluding quoted observed log messages,
 inline/fenced code, resource identifiers, and common fixture terms such as PostgreSQL and Telegram.
 This detects English/Russian mismatches;
 it does not grade translation quality or model reasoning.
+
+Group cases also create an independently failing peer Compose project. Spaced and Cyrillic questions must resolve to the
+target without including that peer. The ambiguous case gives both projects the same human-readable prefix: the first
+turn must ask for the two observed choices without individual evidence reads, and a second request selects the target.
 
 To include real browser flows, install frontend dependencies and Chrome, build the client, and add `--e2e-browser`:
 
@@ -199,6 +204,7 @@ uv run --project backend pytest backend/tests/integration/live_e2e --no-cov --li
 
 Chrome connects to the isolated API using its temporary token. These flows do not mock routes: they submit a free-form
 question or select the Compose group, then compare rendered cards and source navigation with the actual SSE answer.
+The ambiguous case chooses the observed group in the UI and checks that the original question and exact scope are sent.
 Free chat uses a different UI locale from the question to check that narrative follows the operator's question.
 Preview servers use separate loopback ports and are stopped after each case. Browser traces, videos, and automatic
 error-context snapshots are disabled to avoid recording the connection form. Public responses and screenshots remain

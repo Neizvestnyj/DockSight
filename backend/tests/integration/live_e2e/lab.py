@@ -78,13 +78,33 @@ class ComposeLab:
         """Allocate an unguessable project without creating any Docker resource yet."""
         self.case = case
         self.owner = uuid4().hex
-        self.project = f"docksight-e2e-{self.owner[:12]}a"
+        self.project = f"vintoria-infra-e2e-{self.owner[:12]}a"
+        self.peer_project = self.project[:-1] + "b" if case.spelling == "ambiguous" else f"other-e2e-{self.owner[:12]}"
         self.client = connect(HostConfig(id="e2e"), timeout=10)
         self.containers: dict[str, Container] = {}
+        self.peers: dict[str, Container] = {}
 
     def start(self) -> None:
         """Start only the selected services and wait for their specified observable failure states."""
-        if self.client.containers.list(all=True, filters={"label": f"com.docker.compose.project={self.project}"}):
+        self._compose(self.project, self.case.services)
+        self.containers = {row.labels["com.docker.compose.service"]: row for row in self._owned_containers()}
+        if set(self.containers) != set(self.case.services):
+            raise RuntimeError("Compose did not create the exact requested service set")
+        self._wait_ready()
+        if self.case.group:
+            self._compose(self.peer_project, ("backend",))
+            self.peers = {
+                row.id: row
+                for row in self._owned_containers()
+                if row.labels["com.docker.compose.project"] != self.project
+            }
+            if len(self.peers) != 1:
+                raise RuntimeError("Compose did not create the exact peer service set")
+            self._wait_ready({"backend": next(iter(self.peers.values()))})
+
+    def _compose(self, project: str, services: tuple[str, ...]) -> None:
+        """Create one uniquely owned namespace from the real Compose fixture definition."""
+        if self.client.containers.list(all=True, filters={"label": f"com.docker.compose.project={project}"}):
             raise RuntimeError("Refusing to reuse an existing Compose project")
         environment = {**os.environ, "DOCKSIGHT_E2E_OWNER": self.owner}
         environment.pop("DOCKER_CONTEXT", None)
@@ -101,37 +121,32 @@ class ComposeLab:
                 "-f",
                 str(ROOT / "examples/live-e2e/compose.yaml"),
                 "-p",
-                self.project,
+                project,
                 "up",
                 "-d",
                 "--pull",
                 "missing",
-                *self.case.services,
+                *services,
             ],
             environment,
         )
-        self.containers = {row.labels["com.docker.compose.service"]: row for row in self._owned_containers()}
-        if set(self.containers) != set(self.case.services):
-            raise RuntimeError("Compose did not create the exact requested service set")
-        self._wait_ready()
 
     def _owned_containers(self) -> list[Container]:
-        """Read resources under both the unique project and ownership labels."""
-        return self.client.containers.list(
-            all=True, filters={"label": [f"com.docker.compose.project={self.project}", f"{OWNER_LABEL}={self.owner}"]}
-        )
+        """Read only resources carrying this run's unguessable ownership label, across its two namespaces."""
+        return self.client.containers.list(all=True, filters={"label": f"{OWNER_LABEL}={self.owner}"})
 
-    def _wait_ready(self) -> None:
+    def _wait_ready(self, selected: dict[str, Container] | None = None) -> None:
         """Bound startup waits and preserve real Docker evidence when a fixture cannot reach its required state."""
         deadline = time.monotonic() + 90
+        rows = self.containers if selected is None else selected
         while time.monotonic() < deadline:
-            for row in self.containers.values():
+            for row in rows.values():
                 row.reload()
-            if all(self._ready(name, row) for name, row in self.containers.items()):
+            if all(self._ready(name, row) for name, row in rows.items()):
                 self._validate_failures()
                 return
             time.sleep(0.2)
-        states = {name: row.attrs["State"]["Status"] for name, row in self.containers.items()}
+        states = {name: row.attrs["State"]["Status"] for name, row in rows.items()}
         raise RuntimeError(f"Fixture readiness timed out: {states}")
 
     def _validate_failures(self) -> None:
@@ -199,9 +214,7 @@ class ComposeLab:
     def _remove_networks(self, failures: list[Exception]) -> None:
         """Attempt owned network cleanup and surface every failure without touching another project's resources."""
         try:
-            networks = self.client.networks.list(
-                filters={"label": [f"{OWNER_LABEL}={self.owner}", f"com.docker.compose.project={self.project}"]}
-            )
+            networks = self.client.networks.list(filters={"label": f"{OWNER_LABEL}={self.owner}"})
         except DockerException as exc:
             failures.append(exc)
             return

@@ -125,7 +125,7 @@ Events carry `schema_version: 1`, `request_id`, and `turn_id`:
 
 1. `turn.started` includes the session ID.
 2. `tool.started` and `tool.completed` report progress without exposing arguments.
-3. `answer.ready` includes the validated summary, evidence, and typed widgets.
+3. `answer.ready` includes the validated summary, evidence, and typed widgets, or `clarification.required` asks for a group.
 4. Exactly one terminal event is `turn.completed` or `turn.failed`.
 
 The stream also carries a diagnostic trace. `trace.started` follows `turn.started` with the public `provider`, `model`,
@@ -167,12 +167,26 @@ Before model exploration, exact project/stack names in the question are resolved
 Compose project is inspected automatically; otherwise stack names are discovered on a Swarm manager. Exact container
 IDs/names preserve container scope. A whole query token with one substitution, insertion, deletion, or adjacent
 transposition can match a known group name of at least six characters, only when no exact resource matches.
-Ambiguous names require an explicit selection. The report always identifies the canonical observed group.
+The complete canonical group name may also be written with spaces in place of hyphens; a prefix alone is not an exact match.
+Ambiguous names produce `clarification.required` rather than a diagnosis. The report identifies the canonical group.
 Malformed or redacted labels outside the target contract are excluded from automatic matching.
 `resolve_target` progress and trace
 events describe this read; it does not spend a model call. Model tools accept full Docker IDs or exact observed names,
 not ID prefixes or evidence IDs. Optional Swarm discovery failures remain explicit without blocking ordinary container
 diagnosis; an explicit Swarm request still fails if its required metadata cannot be read.
+
+For unresolved spelling, spaces, or another alphabet, the existing agent loop receives a bounded catalog of up to 32
+observed groups. It can call `inspect_group` for a unique interpretation or `request_group_selection` for alternatives.
+The server validates every proposed choice against discovery on the selected host. A shared prefix does not authorize
+choosing between different suffixes or namespaces. Model interpretation remains probabilistic; explicit selection is
+available when the intended group is known.
+The server also requires a choice when an inferred `inspect_group` target has a nearly identical discovered alternative
+and its canonical name was not stated in the question. This prevents a model tool call from bypassing that ambiguity.
+
+`clarification.required` carries `selection: {"candidates":[{"kind":"compose","name":"infra"}]}` with 1–32 distinct
+observed targets and no extra fields. It is followed by `turn.completed`, without `answer.ready`. The frontend presents
+localized choices and continues the original question in a separate session with the selected `group`; the server
+revalidates that target against fresh Docker data. Pending choices are local to the tab, not durable conversation state.
 
 `POST /chat/turns` also accepts an optional `group`: `{"kind":"compose","name":"infra"}` or
 `{"kind":"swarm","name":"infra"}`. The name identifies an observed group on the configured host. Group objects

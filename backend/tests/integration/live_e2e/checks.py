@@ -1,10 +1,33 @@
 import re
 from typing import Any
 
-from docksight.application.views.schemas import ComposeStackCard, ContainerStatusCard, DiagnosisResponse, LogAnomalyCard
+from docksight.application.views.schemas import (
+    ComposeStackCard,
+    ContainerStatusCard,
+    DiagnosisResponse,
+    GroupSelection,
+    LogAnomalyCard,
+)
 from docksight.domain.runtime import ContainerSnapshot
 from tests.integration.live_e2e.cases import Case
 from tests.integration.live_e2e.lab import ComposeLab
+
+
+def check_selection(events: list[dict[str, Any]], lab: ComposeLab) -> None:
+    """Require observed alternatives and no individual reads before the operator resolves an ambiguous name."""
+    assert events and events[0]["type"] == "turn.started"
+    assert events[-1]["type"] == "turn.completed", events[-1]
+    assert not any(row["type"] in {"answer.ready", "turn.failed"} for row in events)
+    choices = [row for row in events if row["type"] == "clarification.required"]
+    assert len(choices) == 1
+    selection = GroupSelection.model_validate(choices[0]["selection"])
+    assert {(row.kind, row.name) for row in selection.candidates} == {
+        ("compose", lab.project),
+        ("compose", lab.peer_project),
+    }
+    reads = {row["tool"] for row in events if row["type"] == "tool.started"}
+    # The server may intercept inspect_group and return alternatives before reading group evidence.
+    assert reads <= {"resolve_target", "request_group_selection", "list_containers", "inspect_group"}, reads
 
 
 def check_language(text: str, language: str, verbatim: tuple[str, ...] = ()) -> None:
