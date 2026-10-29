@@ -17,6 +17,8 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     group.addoption("--live-e2e", action="store_true", help="Run real Docker and local Ollama diagnostics")
     group.addoption("--e2e-model", action="append", default=[], help="Installed Ollama model; repeat for a matrix")
     group.addoption("--e2e-model-url", default="http://127.0.0.1:11434", help="Loopback Ollama endpoint")
+    group.addoption("--e2e-language", action="append", choices=["en", "ru"], help="Select a language; default both")
+    group.addoption("--e2e-browser", action="store_true", help="Also run real Chrome group diagnostics")
     group.addoption(
         "--e2e-case", action="append", choices=[row.name for row in CASES], help="Select a scenario; repeat"
     )
@@ -24,13 +26,16 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 
 def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
     """Collect the requested case/model cross product while leaving unrelated tests untouched."""
-    if metafunc.function.__name__ != "test_live_diagnosis":
+    if metafunc.function.__name__ not in {"test_live_diagnosis", "test_live_browser"}:
         return
     names = metafunc.config.getoption("e2e_model") or ["disabled"]
     selected = metafunc.config.getoption("e2e_case")
     cases = [row for row in CASES if not selected or row.name in selected]
+    if metafunc.function.__name__ == "test_live_browser":
+        cases = [row for row in cases if row.name in {"compose-explicit", "compose-chat"}]
     metafunc.parametrize("model_name", names)
     metafunc.parametrize("case", cases, ids=lambda row: row.name)
+    metafunc.parametrize("language", metafunc.config.getoption("e2e_language") or ["en", "ru"])
 
 
 @pytest.fixture(scope="session")

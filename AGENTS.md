@@ -125,7 +125,9 @@ actions. Models provide explanations and select from approved tools and widgets.
 - Update `CHANGELOG.md` at the end of every task that changes repository files, before committing or reporting completion.
   Cover the delivered behavior, documentation, or development workflow; consolidate related changes and avoid duplicates.
 - Keep updating the same version section while work continues on the same feature branch. Do not create a version per task
-  or commit. Mark an unfinished release as `Unreleased`; choose a new version when preparing a separate release.
+  or commit. Use the intended numeric version immediately instead of `Unreleased` (currently `0.4.0`).
+- Choose versions using Semantic Versioning: PATCH for compatible fixes, MINOR for compatible additions, and MAJOR for
+  breaking changes. Keep `backend/pyproject.toml` and its lockfile aligned with the current changelog version.
 - Keep release notes short, specific, and understandable to users. Group changes by outcome rather than listing commits.
   Documentation and workflow changes require a changelog update but do not by themselves require a version bump.
 

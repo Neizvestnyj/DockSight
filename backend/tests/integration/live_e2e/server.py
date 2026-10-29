@@ -103,7 +103,7 @@ def _wait_server(server: uvicorn.Server, thread: threading.Thread, url: str) -> 
 
 
 @contextmanager
-def live_api(lab: ComposeLab, model: str, model_url: str) -> Iterator[httpx.Client]:
+def live_api(lab: ComposeLab, model: str, model_url: str, origins: tuple[str, ...] = ()) -> Iterator[httpx.Client]:
     """Serve the actual application on an ephemeral loopback port with fresh in-memory credentials."""
     runtime = FixtureRuntime(lab)
     token = secrets.token_urlsafe(32)
@@ -121,6 +121,7 @@ def live_api(lab: ComposeLab, model: str, model_url: str) -> Iterator[httpx.Clie
         turn_timeout=240,
         log_lines=30,
         log_bytes=2048,
+        cors_origins=origins,
     )
     components = build_components(settings, reader=runtime, writer=runtime)
     components.closers.append(runtime.close)

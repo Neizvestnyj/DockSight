@@ -1,6 +1,4 @@
-import hashlib
 import json
-import re
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -8,18 +6,21 @@ from typing import Any
 import httpx
 import pytest
 
-from tests.integration.live_e2e.cases import Case
+from tests.integration.live_e2e.cases import Case, Language
 from tests.integration.live_e2e.checks import check_answer
 from tests.integration.live_e2e.lab import ComposeLab
+from tests.integration.live_e2e.reports import record_run, report_path
 
 pytestmark = [pytest.mark.live, pytest.mark.docker]
 
 
-def test_live_diagnosis(api: httpx.Client, lab: ComposeLab, case: Case, model_name: str, artifacts: Path) -> None:
+def test_live_diagnosis(
+    api: httpx.Client, lab: ComposeLab, case: Case, language: Language, model_name: str, artifacts: Path
+) -> None:
     """Run the real HTTP/SSE, application, Docker, and local-model path without scripted model replies."""
     events: list[dict[str, Any]] = []
     container_id = next(iter(lab.containers.values())).id
-    payload: dict[str, Any] = {"host": "e2e", "query": case.query(lab.project, container_id)}
+    payload: dict[str, Any] = {"host": "e2e", "query": case.query(lab.project, container_id, language)}
     if case.explicit:
         payload["group"] = {"kind": "compose", "name": lab.project}
     started = datetime.now(UTC).isoformat()
@@ -33,25 +34,6 @@ def test_live_diagnosis(api: httpx.Client, lab: ComposeLab, case: Case, model_na
                     events.append(event)
                     if event["type"] in {"tool.started", "turn.failed", "turn.completed"}:
                         print(f"[{model_name}/{case.name}] {event['type']} {event.get('tool', '')}", flush=True)
-        check_answer(events, lab, case)
+        check_answer(events, lab, case, language)
     finally:
-        slug = re.sub(r"[^a-z0-9]+", "-", model_name.lower())[:64]
-        digest = hashlib.sha256(model_name.encode()).hexdigest()[:8]
-        target = artifacts / f"{slug}-{digest}-{case.name}.json"
-        target.write_text(
-            json.dumps(
-                {
-                    "model": model_name,
-                    "case": case.name,
-                    "started_at": started,
-                    "input": payload,
-                    "fixture": lab.facts(),
-                    "events": events,
-                },
-                ensure_ascii=False,
-                indent=2,
-            )
-            + "\n",
-            encoding="utf-8",
-            newline="\n",
-        )
+        record_run(report_path(artifacts, model_name, case, language), lab, model_name, started, payload, events)

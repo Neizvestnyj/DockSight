@@ -1,3 +1,4 @@
+import re
 from typing import Any
 
 from docksight.application.views.schemas import ComposeStackCard, ContainerStatusCard, DiagnosisResponse, LogAnomalyCard
@@ -6,7 +7,54 @@ from tests.integration.live_e2e.cases import Case
 from tests.integration.live_e2e.lab import ComposeLab
 
 
-def check_answer(events: list[dict[str, Any]], lab: ComposeLab, case: Case) -> DiagnosisResponse:
+def check_language(text: str, language: str, verbatim: tuple[str, ...] = ()) -> None:
+    """Require model-authored prose in the requested language without translating quoted runtime text."""
+    prose = re.sub(r"```[\s\S]*?```|`[^`]*`", "", text)
+    for fragment in sorted(verbatim, key=len, reverse=True):
+        prose = prose.replace(fragment, "")
+    prose = re.sub(r"\b[\w./:@-]*[\d_./:@-][\w./:@-]*\b", "", prose)
+    prose = re.sub(
+        r"\b(?:Docker|Compose|Swarm|Grafana|PostgreSQL|nginx|Telegram|Chat\s+ID|OOM|CPU|SIGKILL|SIGTERM)\b",
+        "",
+        prose,
+        flags=re.I,
+    )
+    counts = {
+        "ru": len(re.findall(r"[\u0430-\u044f\u0451]", prose, re.I)),
+        "en": len(re.findall(r"[a-z]", prose, re.I)),
+    }
+    other = "en" if language == "ru" else "ru"
+    assert counts[language] >= 2 and counts[language] > counts[other], f"Expected {language} narrative language: {text}"
+
+
+def check_narrative(answer: DiagnosisResponse, language: str, identifiers: tuple[str, ...]) -> None:
+    """Check every displayed model explanation independently while excluding raw observations and traces."""
+    fields = [answer.summary]
+    verbatim = (*identifiers, *_quoted_logs(answer))
+    if answer.cause:
+        fields.extend([answer.cause.immediate, *answer.cause.unknowns])
+        if answer.cause.underlying:
+            fields.append(answer.cause.underlying)
+    for card in answer.widgets:
+        if isinstance(card, ContainerStatusCard) and card.recommendation and card.recommendation.reason:
+            fields.append(card.recommendation.reason)
+    for text in fields:
+        check_language(text, language, verbatim)
+
+
+def _quoted_logs(answer: DiagnosisResponse) -> tuple[str, ...]:
+    """Exclude quoted observed messages while retaining unquoted English error explanations as prose."""
+    quotes = (("'", "'"), ('"', '"'), ("\u00ab", "\u00bb"), ("\u201c", "\u201d"))
+    return tuple(
+        f"{left}{entry.message}{right}"
+        for card in answer.widgets
+        if isinstance(card, LogAnomalyCard)
+        for entry in card.logs.entries
+        for left, right in quotes
+    )
+
+
+def check_answer(events: list[dict[str, Any]], lab: ComposeLab, case: Case, language: str = "en") -> DiagnosisResponse:
     """Validate typed HTTP output against exact real fixture identities and scenario facts."""
     assert events and events[0]["type"] == "turn.started"
     assert events[-1]["type"] == "turn.completed", events[-1]
@@ -15,10 +63,9 @@ def check_answer(events: list[dict[str, Any]], lab: ComposeLab, case: Case) -> D
     assert len(ready) == 1
     answer = DiagnosisResponse.model_validate(ready[0]["answer"])
     ids = {row.id for row in lab.containers.values()}
-    references = {row.id: row for row in answer.evidence}
-    assert references
-    assert all(row.host == "e2e" and row.container_id in ids | {None} for row in references.values())
-    assert all(set(widget.evidence_ids) <= references.keys() for widget in answer.widgets)
+    _check_references(answer, ids)
+    identifiers = (lab.project, *ids, *(row.name for row in lab.containers.values()))
+    check_narrative(answer, language, identifiers)
     check_resource_scope(answer, ids, lab.project)
     if case.group:
         _check_group(answer, lab)
@@ -28,16 +75,34 @@ def check_answer(events: list[dict[str, Any]], lab: ComposeLab, case: Case) -> D
     return answer
 
 
+def _check_references(answer: DiagnosisResponse, ids: set[str]) -> None:
+    """Require every displayed model reference to resolve to an observation within the fixture scope."""
+    references = {row.id: row for row in answer.evidence}
+    assert references
+    assert all(row.host == "e2e" and row.container_id in ids | {None} for row in references.values())
+    assert all(set(widget.evidence_ids) <= references.keys() for widget in answer.widgets)
+    if answer.cause:
+        assert set(answer.cause.evidence_ids) <= references.keys()
+
+
 def check_resource_scope(answer: DiagnosisResponse, ids: set[str], project: str) -> None:
     """Reject any extra card that introduces a host, container, or group outside the real fixture."""
     for card in answer.widgets:
         if isinstance(card, ContainerStatusCard):
-            assert card.snapshot.id in ids and card.snapshot.host == "e2e"
+            _check_status_scope(card, answer, ids)
         elif isinstance(card, ComposeStackCard):
             assert card.host == "e2e"
             assert all((row.kind, row.name) == ("compose", project) for row in card.stacks)
         else:
             assert card.container_id in ids and card.host == "e2e"
+
+
+def _check_status_scope(card: ContainerStatusCard, answer: DiagnosisResponse, ids: set[str]) -> None:
+    """Reject state cards supported by observations belonging to a different container."""
+    assert card.snapshot.id in ids and card.snapshot.host == "e2e"
+    sources = {row.id: row for row in answer.evidence}
+    assert card.evidence_ids
+    assert all(sources[ref].container_id in {None, card.snapshot.id} for ref in card.evidence_ids)
 
 
 def _check_group(answer: DiagnosisResponse, lab: ComposeLab) -> None:

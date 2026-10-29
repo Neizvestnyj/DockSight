@@ -30,7 +30,7 @@ def require_owner(labels: dict[str, str], owner: str) -> None:
 
 
 def _terminate(process: subprocess.Popen[str]) -> None:
-    """Stop the owned Compose CLI process tree before cleaning any resources it could still create."""
+    """Stop an owned CLI process tree before cleaning resources its descendants could still use."""
     if process.poll() is not None:
         return
     try:
@@ -49,7 +49,9 @@ def _terminate(process: subprocess.Popen[str]) -> None:
         process.communicate(timeout=10)
 
 
-def _compose(arguments: list[str], environment: dict[str, str], timeout: float = 240) -> None:
+def run_command(
+    arguments: list[str], environment: dict[str, str], timeout: float = 240, label: str = "Compose setup"
+) -> None:
     """Bound CLI execution and terminate its plugin descendants on timeout or interruption."""
     with subprocess.Popen(
         arguments,
@@ -61,12 +63,12 @@ def _compose(arguments: list[str], environment: dict[str, str], timeout: float =
         creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
     ) as process:
         try:
-            _, stderr = process.communicate(timeout=timeout)
+            stdout, stderr = process.communicate(timeout=timeout)
         except BaseException:
             _terminate(process)
             raise
         if process.returncode:
-            raise RuntimeError(f"Compose setup failed: {stderr[-4000:]}")
+            raise RuntimeError(f"{label} failed: {(stdout + stderr)[-6000:]}")
 
 
 class ComposeLab:
@@ -88,7 +90,7 @@ class ComposeLab:
         environment.pop("DOCKER_CONTEXT", None)
         default_host = DEFAULT_NPIPE if os.name == "nt" else DEFAULT_UNIX_SOCKET.replace("http+unix:", "unix:")
         docker_host = environment.get("DOCKER_HOST") or default_host
-        _compose(
+        run_command(
             [
                 "docker",
                 "--host",

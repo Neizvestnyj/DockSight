@@ -1,4 +1,5 @@
 import os
+import secrets
 import subprocess
 import sys
 import time
@@ -6,9 +7,94 @@ from unittest.mock import Mock
 
 import pytest
 from docker.errors import DockerException
+from pydantic import SecretStr
 
-from tests.integration.live_e2e.lab import OWNER_LABEL, ROOT, ComposeLab, _compose, require_owner
+from docksight.application.views.schemas import DiagnosisResponse
+from tests.integration.live_e2e.checks import check_language, check_narrative
+from tests.integration.live_e2e.lab import OWNER_LABEL, ROOT, ComposeLab, require_owner, run_command
 from tests.integration.live_e2e.server import local_model_url, require_local_models
+from tests.integration.live_e2e.test_browser import _run_browser
+
+
+@pytest.mark.parametrize(
+    ("text", "language"),
+    [
+        ("The database connection failed during startup.", "ru"),
+        ("Контейнер завершился из-за ошибки подключения к базе данных.", "en"),
+        ("backend-1 e1 137 OOM", "ru"),
+        ("`Контейнер завершился`", "ru"),
+    ],
+)
+def test_language_check_rejects_wrong_language_and_evidence_without_prose(text: str, language: str) -> None:
+    with pytest.raises(AssertionError, match="language"):
+        check_language(text, language, ("backend-1",))
+
+
+@pytest.mark.parametrize(
+    ("text", "language"),
+    [
+        ("Невозможно подключиться к PostgreSQL в backend-1. Логи: `Connection refused`.", "ru"),
+        ("The database is unavailable. Docker logs: `Ошибка подключения`.", "en"),
+        ("Контейнер завершился.\n```log\n" + "Connection refused\n" * 50 + "```", "ru"),
+        ("Неверный Chat ID в Telegram.", "ru"),
+        ("Отсутствует Telegram receiver.", "ru"),
+        ("Нет Chat ID.", "ru"),
+        ("No Chat ID.", "en"),
+    ],
+)
+def test_language_check_excludes_verbatim_code_and_resource_identifiers(text: str, language: str) -> None:
+    check_language(text, language, ("backend-1",))
+
+
+@pytest.mark.parametrize("field", ["immediate", "underlying", "unknowns"])
+def test_russian_summary_cannot_hide_an_english_cause_or_unknown_detail(field: str) -> None:
+    cause = {
+        "immediate": "Произошла ошибка подключения к базе данных.",
+        "underlying": "Настройки сети требуют проверки.",
+        "unknowns": ["Причина недоступности пока неизвестна."],
+        "evidence_ids": ["e1"],
+    }
+    cause[field] = ["The database is unreachable."] if field == "unknowns" else "The database is unreachable."
+    answer = DiagnosisResponse.model_validate(
+        {
+            "summary": "Контейнер завершился из-за ошибки подключения к базе данных.",
+            "uncertain": True,
+            "cause": cause,
+            "widgets": [],
+            "evidence": [],
+        }
+    )
+    with pytest.raises(AssertionError, match="language"):
+        check_narrative(answer, "ru", ())
+
+
+@pytest.mark.parametrize("language", ["ru", "en"])
+def test_language_check_preserves_observed_logs_without_requiring_their_translation(language: str) -> None:
+    message = "Worker ended without recording the reason for termination"
+    answer = DiagnosisResponse.model_validate(
+        {
+            "summary": "Контейнер завершился. Причина пока неизвестна." if language == "ru" else "The worker exited.",
+            "uncertain": True,
+            "cause": {
+                "immediate": "Контейнер завершился без установленной причины." if language == "ru" else message,
+                "unknowns": [f"Точная причина в логах не указана однозначно (только фраза '{message}')."]
+                if language == "ru"
+                else ["The underlying cause remains unknown."],
+                "evidence_ids": ["e1"],
+            },
+            "evidence": [],
+            "widgets": [
+                {
+                    "widget_type": "log_anomalies",
+                    "host": "e2e",
+                    "container_id": "worker",
+                    "evidence_ids": ["e1"],
+                    "logs": {"entries": [{"timestamp": None, "message": message}], "truncated": False},
+                }
+            ],
+        }
+    )
+    check_narrative(answer, language, ())
 
 
 @pytest.mark.parametrize("url", ["http://127.0.0.1:11434", "http://localhost:11434/", "http://[::1]:11434"])
@@ -92,7 +178,7 @@ def test_grafana_fixture_rejects_a_different_failure_cause(exit_code: int, oom: 
 def test_timed_out_cli_is_terminated_before_fixture_cleanup_can_start() -> None:
     started = time.monotonic()
     with pytest.raises(subprocess.TimeoutExpired):
-        _compose([sys.executable, "-c", "import time; time.sleep(30)"], dict(os.environ), timeout=0.1)
+        run_command([sys.executable, "-c", "import time; time.sleep(30)"], dict(os.environ), timeout=0.1)
     assert time.monotonic() - started < 5
 
 
@@ -108,3 +194,19 @@ def test_cleanup_never_deletes_a_foreign_resource_returned_by_the_sdk() -> None:
         lab.close()
     foreign.remove.assert_not_called()
     own.remove.assert_called_once_with(force=True, v=True)
+
+
+def test_browser_failure_redacts_credentials_in_both_message_and_pytest_argument_report(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    secret = SecretStr(secrets.token_urlsafe(32))
+
+    def fail_cli(arguments: list[str], environment: dict[str, str], **options: object) -> None:
+        """Inject a tool failure containing its environment credential at the external process boundary."""
+        raise RuntimeError(f"CLI failed with {environment['DOCKSIGHT_E2E_TOKEN']}")
+
+    monkeypatch.setattr("tests.integration.live_e2e.test_browser.run_command", fail_cli)
+    with pytest.raises(RuntimeError, match="REDACTED") as failure:
+        _run_browser("node", {}, secret)
+    report = str(failure.getrepr(showlocals=False, funcargs=True))
+    assert secret.get_secret_value() not in report

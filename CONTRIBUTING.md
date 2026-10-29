@@ -30,7 +30,9 @@ Resolve that conflict without deleting needed hooks before reinstalling.
   when boundaries change.
 - Before finishing a task or committing, update [CHANGELOG.md](CHANGELOG.md), including documentation and workflow changes.
   Keep entries brief and group related outcomes. Reuse the current version section for ongoing work on the same branch;
-  do not create a version per task or commit. Mark unfinished releases as `Unreleased`. Documentation alone needs no bump.
+  do not create a version per task or commit. Use the intended numeric version immediately, not `Unreleased`.
+  Choose PATCH for compatible fixes, MINOR for compatible additions, and MAJOR for breaking changes; keep the backend
+  package metadata and lockfile aligned. Documentation alone needs no bump.
 
 Keep Python and Markdown prose within 120 characters per line. Use UTF-8 without BOM and LF line endings.
 Write documentation, comments, docstrings, and runtime messages in English; product copy belongs in the English/Russian
@@ -136,9 +138,28 @@ The workloads cover a refused database connection and invalid Grafana alerting c
 an actual memory-limited OOM kill, a crash loop, truncated logs, and an exit 137 without an OOM kill.
 
 Select a smaller matrix with repeated `--e2e-case` options: `compose-explicit`, `compose-chat`, `compose-typo`, `oom`,
-`crash-loop`, `truncated-logs`, or `unknown-exit`. Assertions check runtime facts, resource identities, card coverage,
-observed log content, and evidence references rather than exact model prose. This suite covers the backend HTTP path;
-the browser suite above covers frontend rendering separately.
+`crash-loop`, `truncated-logs`, or `unknown-exit`. Both English and Russian run by default; repeat `--e2e-language en`
+or `--e2e-language ru` to restrict the matrix. Assertions check runtime facts, exact resource identities, card coverage,
+observed log content, and evidence references rather than exact model prose. A script-based language check covers each
+summary, cause, unresolved detail, and action recommendation independently, excluding quoted observed log messages,
+inline/fenced code, resource identifiers, and common fixture terms such as PostgreSQL and Telegram.
+This detects English/Russian mismatches;
+it does not grade translation quality or model reasoning.
+
+To include real browser flows, install frontend dependencies and Chrome, build the client, and add `--e2e-browser`:
+
+```sh
+npm --prefix frontend run build
+uv run --project backend pytest backend/tests/integration/live_e2e --live-e2e --e2e-browser --e2e-model qwen3.5:9b --e2e-case compose-chat --e2e-case compose-explicit -vv -s
+```
+
+Chrome connects to the isolated API using its temporary token. These flows do not mock routes: they submit a free-form
+question or select the Compose group, then compare rendered cards and source navigation with the actual SSE answer.
+Free chat uses a different UI locale from the question to check that narrative follows the operator's question.
+Preview servers use separate loopback ports and are stopped after each case. Browser traces, videos, and automatic
+error-context snapshots are disabled to avoid recording the connection form. Public responses and screenshots remain
+in ignored test artifacts.
+The regular browser suite stays mocked and requires neither Docker nor a model.
 
 Public SSE responses and allowlisted fixture facts are saved under `.test-artifacts/live-e2e/` for successful and failed
 diagnoses. These files are ignored by Git and contain no API token or request headers. Ordinary test runs skip live
