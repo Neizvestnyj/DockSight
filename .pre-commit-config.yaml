@@ -88,7 +88,7 @@ repos:
         always_run: true
 
       - id: pytest
-        name: Run backend tests and report duplicate fixtures
+        name: Run backend tests with 90% coverage and report duplicate fixtures
         entry: uv run --project backend pytest backend/tests -q --dup-fixtures
         language: system
         pass_filenames: false

@@ -75,7 +75,7 @@ uv run --project backend pytest backend/tests --dead-fixtures --no-cov
 
 Backend test runs measure line and branch coverage for the entire `docksight` package, including modules not imported
 by tests. The terminal report lists missing lines and branches and hides fully covered files. Local hooks and CI use
-the same defaults. No minimum coverage threshold is enforced yet. Opt-in external tests stay disabled by default.
+the same defaults and fail below 90% combined line and branch coverage. Opt-in external tests stay disabled by default.
 
 From the repository root, generate a browsable report with:
 
@@ -84,8 +84,8 @@ uv run --project backend pytest backend/tests --cov-report=html
 ```
 
 Open `htmlcov/index.html`. Coverage data and HTML reports are ignored by Git. Use `--no-cov` for debugging or
-collection-only fixture checks. Coverage from a focused test run describes only that run; use the full suite for
-the backend baseline.
+collection-only fixture checks and focused test runs. Use the full suite to check the 90% backend coverage requirement;
+individual Docker and image checks in CI use `--no-cov` because they do not represent the full suite.
 
 For frontend changes:
 
@@ -102,6 +102,8 @@ Set `PLAYWRIGHT_PORT` if the default preview port is occupied. Reports and failu
 ## Protecting master on GitHub
 
 In repository Settings, protect `master` with a branch rule requiring pull requests and the Backend and Frontend checks.
+Require `Backend checks` so coverage below 90% blocks merging. A failing workflow alone does not
+block merging unless its check is required by the branch rule.
 Apply the rule to administrators as well, disable force pushes, and prevent branch deletion. A solo maintainer can require
 pull requests without requiring another reviewer's approval. Local hooks can be bypassed; server-side protection enforces
 the policy for every client. CI runs after a push and cannot reject an already accepted update.
@@ -120,7 +122,7 @@ For Docker integration tests, start Docker and pull `python:3.12-alpine`, then r
 
 ```powershell
 $env:DOCKSIGHT_TEST_DOCKER = "1"
-uv run --project backend pytest backend/tests/integration -m docker
+uv run --project backend pytest backend/tests/integration -m docker --no-cov
 Remove-Item Env:DOCKSIGHT_TEST_DOCKER
 ```
 
@@ -142,7 +144,7 @@ an ephemeral loopback port, and isolated settings; it does not read your `.env` 
 Start Docker and local Ollama, install the desired models yourself, then run from the repository root:
 
 ```sh
-uv run --project backend pytest backend/tests/integration/live_e2e --live-e2e --e2e-model qwen3.5:9b --e2e-model ministral-3:8b-instruct-2512-q4_K_M -vv -s
+uv run --project backend pytest backend/tests/integration/live_e2e --no-cov --live-e2e --e2e-model qwen3.5:9b --e2e-model ministral-3:8b-instruct-2512-q4_K_M -vv -s
 ```
 
 Repeat `--e2e-model` to add models. `--e2e-model-url` accepts loopback endpoints only. Models are never downloaded by the
@@ -164,7 +166,7 @@ To include real browser flows, install frontend dependencies and Chrome, build t
 
 ```sh
 npm --prefix frontend run build
-uv run --project backend pytest backend/tests/integration/live_e2e --live-e2e --e2e-browser --e2e-model qwen3.5:9b --e2e-case compose-chat --e2e-case compose-explicit -vv -s
+uv run --project backend pytest backend/tests/integration/live_e2e --no-cov --live-e2e --e2e-browser --e2e-model qwen3.5:9b --e2e-case compose-chat --e2e-case compose-explicit -vv -s
 ```
 
 Chrome connects to the isolated API using its temporary token. These flows do not mock routes: they submit a free-form
