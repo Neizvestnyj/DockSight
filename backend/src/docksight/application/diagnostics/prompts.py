@@ -1,5 +1,12 @@
+import json
 import re
 from typing import Final
+
+from pydantic import ValidationError
+
+from docksight.application.diagnostics.context import EvidenceContext
+from docksight.application.diagnostics.trace import schema_issues
+from docksight.domain.errors import DockSightError
 
 SYSTEM_PROMPT: Final = """You diagnose Docker environments using read-only tools.
 Write human-readable explanations in the language of the operator's question.
@@ -35,7 +42,10 @@ When evidence identifies the immediate failure, provide cause.immediate with
 its evidence_ids. Separate cause.underlying from cause.unknowns: a refused
 database connection explains startup failure but does not establish why the
 database was unreachable. Use underlying=null for an unestablished deeper cause.
-Use cause=null when no immediate failure is established. For a group, explain
+Use cause=null when no immediate failure is established.
+Write cause text as natural sentences, never IDs such as e1/e3 or JSON such as [].
+Only evidence_ids contains reference IDs. unknowns is an array of unresolved questions.
+For a group, explain
 the whole observed scope and identify unexamined members; never imply omitted
 logs were checked. Group reports are assembled by the server independently.
 Include every widget type requested by the user when matching evidence exists:
@@ -45,7 +55,7 @@ Each container_status, log_anomalies, or env_inspector widget must reference
 exactly one container. Create separate widgets for different containers, up to
 eight widgets total. Never combine different containers in one widget.
 An uncertain cause or missing metrics must not remove supported requested cards.
-Only container_status may propose an action; set action=null on every other widget.
+Only container_status may propose an action; set both action=null and action_reason=null on every other widget.
 Available operations alone are not recommendations. Set action=null when no operation
 is needed. When explicitly recommending an operation, provide a short action_reason
 grounded in that card's evidence. Otherwise set action_reason=null. The server
@@ -62,4 +72,33 @@ def final_prompt(query: str) -> str:
         + language
         + ", unless the operator explicitly requested another language. Use human-readable prose. "
         "Do not translate log entries, environment values, names, IDs, or schema keys."
+    )
+
+
+def repair_feedback(error: ValidationError | DockSightError, context: EvidenceContext, instruction: str) -> str:
+    """Explain failures with trusted constraints and evidence groups without echoing rejected model values."""
+    failure: dict[str, object]
+    if isinstance(error, ValidationError):
+        failure = {"code": "invalid_schema", "issues": [issue.model_dump() for issue in schema_issues(error)]}
+    else:
+        failure = {"code": error.code, "message": error.message}
+    groups: dict[tuple[str, str], list[str]] = {}
+    for ref, snapshot in context.snapshots.items():
+        groups.setdefault((snapshot.host, snapshot.id), []).append(ref)
+    return json.dumps(
+        {
+            "instruction": instruction + "\nCorrect the reported error. Each evidence group is one container. "
+            "Use a separate widget for each container; never merge evidence groups in one widget. "
+            "Cause text must be natural language, never bare IDs, [] or machine codes. "
+            "Use cause=null if there is no established immediate cause.",
+            "error": failure,
+            "evidence_ids": list(context.evidence),
+            "container_evidence_groups": list(groups.values()),
+            "log_evidence_ids": list(context.logs),
+            "stack_evidence_ids": list(context.stacks),
+            "widget_constraints": {
+                "non_container_status": {"action": None, "action_reason": None},
+                "no_action": {"action_reason": None},
+            },
+        }
     )

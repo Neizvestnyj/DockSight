@@ -9,7 +9,7 @@ from uuid import uuid4
 from pydantic import ValidationError
 
 from docksight.application.diagnostics.context import EvidenceContext
-from docksight.application.diagnostics.prompts import SYSTEM_PROMPT, final_prompt
+from docksight.application.diagnostics.prompts import SYSTEM_PROMPT, final_prompt, repair_feedback
 from docksight.application.diagnostics.scope import resolve_target
 from docksight.application.diagnostics.tools import DiagnosticTools, tool_specs
 from docksight.application.diagnostics.trace import DiagnosticTrace, schema_issues
@@ -31,29 +31,6 @@ async def _before_deadline[T](deadline: float, operation: Callable[[], Awaitable
         raise TimeoutError
     async with asyncio.timeout_at(deadline):
         return await operation()
-
-
-def _repair_feedback(error: ValidationError | DockSightError, context: EvidenceContext, instruction: str) -> str:
-    """Explain validation failures with field locations and trusted evidence groups, without raw values."""
-    failure: dict[str, object]
-    if isinstance(error, ValidationError):
-        failure = {"code": "invalid_schema", "issues": [issue.model_dump() for issue in schema_issues(error)]}
-    else:
-        failure = {"code": error.code, "message": error.message}
-    groups: dict[tuple[str, str], list[str]] = {}
-    for ref, snapshot in context.snapshots.items():
-        groups.setdefault((snapshot.host, snapshot.id), []).append(ref)
-    return json.dumps(
-        {
-            "instruction": instruction
-            + "\nCorrect the reported error. Each container evidence group is one container.",
-            "error": failure,
-            "evidence_ids": list(context.evidence),
-            "container_evidence_groups": list(groups.values()),
-            "log_evidence_ids": list(context.logs),
-            "stack_evidence_ids": list(context.stacks),
-        }
-    )
 
 
 def _redact_narrative(proposal: DiagnosisProposal, redactor: Redactor) -> None:
@@ -296,7 +273,7 @@ class Diagnostics:
                 messages.extend(
                     [
                         ModelMessage("assistant", reply.content),
-                        ModelMessage("user", _repair_feedback(exc, context, instruction)),
+                        ModelMessage("user", repair_feedback(exc, context, instruction)),
                     ]
                 )
                 continue

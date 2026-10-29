@@ -8,6 +8,33 @@ from docksight.application.ports.models import ModelMessage, ToolSpec
 from docksight.domain.errors import DockSightError
 
 
+async def test_structured_output_schema_descriptions_reach_the_model_without_mutating_history() -> None:
+    payloads: list[dict] = []
+
+    def reply(request: httpx.Request) -> httpx.Response:
+        """Capture the actual provider request while returning a bounded structured answer."""
+        payloads.append(json.loads(request.content))
+        return httpx.Response(200, json={"message": {"content": '{"immediate":"Database connection failed"}'}})
+
+    schema = {
+        "type": "object",
+        "properties": {"immediate": {"type": "string", "description": "Explain the failure in natural language"}},
+        "required": ["immediate"],
+    }
+    messages = [ModelMessage("system", "Keep observed data separate"), ModelMessage("user", "Inspect worker")]
+    async with httpx.AsyncClient(transport=httpx.MockTransport(reply), base_url="http://ollama") as client:
+        await OllamaModel(client, "test-model").complete(messages, schema=schema)
+    assert payloads[0]["format"] == schema
+    content = "\n".join(row["content"] for row in payloads[0]["messages"])
+    assert "Explain the failure in natural language" in content
+    assert '"immediate"' in content
+    assert payloads[0]["messages"][:2] == [
+        {"role": "system", "content": "Keep observed data separate"},
+        {"role": "user", "content": "Inspect worker"},
+    ]
+    assert messages == [ModelMessage("system", "Keep observed data separate"), ModelMessage("user", "Inspect worker")]
+
+
 async def test_ollama_parses_tools_and_sends_native_schema() -> None:
     requests: list[dict] = []
 

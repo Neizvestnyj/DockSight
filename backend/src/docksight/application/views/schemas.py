@@ -9,6 +9,19 @@ from docksight.domain.diagnostics import EvidenceRef
 from docksight.domain.runtime import ContainerSnapshot, LogBatch, StackSummary
 
 
+def _readable_explanation(value: str) -> None:
+    """Reject placeholders and reference-only text without imposing a language or translating observations."""
+    text = re.sub(r"\be\d+\b", "", value.strip(), flags=re.I)
+    if (
+        not any(character.isalpha() for character in text)
+        or text.casefold() in {"null", "none", "n/a", "undefined"}
+        or re.fullmatch(r"[a-z][a-z0-9]*(?:_[a-z0-9]+)+", text)
+    ):
+        raise ValueError(
+            "An explanation must contain human-readable prose, not evidence IDs, placeholders, or machine codes"
+        )
+
+
 class Contract(BaseModel):
     """Forbid unrecognized fields in application and HTTP data contracts."""
 
@@ -47,17 +60,31 @@ class CauseAssessment(Contract):
     immediate: str = Field(
         min_length=1,
         max_length=600,
-        description="A human-readable explanation in the operator's language, never a machine error code.",
+        description=(
+            "Explain the immediate failure in natural language. Never put evidence IDs, JSON, or machine codes here."
+        ),
     )
-    underlying: str | None = Field(default=None, min_length=1, max_length=600)
-    unknowns: list[Annotated[str, Field(min_length=1, max_length=240)]] = Field(default_factory=list, max_length=4)
+    underlying: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=600,
+        description="A supported deeper cause in natural language, or null when not established.",
+    )
+    unknowns: list[Annotated[str, Field(min_length=1, max_length=240)]] = Field(
+        default_factory=list,
+        max_length=4,
+        description=(
+            "Unresolved questions in natural language. Use an empty array when none remain; never the string []."
+        ),
+    )
     evidence_ids: list[str] = Field(min_length=1, max_length=10)
 
     @model_validator(mode="after")
     def readable_cause(self) -> Self:
         """Reject identifier-only explanations so the single repair can request useful prose."""
-        if re.fullmatch(r"[a-z][a-z0-9]*(?:_[a-z0-9]+)+", self.immediate):
-            raise ValueError("An immediate cause must be a human-readable explanation, not a machine error code")
+        for value in (self.immediate, self.underlying, *self.unknowns):
+            if value is not None:
+                _readable_explanation(value)
         return self
 
 
@@ -65,9 +92,22 @@ class WidgetProposal(Contract):
     """Let a model select a widget and evidence without supplying runtime values."""
 
     widget_type: Literal["container_status", "log_anomalies", "compose_stack", "env_inspector"]
-    evidence_ids: list[str] = Field(min_length=1, max_length=10)
-    action: Operation | None = None
-    action_reason: str | None = Field(default=None, min_length=1, max_length=240)
+    evidence_ids: list[str] = Field(
+        min_length=1,
+        max_length=10,
+        description=(
+            "Collected evidence for this card. Container, log, and env cards each reference one exact container."
+        ),
+    )
+    action: Operation | None = Field(
+        default=None, description="Only container_status may recommend an operation; otherwise null."
+    )
+    action_reason: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=240,
+        description="A reason only when container_status explicitly recommends an action. Null when action is null.",
+    )
 
     @model_validator(mode="after")
     def check_action(self) -> Self:

@@ -136,6 +136,73 @@ async def test_schema_repair_reports_field_errors_without_model_values() -> None
     assert events[-1]["type"] == "turn.completed"
 
 
+async def test_evidence_only_cause_gets_one_repair_before_becoming_a_public_answer() -> None:
+    invalid = json.loads(proposal())
+    invalid["cause"] = {"immediate": "e1", "evidence_ids": ["e1"]}
+    corrected = json.loads(proposal())
+    corrected["cause"] = {"immediate": "Worker exited during startup", "evidence_ids": ["e1"]}
+    model = ScriptedModel(
+        [
+            ModelReply("", (ToolCall("inspect", "inspect_container", {"container_id": "worker"}),)),
+            ModelReply("Ready"),
+            ModelReply(json.dumps(invalid)),
+            ModelReply(json.dumps(corrected)),
+        ]
+    )
+    events = [
+        event
+        async for event in Diagnostics(FakeRuntime(), model, MemorySessions(), Redactor()).stream(
+            "alice",
+            "local",
+            "Inspect worker",
+        )
+    ]
+    answer = next(event["answer"] for event in events if event["type"] == "answer.ready")
+    assert len(model.requests) == 4
+    assert answer["cause"]["immediate"] == "Worker exited during startup"
+    assert events[-1]["type"] == "turn.completed"
+
+
+async def test_action_schema_repair_supplies_null_constraints_without_echoing_the_rejected_reason() -> None:
+    invalid = {
+        "summary": "Database connection failed",
+        "uncertain": True,
+        "evidence_ids": ["e2"],
+        "widgets": [
+            {
+                "widget_type": "log_anomalies",
+                "evidence_ids": ["e2"],
+                "action": None,
+                "action_reason": "private-model-reason",
+            }
+        ],
+    }
+    corrected = {**invalid, "widgets": [{"widget_type": "log_anomalies", "evidence_ids": ["e2"]}]}
+    model = ScriptedModel(
+        [
+            ModelReply("", (ToolCall("logs", "get_container_logs", {"container_id": "worker"}),)),
+            ModelReply("Ready"),
+            ModelReply(json.dumps(invalid)),
+            ModelReply(json.dumps(corrected)),
+        ]
+    )
+    events = [
+        event
+        async for event in Diagnostics(FakeRuntime(), model, MemorySessions(), Redactor()).stream(
+            "alice",
+            "local",
+            "Inspect worker",
+        )
+    ]
+    feedback = repair_feedback(model)
+    assert feedback["widget_constraints"] == {
+        "non_container_status": {"action": None, "action_reason": None},
+        "no_action": {"action_reason": None},
+    }
+    assert "private-model-reason" not in json.dumps(feedback)
+    assert events[-1]["type"] == "turn.completed"
+
+
 @pytest.mark.parametrize(
     ("nested", "location"),
     [(False, ["<extra_field>"]), (True, ["widgets", 0, "<extra_field>"])],

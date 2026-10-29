@@ -204,8 +204,9 @@ Optional `cause` separates model-authored `immediate`, nullable `underlying`, `u
 can explain startup failure while the reason for database unavailability remains unknown. The existing `uncertain`
 field remains available for older clients and responses.
 Final narrative values follow the question language (English/Russian), unless the operator explicitly asks for another
-language. Log entries, environment values, identifiers, and schema keys remain verbatim. Machine-code-only immediate
-causes are rejected through the existing single repair attempt.
+language. Log entries, environment values, identifiers, and schema keys remain verbatim. Cause text containing only
+machine codes, evidence IDs, or empty placeholders such as the string `[]` is rejected through the single repair attempt.
+Unestablished causes use `null`; unresolved questions use natural-language list entries.
 
 ## Actions
 

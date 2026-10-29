@@ -110,3 +110,41 @@ def test_immediate_cause_rejects_a_machine_error_code_as_the_explanation() -> No
                 },
             }
         )
+
+
+@pytest.mark.parametrize("field", ["immediate", "underlying", "unknowns"])
+@pytest.mark.parametrize("text", ["e3", "e3,e5", '["e1", "e2"]', "[]", "{}", "null", "   "])
+def test_cause_text_rejects_evidence_identifiers_and_empty_placeholders(field: str, text: str) -> None:
+    cause = {
+        "immediate": "Database connection failed during startup",
+        "underlying": None,
+        "unknowns": [],
+        "evidence_ids": ["e1"],
+    }
+    cause[field] = [text] if field == "unknowns" else text
+    with pytest.raises(ValidationError, match="human-readable"):
+        DiagnosisProposal.model_validate(
+            {
+                "summary": "Worker failed during startup",
+                "uncertain": True,
+                "evidence_ids": ["e1"],
+                "widgets": [],
+                "cause": cause,
+            }
+        )
+
+
+@pytest.mark.parametrize(
+    "text", ["OOM killed", "Exit 137 without recorded cause", "Контейнер завершился", "See e1: startup failed"]
+)
+def test_cause_prose_can_include_technical_terms_codes_and_evidence_citations(text: str) -> None:
+    proposal = DiagnosisProposal.model_validate(
+        {
+            "summary": "Worker failed",
+            "uncertain": True,
+            "evidence_ids": ["e1"],
+            "widgets": [],
+            "cause": {"immediate": text, "evidence_ids": ["e1"]},
+        }
+    )
+    assert proposal.cause and proposal.cause.immediate == text
