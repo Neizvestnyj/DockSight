@@ -105,3 +105,6 @@ See [configuration and deployment](docs/configuration.md) for provider examples,
 - [Architecture](docs/architecture.md) — backend boundaries and diagrams.
 - [Contributing](CONTRIBUTING.md) — development setup, checks, and contribution guidelines.
 - [Changelog](CHANGELOG.md) — release changes.
+
+For development shortcuts, optional [Make commands](CONTRIBUTING.md#make-commands) provide setup, server,
+check, test, and build targets. Run `make help` to list them.

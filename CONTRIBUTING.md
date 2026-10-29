@@ -18,6 +18,34 @@ for provider credentials and remote hosts. Never commit `.env` files, tokens, pr
 The installer preserves custom hooks and stops if an active hook and its `.legacy` backup both exist.
 Resolve that conflict without deleting needed hooks before reinstalling.
 
+### Make commands
+
+With GNU Make installed, run `make` or `make help` from the repository root to list the available commands.
+Make is optional; the direct commands in this guide remain available. Recipes work on Windows and Linux/macOS
+without Bash or Unix text utilities. Help requires only GNU Make; other targets require uv and/or npm.
+
+```sh
+make install
+make hooks
+make backend
+```
+
+Run `make frontend` in another terminal. Backend configuration and credentials follow the
+[quick start](README.md#connect-your-docker-environment).
+
+| Command | Behavior |
+|---------|----------|
+| `make check` | Run backend and frontend static checks |
+| `make check-backend` / `make check-frontend` | Check one side only |
+| `make test` | Run backend tests and frontend unit tests |
+| `make test-backend` / `make test-frontend` | Test one side only |
+| `make test-browser` | Build the frontend, then run browser tests; requires Chrome |
+| `make build` | Build the frontend |
+| `make verify` | Run all shared hooks, frontend static and unit checks, and browser tests with a fresh build |
+
+Targets run sequentially even with `make -j` to avoid concurrent frontend checks and builds.
+Docker and live-model tests remain separate opt-in commands described below.
+
 ## Making changes
 
 - Start branches from `master`; use `feature/<lowercase-kebab-case>` for features.

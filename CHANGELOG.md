@@ -12,6 +12,7 @@
   with exact-resource card checks, English/Russian narrative checks, retained diagnostic artifacts, and scoped cleanup.
 - Exercise free-form group questions and explicit Compose selection through the real browser, API, Docker, and model.
 - Assign the intended semantic version during branch development and keep backend package metadata aligned.
+- Add optional root Make commands with English help for setup, development servers, checks, tests, and frontend builds.
 
 ## v0.3.0
 
