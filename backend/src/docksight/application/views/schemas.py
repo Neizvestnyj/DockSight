@@ -1,3 +1,4 @@
+import re
 from datetime import datetime
 from typing import Annotated, Literal, Self
 
@@ -43,10 +44,21 @@ class GroupInspection(Contract):
 class CauseAssessment(Contract):
     """Separate an evidence-backed immediate failure from deeper explanations and unknowns."""
 
-    immediate: str = Field(min_length=1, max_length=600)
+    immediate: str = Field(
+        min_length=1,
+        max_length=600,
+        description="A human-readable explanation in the operator's language, never a machine error code.",
+    )
     underlying: str | None = Field(default=None, min_length=1, max_length=600)
     unknowns: list[Annotated[str, Field(min_length=1, max_length=240)]] = Field(default_factory=list, max_length=4)
     evidence_ids: list[str] = Field(min_length=1, max_length=10)
+
+    @model_validator(mode="after")
+    def readable_cause(self) -> Self:
+        """Reject identifier-only explanations so the single repair can request useful prose."""
+        if re.fullmatch(r"[a-z][a-z0-9]*(?:_[a-z0-9]+)+", self.immediate):
+            raise ValueError("An immediate cause must be a human-readable explanation, not a machine error code")
+        return self
 
 
 class WidgetProposal(Contract):

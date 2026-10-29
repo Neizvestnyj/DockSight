@@ -37,6 +37,8 @@ async def test_trace_reports_ordered_measured_steps_without_intermediate_text_or
     assert any(event["type"] == "trace.started" for event in events)
     rows = [event["step"] for event in events if event["type"] == "trace.step"]
     finished = [row for row in rows if row["state"] != "running"]
+    assert finished[0]["operation"] == "resolve_target"
+    finished = finished[1:]
     assert [row["kind"] for row in finished] == ["model", "tool", "model", "model", "validation"]
     assert finished[0]["input_tokens"] == 12
     assert finished[0]["output_tokens"] == 0
@@ -194,6 +196,8 @@ async def test_excess_tool_calls_keep_paired_budget_errors_without_executing_or_
     results = [message for message in model.requests[-1][0] if message.role == "tool"]
     assert [message.tool_call_id for message in results] == ["c0", "c1", "c2"]
     assert [json.loads(message.content)["error"] for message in results[1:]] == ["tool_limit", "tool_limit"]
-    actual = [event for event in events if event["type"] == "trace.step" and event["step"]["kind"] == "tool"]
+    actual = [
+        event for event in events if event["type"] == "trace.step" and event["step"]["operation"] == "inspect_container"
+    ]
     assert len(actual) == 2
     assert events[-1]["type"] == "turn.completed"

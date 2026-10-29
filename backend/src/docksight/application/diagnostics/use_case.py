@@ -9,7 +9,8 @@ from uuid import uuid4
 from pydantic import ValidationError
 
 from docksight.application.diagnostics.context import EvidenceContext
-from docksight.application.diagnostics.prompts import FINAL_PROMPT, SYSTEM_PROMPT
+from docksight.application.diagnostics.groups import resolve_target
+from docksight.application.diagnostics.prompts import SYSTEM_PROMPT, final_prompt
 from docksight.application.diagnostics.tools import DiagnosticTools, tool_specs
 from docksight.application.diagnostics.trace import DiagnosticTrace, schema_issues
 from docksight.application.events import TurnEvent
@@ -32,7 +33,7 @@ async def _before_deadline[T](deadline: float, operation: Callable[[], Awaitable
         return await operation()
 
 
-def _repair_feedback(error: ValidationError | DockSightError, context: EvidenceContext) -> str:
+def _repair_feedback(error: ValidationError | DockSightError, context: EvidenceContext, instruction: str) -> str:
     """Explain validation failures with field locations and trusted evidence groups, without raw values."""
     failure: dict[str, object]
     if isinstance(error, ValidationError):
@@ -44,7 +45,7 @@ def _repair_feedback(error: ValidationError | DockSightError, context: EvidenceC
         groups.setdefault((snapshot.host, snapshot.id), []).append(ref)
     return json.dumps(
         {
-            "instruction": FINAL_PROMPT
+            "instruction": instruction
             + "\nCorrect the reported error. Each container evidence group is one container.",
             "error": failure,
             "evidence_ids": list(context.evidence),
@@ -122,6 +123,8 @@ class Diagnostics:
                 else ("turn_timeout", "Diagnostic turn timed out")
             )
             if trace.active:
+                if trace.active.kind == "tool":
+                    yield {"type": "tool.completed", "turn_id": turn_id, "tool": trace.active.operation, "ok": False}
                 yield trace.finish(code=code)
             yield {
                 "type": "turn.failed",
@@ -157,7 +160,28 @@ class Diagnostics:
             ModelMessage("user", self.redactor.text(query)),
         ]
         context = EvidenceContext()
-        tools = DiagnosticTools(self.runtime, context, session.host, self.log_lines, self.log_bytes, group)
+        inventory = None
+        if group is None:
+            yield {"type": "tool.started", "turn_id": trace.turn_id, "tool": "resolve_target"}
+            yield trace.begin("tool", "resolve_target")
+            resolved = await _before_deadline(deadline, lambda: resolve_target(self.runtime, session.host, query))
+            inventory, group = resolved.containers, resolved.group
+            yield trace.finish(code=resolved.discovery_code)
+            yield {
+                "type": "tool.completed",
+                "turn_id": trace.turn_id,
+                "tool": "resolve_target",
+                "ok": resolved.discovery_code is None,
+            }
+            if resolved.discovery_code:
+                messages.append(
+                    ModelMessage(
+                        "system",
+                        "Swarm discovery failed. Its stack inventory is unknown; do not infer absence. "
+                        "Container observations remain usable.",
+                    )
+                )
+        tools = DiagnosticTools(self.runtime, context, session.host, self.log_lines, self.log_bytes, group, inventory)
         if group:
             call = ToolCall("selected-group", "inspect_group", group.model_dump())
             messages.append(ModelMessage("assistant", "", (call,)))
@@ -165,7 +189,7 @@ class Diagnostics:
                 yield event
         async for event in self._explore(messages, tools, deadline, trace, int(group is not None)):
             yield event
-        messages.append(ModelMessage("user", FINAL_PROMPT))
+        messages.append(ModelMessage("user", final_prompt(query)))
         async for event in self._finalize(messages, context, session.actor, deadline, trace):
             if event["type"] == "answer.ready":
                 session.history.extend(
@@ -245,6 +269,7 @@ class Diagnostics:
         trace: DiagnosticTrace,
     ) -> AsyncGenerator[TurnEvent]:
         """Validate the final proposal and allow one budgeted schema or evidence repair."""
+        instruction = messages[-1].content
         for attempt in range(2):
             yield trace.begin("model", "repair_response" if attempt else "final_response")
             reply = await _before_deadline(deadline, lambda: self.model.complete(messages, schema=proposal_schema()))
@@ -271,7 +296,7 @@ class Diagnostics:
                 messages.extend(
                     [
                         ModelMessage("assistant", reply.content),
-                        ModelMessage("user", _repair_feedback(exc, context)),
+                        ModelMessage("user", _repair_feedback(exc, context, instruction)),
                     ]
                 )
                 continue

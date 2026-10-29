@@ -152,7 +152,8 @@ serialization. A preview is at most 16 KiB of UTF-8 text, may have changed forma
 `response_truncated=true` also marks an oversized withheld candidate. Never interpret a preview as authoritative Docker
 data or execute a proposed action directly from it.
 
-Configured budgets allow at most 30 model calls, 100 tool executions, and two validation steps, yielding at most 132
+Configured budgets allow at most 30 model calls, 100 tool executions, two validation steps, and one scope-discovery step,
+yielding at most 133
 trace steps. Calls beyond the tool budget still receive paired `tool_limit` results for provider replay and existing
 tool-progress events; they perform no runtime read and add no execution trace step. Trace events share the request's
 authentication and host scope, add no provider requests, are not persisted, and do not support replay.
@@ -161,6 +162,13 @@ SSE comments provide heartbeats. Failures after streaming starts remain HTTP 200
 Disconnecting cancels diagnostic work. Streams do not support replay or automatic reconnection.
 
 ## Group targets and cause assessment
+
+Before model exploration, exact project/stack names in the question are resolved against Docker metadata. A matching
+Compose project is inspected automatically; otherwise stack names are discovered on a Swarm manager. Exact container
+IDs/names preserve container scope. Ambiguous names require an explicit selection. `resolve_target` progress and trace
+events describe this read; it does not spend a model call. Model tools accept full Docker IDs or exact observed names,
+not ID prefixes or evidence IDs. Optional Swarm discovery failures remain explicit without blocking ordinary container
+diagnosis; an explicit Swarm request still fails if its required metadata cannot be read.
 
 `POST /chat/turns` also accepts an optional `group`: `{"kind":"compose","name":"infra"}` or
 `{"kind":"swarm","name":"infra"}`. The name identifies an observed group on the configured host. Group objects
@@ -187,6 +195,9 @@ Optional `cause` separates model-authored `immediate`, nullable `underlying`, `u
 `evidence_ids`. References are validated and narrative fields are redacted. For example, a database connection refusal
 can explain startup failure while the reason for database unavailability remains unknown. The existing `uncertain`
 field remains available for older clients and responses.
+Final narrative values follow the question language (English/Russian), unless the operator explicitly asks for another
+language. Log entries, environment values, identifiers, and schema keys remain verbatim. Machine-code-only immediate
+causes are rejected through the existing single repair attempt.
 
 ## Actions
 

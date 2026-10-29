@@ -5,6 +5,7 @@ import pytest
 
 from docksight.adapters.outbound.memory.sessions import MemorySessions
 from docksight.application.diagnostics.context import EvidenceContext
+from docksight.application.diagnostics.groups import resolve_target
 from docksight.application.diagnostics.tools import DiagnosticTools
 from docksight.application.diagnostics.use_case import Diagnostics
 from docksight.application.ports.models import ModelReply, ToolCall
@@ -200,3 +201,139 @@ async def test_group_inventory_cannot_introduce_an_unrelated_card() -> None:
     )
     with pytest.raises(DockSightError, match="outside the selected group"):
         await ViewAssembler().build(invalid, context, "alice")
+
+
+async def test_plain_question_resolves_the_exact_compose_name_before_model_exploration() -> None:
+    model = ScriptedModel(
+        [
+            ModelReply("Ready"),
+            ModelReply(
+                json.dumps(
+                    {
+                        "summary": "Several project members failed",
+                        "uncertain": True,
+                        "evidence_ids": ["e1"],
+                        "widgets": [],
+                    }
+                )
+            ),
+        ]
+    )
+    events = [
+        event
+        async for event in Diagnostics(GroupRuntime(), model, MemorySessions(), Redactor()).stream(
+            "alice", "local", "What happened to infra?"
+        )
+    ]
+    answer = next(event["answer"] for event in events if event["type"] == "answer.ready")
+    assert answer["group"]["summary"]["name"] == "infra"
+    assert len(answer["group"]["summary"]["members"]) == 6
+    assert any("database unavailable" in message.content for message in model.requests[0][0] if message.role == "tool")
+    assert events[-1]["type"] == "turn.completed"
+
+
+async def test_evidence_ids_cannot_be_interpreted_as_docker_id_prefixes() -> None:
+    context = EvidenceContext()
+    tools = DiagnosticTools(FakeRuntime(), context, "local")
+    await tools.execute(ToolCall("inventory", "list_containers", {}))
+    with pytest.raises(DockSightError, match=r"data\.id or the exact container name"):
+        await tools.execute(ToolCall("wrong", "inspect_container", {"container_id": "e1"}))
+    with pytest.raises(DockSightError, match=r"data\.id or the exact container name"):
+        await tools.execute(ToolCall("prefix", "inspect_container", {"container_id": "abcd"}))
+
+
+async def test_scope_failure_finishes_its_tool_progress_without_calling_the_model() -> None:
+    runtime = GroupRuntime()
+    runtime.item = replace(runtime.item, name="infra")
+    model = ScriptedModel([])
+    events = [
+        event
+        async for event in Diagnostics(runtime, model, MemorySessions(), Redactor()).stream(
+            "alice", "local", "What happened to infra?"
+        )
+    ]
+    assert events[-1]["type"] == "turn.failed"
+    assert any(
+        event["type"] == "tool.completed" and event["tool"] == "resolve_target" and not event["ok"] for event in events
+    )
+    assert not model.requests
+
+
+async def test_scope_resolution_keeps_exact_containers_and_rejects_an_ambiguous_group_name() -> None:
+    runtime = GroupRuntime()
+    exact = await resolve_target(runtime, "local", f"Investigate infra worker {runtime.rows[0].id}")
+    assert exact.group is None
+    named = await resolve_target(runtime, "local", "What happened to worker-1?")
+    assert named.group is None
+    runtime.item = replace(runtime.item, name="infra")
+    with pytest.raises(DockSightError, match="ambiguous"):
+        await resolve_target(runtime, "local", "What happened to infra?")
+
+
+async def test_scope_resolution_does_not_match_a_project_name_inside_a_container_name() -> None:
+    assert (await resolve_target(GroupRuntime(), "local", "Inspect infra-backend-1")).group is None
+
+
+async def test_scope_resolution_discovers_a_named_swarm_stack() -> None:
+    class SwarmRuntime(GroupRuntime):
+        """Expose a manager stack without a local Compose project of the same name."""
+
+        async def stacks(self, host: str, kind: str) -> tuple[StackSummary, ...]:
+            """Return manager-owned stack metadata."""
+            return (StackSummary("production", "swarm", 4, 2),)
+
+    target = (await resolve_target(SwarmRuntime(), "local", "What happened to production?")).group
+    assert target == GroupTarget(kind="swarm", name="production")
+
+
+async def test_scope_resolution_respects_kind_and_sentence_punctuation() -> None:
+    class DualRuntime(GroupRuntime):
+        """Expose colliding Compose and Swarm names for disambiguation."""
+
+        async def stacks(self, host: str, kind: str) -> tuple[StackSummary, ...]:
+            """Return the namespace selected by the metadata read."""
+            return (StackSummary("infra", "swarm", 4, 2),) if kind == "swarm" else await super().stacks(host, kind)
+
+    assert (await resolve_target(DualRuntime(), "local", "Inspect the Swarm stack infra.")).group == GroupTarget(
+        kind="swarm", name="infra"
+    )
+    assert (await resolve_target(DualRuntime(), "local", "Inspect the Compose project infra.")).group == GroupTarget(
+        kind="compose", name="infra"
+    )
+    with pytest.raises(DockSightError, match="ambiguous"):
+        await resolve_target(DualRuntime(), "local", "What happened to infra?")
+    assert (await resolve_target(GroupRuntime(), "local", "Diagnose infra.")).group == GroupTarget(
+        kind="compose", name="infra"
+    )
+
+
+async def test_failed_optional_swarm_discovery_does_not_block_container_diagnostics() -> None:
+    class FailedSwarm(GroupRuntime):
+        """Keep ordinary Docker reads available while manager metadata fails."""
+
+        async def stacks(self, host: str, kind: str) -> tuple[StackSummary, ...]:
+            """Report a bounded manager read failure."""
+            raise DockSightError("runtime_timeout", "Docker operation timed out", 504)
+
+    model = ScriptedModel(
+        [
+            ModelReply("Ready"),
+            ModelReply(
+                json.dumps(
+                    {
+                        "summary": "More observations are needed",
+                        "uncertain": True,
+                        "evidence_ids": [],
+                        "widgets": [],
+                    }
+                )
+            ),
+        ]
+    )
+    service = Diagnostics(FailedSwarm(), model, MemorySessions(), Redactor())
+    events = [event async for event in service.stream("alice", "local", "Why are containers restarting?")]
+    assert events[-1]["type"] == "turn.completed"
+    assert any("Swarm discovery failed" in message.content for message in model.requests[0][0])
+    failed = [event async for event in service.stream("alice", "local", "Inspect the Swarm stack infra")]
+    assert failed[-1]["type"] == "turn.failed"
+    assert failed[-1]["code"] == "runtime_timeout"

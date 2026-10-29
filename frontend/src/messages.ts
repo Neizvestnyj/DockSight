@@ -41,6 +41,7 @@ const russian = {
   'Logs not collected': 'Логи не собраны',
   'Problem containers with logs: {collected} / {total}': 'Проблемных контейнеров с логами: {collected} / {total}',
   'Inspecting group members': 'Проверка участников группы',
+  'Resolving diagnostic scope': 'Определение области диагностики',
   'Local container discovery failed. Group observations are retained.':
     'Не удалось получить локальные контейнеры. Наблюдения группы сохранены.',
   'Supporting observations': 'Подтверждающие наблюдения',
@@ -481,6 +482,7 @@ const russian = {
 
 export type MessageKey = keyof typeof russian;
 export const diagnosticOperations: Record<string, MessageKey> = {
+  resolve_target: 'Resolving diagnostic scope',
   inspect_group: 'Inspecting group members',
   list_containers: 'Reading container inventory',
   inspect_container: 'Inspecting container state',

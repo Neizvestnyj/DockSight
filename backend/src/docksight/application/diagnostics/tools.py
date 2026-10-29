@@ -1,3 +1,4 @@
+import re
 from dataclasses import replace
 from typing import Final, Literal, cast
 
@@ -23,7 +24,10 @@ class NoArgs(Contract):
 class ContainerArgs(Contract):
     """Validate a Docker container identifier without accepting a host override."""
 
-    container_id: str = Field(pattern=r"^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$")
+    container_id: str = Field(
+        pattern=r"^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$",
+        description="Use the full data.id or exact observed container name, never an evidence_id.",
+    )
 
 
 class StackArgs(Contract):
@@ -67,6 +71,7 @@ class DiagnosticTools:
         log_lines: int = 200,
         log_bytes: int = 65536,
         group: GroupTarget | None = None,
+        inventory: tuple[ContainerSnapshot, ...] | None = None,
     ) -> None:
         """Bind one host, evidence context, and bounded log read settings."""
         self.runtime = runtime
@@ -75,6 +80,7 @@ class DiagnosticTools:
         self.log_lines = log_lines
         self.log_bytes = log_bytes
         self.group = group
+        self.inventory = inventory
 
     async def execute(self, call: ToolCall) -> JsonObject:
         """Reject unknown tools or arguments before dispatching a bounded runtime read."""
@@ -104,9 +110,7 @@ class DiagnosticTools:
 
     async def _containers(self) -> JsonObject:
         """Record bounded inventory and report truncation when evidence capacity is reached."""
-        rows = await self.runtime.containers(self.host)
-        if self.context.group:
-            rows = tuple(row for row in rows if row.id in self.context.group.summary.container_ids)
+        rows = await self._inventory()
         results: list[JsonValue] = []
         for snapshot in rows[:32]:
             try:
@@ -123,6 +127,13 @@ class DiagnosticTools:
             results.append({"evidence_id": item.id, "data": item.data})
         return {"containers": results, "truncated": len(results) < len(rows)}
 
+    async def _inventory(self) -> tuple[ContainerSnapshot, ...]:
+        """Reuse this turn's discovery snapshots and keep any group read scoped before applying limits."""
+        rows = self.inventory if self.inventory is not None else await self.runtime.containers(self.host)
+        if self.context.group:
+            rows = tuple(row for row in rows if row.id in self.context.group.summary.container_ids)
+        return rows
+
     async def _group(self, target: GroupTarget) -> JsonObject:
         """Bind model-discovered groups and reuse an already collected report within this turn."""
         if self.group and target != self.group:
@@ -136,7 +147,8 @@ class DiagnosticTools:
 
     async def _container(self, tool: str, container_id: str) -> JsonObject:
         """Resolve one container before collecting its allowlisted evidence."""
-        snapshot = await self.runtime.inspect(self.host, container_id)
+        exact_id = await self._resource_id(container_id)
+        snapshot = await self.runtime.inspect(self.host, exact_id)
         if self.context.group and snapshot.id not in self.context.group.summary.container_ids:
             raise DockSightError("resource_outside_group", "Resource is outside the selected group", 422)
         data = cast(JsonObject, _SNAPSHOT.dump_python(snapshot, mode="json"))
@@ -167,3 +179,15 @@ class DiagnosticTools:
             item = self.context.record("container", self.host, data, snapshot)
 
         return {"evidence_id": item.id, "data": item.data}
+
+    async def _resource_id(self, value: str) -> str:
+        """Accept full Docker IDs or discovered exact names, never arbitrary ID prefixes or evidence aliases."""
+        if re.fullmatch(r"[a-f0-9]{64}", value):
+            return value
+        rows = self.inventory if self.inventory is not None else await self.runtime.containers(self.host)
+        target = next((row for row in rows if row.name == value), None)
+        if target:
+            return target.id
+        raise DockSightError(
+            "invalid_resource_reference", "Use data.id or the exact container name, not evidence_id", 422
+        )

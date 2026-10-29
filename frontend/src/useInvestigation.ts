@@ -102,7 +102,7 @@ export function useInvestigation(client: Transport, host: string, initial?: Answ
             const existing = trace.steps.some((row) => row.id === event.step.id);
             const steps = existing
               ? trace.steps.map((row) => (row.id === event.step.id ? event.step : row))
-              : [...trace.steps, event.step].slice(0, 132);
+              : [...trace.steps, event.step].slice(0, 133);
             return { ...common, trace: { ...trace, steps } };
           }
           case 'tool.started':

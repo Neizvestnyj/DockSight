@@ -92,3 +92,21 @@ def test_cause_assessment_requires_evidence_and_keeps_unknowns_separate() -> Non
     assert proposal.cause is not None
     assert proposal.cause.immediate == "Database connection failed during startup"
     assert proposal.cause.underlying is None
+
+
+def test_immediate_cause_rejects_a_machine_error_code_as_the_explanation() -> None:
+    with pytest.raises(ValidationError, match="human-readable"):
+        DiagnosisProposal.model_validate(
+            {
+                "summary": "Startup failed",
+                "uncertain": True,
+                "evidence_ids": ["e1"],
+                "widgets": [],
+                "cause": {
+                    "immediate": "database_connection_failure",
+                    "underlying": None,
+                    "unknowns": [],
+                    "evidence_ids": ["e1"],
+                },
+            }
+        )
