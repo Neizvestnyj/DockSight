@@ -284,8 +284,8 @@ test('keeps large logs bounded and keyboard-scrollable', async ({ page }) => {
   const answer = demoAnswer('crash_loop', 'test-host');
   const data = {
     entries: Array.from({ length: 200 }, (_, i) => ({
-      timestamp: null,
-      message: `Browser test log sample ${i + 1}: application output`,
+      timestamp: new Date(Date.parse('2026-10-27T23:58:20Z') + i * 1000).toISOString(),
+      message: i === 199 ? 'database system is shut down' : `Browser test log sample ${i + 1}: application output`,
     })),
     truncated: true,
   };
@@ -308,8 +308,11 @@ test('keeps large logs bounded and keyboard-scrollable', async ({ page }) => {
   await page.getByRole('button', { name: 'Investigate', exact: true }).click();
   const logs = page.getByRole('group', { name: 'Timestamped container logs' });
   await expect(logs.locator('.log-line')).toHaveCount(200);
+  await expect(page.locator('.log-window')).toContainText('2026-10-27 23:58:20 UTC');
+  await expect(page.locator('.log-window')).toContainText('2026-10-28 00:01:39 UTC');
   await logs.focus();
   await page.keyboard.press('End');
+  await expect(logs.getByText('database system is shut down')).toBeInViewport();
   expect(await logs.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });

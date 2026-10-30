@@ -416,12 +416,15 @@ const russian = {
   },
   'Truncated · partial evidence': 'Логи обрезаны · данные неполные',
   'Within requested bounds': 'В пределах запроса',
+  'Latest log window · oldest first': 'Последние логи · сначала более ранние',
+  'No complete log lines fit within the limit. The log is incomplete.':
+    'В лимит не поместились целые строки логов. Данные неполные.',
   'Timestamped container logs': 'Логи контейнера с временными метками',
   'No time': 'Нет времени',
   'No log entries returned. An empty log does not establish the cause.':
     'Строки логов не получены. Пустые логи не объясняют причину.',
   'Docker logs · sanitized text': 'Логи Docker · очищенный текст',
-  'Earlier or later output may be missing': 'Начало или конец вывода могут отсутствовать',
+  'Earlier output was omitted': 'Более ранний вывод опущен',
   'Docker Compose': 'Docker Compose',
   'Docker Swarm': 'Docker Swarm',
   '{running} of {total} running': 'Работают {running} из {total}',

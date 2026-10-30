@@ -10,6 +10,8 @@ Dates below record each version's merge into `master` in Europe/Moscow. Version 
 
 ### Fixed
 
+- Bounded Docker log reads and diagnostic byte budgets retain the latest output instead of the start of a tail window.
+  Log viewers show the retained UTC date range and order; oversized scans fail explicitly rather than hiding final events.
 - Final and repair schemas restrict evidence references to the current turn instead of accepting arbitrary strings.
   A noisy SQL-log follow-up covers exact-container evidence, card content, and response language.
 - Explicit English/Russian container references preserve container scope when a Compose project has the same name,
@@ -28,6 +30,8 @@ Dates below record each version's merge into `master` in Europe/Moscow. Version 
 
 ### Added
 
+- A graceful-shutdown live scenario checks tail retention and detects unsupported attribution of process stops to SQL
+  request errors. The causal check currently exposes a remaining local-model limitation.
 - Gemini provider with a default Google endpoint, environment-based API keys, metadata checks, and preserved tool-call
   signatures for multi-step diagnostics. The status panel recognizes Gemini; configuration includes a Flash-Lite example.
 - An opt-in two-turn live regression checks group-to-dependency follow-ups in the same session against isolated Docker

@@ -39,6 +39,8 @@ namespace-labeled group of Swarm services, not an individual service.
 Group logs[].state is a log-read outcome, never a container runtime state.
 A failed log read does not mean the container failed; use summary.members or snapshots for runtime states.
 Distinguish symptoms from causes. State uncertainty when evidence is missing.
+Request or transaction errors do not establish why a server process terminated.
+Compare current Docker state, exit code, OOM and log chronology before claiming a crash or a causal link.
 Each tool response supplies evidence IDs scoped to this turn; cite those IDs.
 Do not output shell commands, HTML, endpoint URLs, or hidden reasoning.
 The application will ask for a final JSON diagnosis after evidence collection.
@@ -52,6 +54,9 @@ Previous turn summaries are context only; collect fresh evidence for this turn.
 FINAL_PROMPT: Final = """Return the final diagnosis using the supplied JSON schema.
 Use only evidence IDs collected in this turn. Keep the summary short and state
 what the evidence supports. Set uncertain=true if the cause is not established.
+Use the latest lifecycle observations, not historical request errors, to explain a container's termination.
+Exit code 0 with an orderly shutdown is not evidence of a crash caused by preceding application errors.
+If the shutdown initiator or a cross-service causal link is not observed, keep it unknown instead of guessing.
 Every evidence_ids item must be an ID from the current evidence catalog, never a log quotation or an error message.
 When evidence identifies the immediate failure, provide cause.immediate with
 its evidence_ids. Separate cause.underlying from cause.unknowns: a refused

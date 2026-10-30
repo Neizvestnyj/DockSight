@@ -110,7 +110,7 @@ async def test_logs_fit_remaining_serialized_evidence_budget(message: str, consu
     assert batch.truncated is True
     assert batch.entries
     assert batch.entries[0].message
-    assert message.startswith(batch.entries[0].message)
+    assert message.endswith(batch.entries[-1].message)
     assert context.used_bytes <= 65536
     assert context.used_bytes == sum(
         len(json.dumps(item.data, ensure_ascii=False).encode()) for item in context.evidence.values()

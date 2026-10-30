@@ -1717,6 +1717,20 @@ textarea {
   font-size: 11px;
   gap: 10px;
 }
+.log-window {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 6px 16px;
+  padding: 0 16px 10px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.log-window-range {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
 .logs {
   background: var(--log-bg);
   color: var(--log-text);

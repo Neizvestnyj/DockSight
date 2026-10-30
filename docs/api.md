@@ -22,7 +22,10 @@ and `/openapi.json` are public.
 
 Errors contain `code`, `message`, and a request ID where available. Validation errors omit submitted values. Request
 bodies are limited to 16 KiB. Host IDs resolve through server configuration; callers cannot submit connection URLs. At
-the byte limit, logs omit the incomplete trailing line before redaction.
+the byte limit, logs retain the newest complete lines after redaction, discarding an incomplete leading fragment.
+They remain in Docker output order. A finite tail scan is limited to 8 MiB and the Docker timeout; exceeding the scan
+limit returns `log_read_limit` instead of a middle excerpt presented as the latest output.
+Diagnostic JSON-budget clipping can shorten the beginning of the oldest retained message and sets `truncated=true`.
 
 Container and stack GET requests pass through HTTP routes, `RuntimeQueries`, and the Docker adapter. The Docker adapter
 applies field allowlists and redaction before returning owned values; the HTTP adapter serializes them as JSON.
@@ -123,6 +126,7 @@ call. Executing those actions requires the separate confirmation flow below.
 Final and repair JSON schemas constrain every `evidence_ids` array to IDs collected in the current turn. A compact
 current-turn catalog identifies their observation kind and exact container; quoted log messages are not reference IDs.
 Server validation still rejects unknown references or references that cannot support the requested card.
+This validates reference integrity and card data, not the semantic correctness of a model's causal explanation.
 
 Container status, log, and environment cards each reference exactly one container. A question about several containers
 uses separate cards, with at most eight cards per response. Repair feedback includes the validation failure, valid
@@ -228,7 +232,8 @@ requests containing both `group` and `container_id` are rejected. A removed or f
 Clarifying a pending question retains its session; independently changing the selected scope starts a separate session.
 
 The read-only `inspect_group` tool provides the same workflow for model-discovered targets. It collects a group summary
-and logs for at most four local problem containers, at most 200 configured lines and 4 KiB per read. Collected payloads
+and logs for at most four local problem containers, at most 200 configured lines and 4 KiB of returned log text per
+container. Collected payloads
 and evidence references reach the model together. Failed and omitted reads remain distinct. Tool calls keep their normal
 progress and trace events. Group collection never prepares or executes a group-wide mutation.
 

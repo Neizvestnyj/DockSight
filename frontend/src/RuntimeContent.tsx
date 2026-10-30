@@ -5,12 +5,26 @@ import { utc } from './format';
 /** Render sanitized log strings verbatim in both historical cards and direct Docker reads. */
 export function LogContent({ logs, grouped = false }: { logs: LogBatch; grouped?: boolean }) {
   const { t } = useLocale();
+  const first = logs.entries[0]?.timestamp;
+  const last = logs.entries.at(-1)?.timestamp;
   return (
     <>
       <div className="log-toolbar">
         <span>{t('{count} lines returned', { count: logs.entries.length })}</span>
         <span>{t(logs.truncated ? 'Truncated · partial evidence' : 'Within requested bounds')}</span>
       </div>
+      {!!logs.entries.length && (
+        <div className="log-window">
+          <span>{t('Latest log window · oldest first')}</span>
+          {first && last && (
+            <span className="log-window-range">
+              <time dateTime={first}>{utc(first, true)}</time>
+              <span aria-hidden="true">→</span>
+              <time dateTime={last}>{utc(last, true)}</time>
+            </span>
+          )}
+        </div>
+      )}
       <div
         className="logs"
         tabIndex={0}
@@ -20,14 +34,23 @@ export function LogContent({ logs, grouped = false }: { logs: LogBatch; grouped?
         {logs.entries.length ? (
           logs.entries.map((entry, index) => (
             <div className="log-line" key={index}>
-              <time dateTime={entry.timestamp ?? undefined}>
+              <time
+                dateTime={entry.timestamp ?? undefined}
+                title={entry.timestamp ? utc(entry.timestamp, true) : undefined}
+              >
                 {entry.timestamp ? utc(entry.timestamp).replace(' UTC', '') : t('No time')}
               </time>
               <code>{entry.message}</code>
             </div>
           ))
         ) : (
-          <p>{t('No log entries returned. An empty log does not establish the cause.')}</p>
+          <p>
+            {t(
+              logs.truncated
+                ? 'No complete log lines fit within the limit. The log is incomplete.'
+                : 'No log entries returned. An empty log does not establish the cause.',
+            )}
+          </p>
         )}
       </div>
     </>

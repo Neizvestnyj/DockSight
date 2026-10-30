@@ -34,8 +34,8 @@ def logs() -> None:
         time.sleep(1)
 
 
-def database_logs() -> None:
-    """Emit synthetic PostgreSQL-style SQL errors while Docker keeps this workload running; no database is hosted."""
+def database_logs(shutdown: bool = False) -> None:
+    """Emit synthetic PostgreSQL-style history followed by a running workload or a clean exit; no DB is hosted."""
     for index in range(60):
         print(
             f'ERROR: invalid input value for enum login_provider: "invalid_provider" request={index}'
@@ -48,6 +48,13 @@ def database_logs() -> None:
     print("LOG: invalid record length at 14/5A179788: expected at least 24, got 0")
     print("LOG: redo done at 14/5A179750")
     print("LOG: database system is ready to accept connections")
+    if shutdown:
+        print("LOG: received fast shutdown request")
+        print("LOG: aborting any active transactions")
+        print("LOG: shutting down")
+        print("LOG: checkpoint complete")
+        print("LOG: database system is shut down")
+        return
     Path("/tmp/ready").touch()
     while True:
         time.sleep(1)
@@ -64,6 +71,8 @@ def main() -> None:
         logs()
     elif mode == "database-logs":
         database_logs()
+    elif mode == "database-shutdown":
+        database_logs(shutdown=True)
     elif mode == "crash":
         print("ConfigurationError: REQUIRED_SETTING is missing; initialization aborted")
         raise SystemExit(1)

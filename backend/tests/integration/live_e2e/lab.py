@@ -11,7 +11,7 @@ from docker.errors import DockerException
 from docker.models.containers import Container
 
 from docksight.adapters.outbound.docker.hosts import HostConfig, connect
-from tests.integration.live_e2e.cases import FOLLOW_UP_CASES, FOLLOW_UP_NOISY_CASE, Case
+from tests.integration.live_e2e.cases import FOLLOW_UP_CASES, Case
 
 ROOT: Final = Path(__file__).resolve().parents[4]
 OWNER_LABEL: Final = "com.docksight.e2e"
@@ -96,7 +96,7 @@ class ComposeLab:
 
     def _start_peer(self) -> None:
         """Create a separate dependency namespace, optionally with a colliding container name and noisy logs."""
-        service = "database" if self.case == FOLLOW_UP_NOISY_CASE else "backend"
+        service = self.case.peer_service
         self._compose(self.peer_project, (service,))
         self.peers = {
             row.id: row for row in self._owned_containers() if row.labels["com.docker.compose.project"] != self.project
@@ -171,7 +171,7 @@ class ComposeLab:
     def _ready(self, name: str, row: Container) -> bool:
         """Check Docker facts rather than assuming that detached startup means application readiness."""
         state = row.attrs["State"]
-        if name in {"backend", "grafana", "oom", "unknown"}:
+        if name in {"backend", "grafana", "oom", "unknown", "database-stopped"}:
             return state["Status"] == "exited"
         if name == "crash":
             return row.attrs["RestartCount"] >= 2

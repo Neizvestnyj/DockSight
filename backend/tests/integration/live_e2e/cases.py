@@ -14,6 +14,7 @@ class Case:
     explicit: bool = False
     typo: bool = False
     spelling: Literal["exact", "spaced", "cyrillic", "ambiguous", "unscoped"] = "exact"
+    peer_service: Literal["backend", "database", "database-stopped"] = "backend"
 
     @property
     def needs_selection(self) -> bool:
@@ -51,8 +52,13 @@ class Case:
 
 
 FOLLOW_UP_CASE: Final = Case("compose-follow-up", ("backend", "grafana", "nginx"), group=True)
-FOLLOW_UP_NOISY_CASE: Final = Case("compose-follow-up-noisy", ("backend", "grafana", "nginx"), group=True)
-FOLLOW_UP_CASES: Final = (FOLLOW_UP_CASE, FOLLOW_UP_NOISY_CASE)
+FOLLOW_UP_NOISY_CASE: Final = Case(
+    "compose-follow-up-noisy", ("backend", "grafana", "nginx"), group=True, peer_service="database"
+)
+FOLLOW_UP_SHUTDOWN_CASE: Final = Case(
+    "compose-follow-up-shutdown", ("backend", "grafana", "nginx"), group=True, peer_service="database-stopped"
+)
+FOLLOW_UP_CASES: Final = (FOLLOW_UP_CASE, FOLLOW_UP_NOISY_CASE, FOLLOW_UP_SHUTDOWN_CASE)
 
 CASES: Final = (
     Case("compose-explicit", ("backend", "grafana", "nginx"), group=True, explicit=True),

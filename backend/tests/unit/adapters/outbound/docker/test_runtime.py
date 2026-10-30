@@ -73,20 +73,45 @@ async def test_logs_redact_environment_secrets_bound_output_and_close_stream(max
     stream = sdk.api.logs.return_value
 
     def log_chunks() -> Iterator[bytes]:
-        """Reject further stream consumption once the byte budget has been exceeded."""
+        """Include the actual final event beyond the output byte budget."""
         yield b"2026-01-01T00:00:00Z connected secret-value\n"
         yield b"x" * 64 + b"\n"
-        if truncated:
-            raise AssertionError("Log stream was read beyond the byte budget")
+        yield b"2026-01-01T00:00:01Z database system is shut down\n"
 
     stream.__iter__.return_value = log_chunks()
     with patch("docksight.adapters.outbound.docker.runtime.connect", return_value=sdk):
-        result = await runtime.logs("local", "a" * 64, lines=2, max_bytes=max_bytes)
+        result = await runtime.logs("local", "a" * 64, lines=3, max_bytes=max_bytes)
     assert result.truncated is truncated
-    assert result.entries[0].message == "connected [REDACTED]"
-    assert result.entries[0].timestamp is not None
-    assert len(result.entries) == (1 if truncated else 2)
-    sdk.api.logs.assert_called_once_with("a" * 64, tail=2, timestamps=True, stream=True, follow=False)
+    assert result.entries[-1].message == "database system is shut down"
+    assert result.entries[-1].timestamp is not None
+    if not truncated:
+        assert result.entries[0].message == "connected [REDACTED]"
+    assert len(result.entries) == (1 if truncated else 3)
+    sdk.api.logs.assert_called_once_with("a" * 64, tail=3, timestamps=True, stream=True, follow=False)
+    stream.close.assert_called_once()
+    sdk.close.assert_called_once()
+    await runtime.close()
+
+
+async def test_log_scan_limit_fails_explicitly_and_closes_the_stream_without_returning_a_middle_excerpt() -> None:
+    runtime = DockerRuntime((HostConfig(id="local"),), Redactor())
+    sdk = MagicMock()
+    sdk.api.inspect_container.return_value = {"Config": {}}
+    stream = sdk.api.logs.return_value
+
+    def oversized_chunks() -> Iterator[bytes]:
+        """Reject reads after the separate hard scan limit has been reached."""
+        yield b"x" * 129
+        raise AssertionError("Read exceeded hard log scan limit")
+
+    stream.__iter__.return_value = oversized_chunks()
+    with (
+        patch("docksight.adapters.outbound.docker.runtime.connect", return_value=sdk),
+        patch("docksight.adapters.outbound.docker.runtime.MAX_LOG_SCAN_BYTES", 128),
+        pytest.raises(DockSightError) as error,
+    ):
+        await runtime.logs("local", "a" * 64, lines=200, max_bytes=64)
+    assert error.value.code == "log_read_limit"
     stream.close.assert_called_once()
     sdk.close.assert_called_once()
     await runtime.close()

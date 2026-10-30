@@ -100,21 +100,22 @@ def map_metrics(raw: Mapping[str, Any]) -> ResourceMetrics:
 
 
 def parse_logs(raw: bytes, redactor: Redactor, max_bytes: int, lines: int) -> LogBatch:
-    """Redact bounded log lines and discard a partial line at the input cutoff."""
-    truncated = len(raw) > max_bytes
+    """Sanitize the finite tail before retaining its latest complete UTF-8 lines within the output bounds."""
+    encoded = redactor.text(raw.decode("utf-8", errors="replace")).encode()
+    truncated = len(encoded) > max_bytes
     if truncated:
-        raw = raw[:max_bytes]
-        raw = raw[: raw.rfind(b"\n") + 1]
-    text = redactor.text(raw.decode("utf-8", errors="replace"))
-    encoded = text.encode()
-    truncated = truncated or len(encoded) > max_bytes
-    text = encoded[:max_bytes].decode("utf-8", errors="ignore")
-    rows = text.splitlines()
+        start = len(encoded) - max_bytes
+        boundary = start if encoded[start - 1 : start] == b"\n" else encoded.find(b"\n", start) + 1
+        encoded = encoded[boundary:] if boundary else b""
+    rows = encoded.decode("utf-8", errors="replace").splitlines()
     truncated = truncated or len(rows) > lines
-    entries: list[LogEntry] = []
-    for row in rows[:lines]:
-        prefix, _, message = row.partition(" ")
-        timestamp = parse_time(prefix) if prefix[:4].isdigit() and "T" in prefix else None
-        entries.append(LogEntry(message if timestamp else row, timestamp))
+    entries = tuple(_log_entry(row) for row in rows[-lines:])
 
-    return LogBatch(tuple(entries), truncated)
+    return LogBatch(entries, truncated)
+
+
+def _log_entry(row: str) -> LogEntry:
+    """Parse a Docker timestamp without interpreting application log contents."""
+    prefix, _, message = row.partition(" ")
+    timestamp = parse_time(prefix) if prefix[:4].isdigit() and "T" in prefix else None
+    return LogEntry(message if timestamp else row, timestamp)

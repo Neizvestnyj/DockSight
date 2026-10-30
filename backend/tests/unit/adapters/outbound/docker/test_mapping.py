@@ -2,6 +2,32 @@ from docksight.adapters.outbound.docker.mapping import map_container, map_metric
 from docksight.application.redaction import Redactor
 
 
+def test_log_byte_and_line_limits_keep_the_latest_complete_rows_in_order() -> None:
+    raw = (
+        b"2026-10-01T00:00:00Z ERROR: historical SQL failure\n" * 100
+        + b"2026-10-27T14:02:05Z LOG: received fast shutdown request\n"
+        + b"2026-10-27T14:02:06Z LOG: database system is shut down\n"
+    )
+    for budget, lines in [(128, 200), (65536, 2)]:
+        batch = parse_logs(raw, Redactor(), budget, lines)
+        assert [row.message for row in batch.entries] == [
+            "LOG: received fast shutdown request",
+            "LOG: database system is shut down",
+        ]
+        assert batch.entries[-1].timestamp is not None
+        assert batch.entries[-1].timestamp.day == 27
+        assert batch.truncated
+
+
+def test_tail_clipping_redacts_secrets_before_selecting_the_byte_window() -> None:
+    secret = "private-sensitive-boundary-" + "A" * 104
+    raw = ("historical\n" * 200 + f"2026-10-27T14:02:06Z value={secret}\n").encode()
+    batch = parse_logs(raw, Redactor((secret,)), 64, 200)
+    assert batch.entries[-1].message == "value=[REDACTED]"
+    assert secret not in "\n".join(row.message for row in batch.entries)
+    assert batch.truncated
+
+
 def test_inspect_discards_secrets_and_preserves_oom_evidence() -> None:
     raw = {
         "Id": "a" * 64,
@@ -64,12 +90,12 @@ def test_log_response_is_bounded_after_redaction() -> None:
     assert result.entries == ()
 
 
-def test_truncated_line_does_not_expose_a_known_environment_secret_prefix() -> None:
+def test_tail_boundary_does_not_expose_a_partial_known_environment_secret() -> None:
     secret = "private-sensitive-boundary-" + "A" * 104
     redactor = Redactor().with_environment([f"DB_PASSWORD={secret}"])
-    raw = b"benign\n" + b"x" * 953 + secret.encode()
-    result = parse_logs(raw[:1025], redactor, 1024, 200)
+    raw = b"benign\n" + b"x" * 953 + secret.encode() + b"\nshutdown complete\n"
+    result = parse_logs(raw, redactor, 64, 200)
     text = "\n".join(entry.message for entry in result.entries)
     assert "private-sensitive" not in text
-    assert text == "benign"
+    assert text == "shutdown complete"
     assert result.truncated

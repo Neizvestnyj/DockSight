@@ -116,8 +116,11 @@ test('keeps large untrusted observations bounded and retains successful data aft
       return route.fulfill({
         json: {
           entries: Array.from({ length: 200 }, (_, i) => ({
-            timestamp: null,
-            message: `<img src=x onerror=alert(1)> ${i} ${'original log '.repeat(50)}`,
+            timestamp: new Date(Date.parse('2026-10-27T23:58:20Z') + i * 1000).toISOString(),
+            message:
+              i === 199
+                ? 'database system is shut down'
+                : `<img src=x onerror=alert(1)> ${i} ${'original log '.repeat(50)}`,
           })),
           truncated: true,
         },
@@ -133,6 +136,8 @@ test('keeps large untrusted observations bounded and retains successful data aft
   await expect(facts.getByRole('button', { name: 'Refresh data' })).toBeEnabled();
   const logs = facts.getByRole('region', { name: 'Timestamped container logs' });
   await expect(logs.locator('.log-line')).toHaveCount(200);
+  await expect(facts.locator('.log-window')).toContainText('2026-10-27 23:58:20 UTC');
+  await expect(facts.locator('.log-window')).toContainText('2026-10-28 00:01:39 UTC');
   await expect(facts.getByText('0.0%')).toBeVisible();
   await expect(facts.getByText('0 B', { exact: true })).toBeVisible();
   await expect(facts.getByText('Unavailable', { exact: true })).toBeVisible();
@@ -142,6 +147,10 @@ test('keeps large untrusted observations bounded and retains successful data aft
     .getAttribute('datetime');
   await logs.focus();
   await page.keyboard.press('End');
+  await expect(logs.getByText('database system is shut down')).toBeInViewport();
+  await facts.getByRole('region', { name: 'Container logs', exact: true }).screenshot({
+    path: `test-results/${info.project.name}-log-window.png`,
+  });
   expect(await logs.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
   expect(await logs.locator('img').count()).toBe(0);
   expect(await facts.locator('.env-list script').count()).toBe(0);
