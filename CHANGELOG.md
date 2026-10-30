@@ -33,7 +33,8 @@ Dates below record each version's merge into `master` in Europe/Moscow. Version 
 - A graceful-shutdown live scenario checks tail retention and detects unsupported attribution of process stops to SQL
   request errors. The causal check currently exposes a remaining local-model limitation.
 - Gemini provider with a default Google endpoint, environment-based API keys, metadata checks, and preserved tool-call
-  signatures for multi-step diagnostics. The status panel recognizes Gemini; configuration includes a Flash-Lite example.
+  signatures for multi-step diagnostics. The status panel recognizes Gemini; configuration uses 3.5 Flash-Lite because
+  Google restricts 2.5 Flash-Lite generation for new users.
 - An opt-in two-turn live regression checks group-to-dependency follow-ups in the same session against isolated Docker
   workloads and local models, including a container/project name collision and original evidence retention.
 - An unscoped live scenario checks clarification before model calls and the selected project's complete failure cards.

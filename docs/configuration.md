@@ -49,13 +49,14 @@ Gemini uses Google's [OpenAI-compatible API](https://ai.google.dev/gemini-api/do
 `https://generativelanguage.googleapis.com/v1beta/openai/` by default. Remove an old `DOCKSIGHT_MODEL_BASE_URL`
 override when switching providers. Tool-call signatures are retained internally for multi-step Gemini diagnostics.
 Server-created preliminary reads use Google's documented signature marker; model-issued signatures replay unchanged.
-Start with `gemini-2.5-flash-lite`; select `gemini-3.5-flash-lite` to try the newer Lite model.
+Use `gemini-3.5-flash-lite`. Google rejects generation with `gemini-2.5-flash-lite` for new users, even when its
+metadata lookup succeeds. A successful metadata check does not guarantee access to generation.
 For a Compose service, put these settings in its `environment` mapping and supply the key from your local environment:
 
 ```yaml
 environment:
   DOCKSIGHT_PROVIDER: gemini
-  DOCKSIGHT_MODEL: gemini-2.5-flash-lite
+  DOCKSIGHT_MODEL: gemini-3.5-flash-lite
   DOCKSIGHT_MODEL_API_KEY: ${GEMINI_API_KEY:?Set GEMINI_API_KEY}
 ```
 
