@@ -6,7 +6,7 @@ This file records notable changes to DockSight. The format follows
 
 Dates below record each version's merge into `master` in Europe/Moscow. Version links show the corresponding changes.
 
-## 0.4.1
+## 0.5.0
 
 ### Fixed
 
@@ -26,6 +26,8 @@ Dates below record each version's merge into `master` in Europe/Moscow. Version 
 
 ### Added
 
+- Gemini provider with a default Google endpoint, environment-based API keys, metadata checks, and preserved tool-call
+  signatures for multi-step diagnostics. The status panel recognizes Gemini; configuration includes a Flash-Lite example.
 - An opt-in two-turn live regression checks group-to-dependency follow-ups in the same session against isolated Docker
   workloads and local models, including a container/project name collision and original evidence retention.
 - An unscoped live scenario checks clarification before model calls and the selected project's complete failure cards.

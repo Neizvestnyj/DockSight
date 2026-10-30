@@ -261,7 +261,7 @@ const dependencyCheckSchema = z.strictObject({
 export const systemStatusSchema = z.strictObject({
   schema_version: z.literal(1),
   host: z.string().max(64).nullable(),
-  provider: z.enum(['ollama', 'openai', 'anthropic', 'compatible']),
+  provider: z.enum(['ollama', 'openai', 'anthropic', 'compatible', 'gemini']),
   model: z.string().min(1).max(256),
   docker: dependencyCheckSchema,
   provider_check: dependencyCheckSchema,

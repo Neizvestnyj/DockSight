@@ -76,7 +76,7 @@ backend/src/docksight/
     inbound/http/        # Routes, HTTP schemas, auth, error mapping, SSE
     outbound/
       docker/            # SDK connections, mapping, port implementations
-      models/            # Ollama, OpenAI, Anthropic, compatible API adapters
+      models/            # Ollama, OpenAI, Anthropic, Gemini/compatible API adapters
       memory/            # Bounded session and action stores
       audit.py           # Structured action audit output
 ```

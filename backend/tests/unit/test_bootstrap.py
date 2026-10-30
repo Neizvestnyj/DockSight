@@ -7,12 +7,59 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from docksight.adapters.outbound.models.anthropic import AnthropicModel
+from docksight.adapters.outbound.models.compatible import CompatibleModel
 from docksight.adapters.outbound.models.openai import OpenAIModel
 from docksight.adapters.outbound.models.status import ModelAvailability
 from docksight.application.ports.models import ModelMessage
 from docksight.bootstrap import Settings, build_components
 from docksight.main import create_app
 from tests.fakes import FakeRuntime
+
+
+@pytest.mark.parametrize("explicit_key", [None, "explicit-gemini-key"])
+@pytest.mark.parametrize("base_url", [None, "https://gateway.example.test/gemini/"])
+async def test_gemini_wiring_uses_google_credentials_and_endpoint(
+    monkeypatch: pytest.MonkeyPatch, explicit_key: str | None, base_url: str | None
+) -> None:
+    """Keep Gemini generation and metadata on the same origin without OpenAI environment defaults."""
+    monkeypatch.setenv("GEMINI_API_KEY", "environment-gemini-key")
+    monkeypatch.setenv("OPENAI_API_KEY", "unrelated-openai-key")
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://unrelated.example.test/")
+    settings = Settings(
+        api_token="test-token-at-least-24-chars",
+        provider="gemini",
+        model="gemini-2.5-flash-lite",
+        model_api_key=explicit_key,
+        model_base_url=base_url,
+        _env_file=None,
+    )
+    runtime = FakeRuntime()
+    components = build_components(settings, reader=runtime, writer=runtime)
+    try:
+        generation, probe = components.diagnostics.model, components.status.probe
+        assert isinstance(generation, CompatibleModel)
+        assert isinstance(probe, ModelAvailability)
+        assert str(generation.client.base_url) == (
+            base_url or "https://generativelanguage.googleapis.com/v1beta/openai/"
+        )
+        assert str(probe.client.base_url) == str(generation.client.base_url)
+        assert probe.provider == "gemini"
+        assert probe.client.headers["Authorization"] == f"Bearer {explicit_key or 'environment-gemini-key'}"
+        assert generation.model == "gemini-2.5-flash-lite"
+        assert generation.require_tool_signatures
+        assert generation.client.max_retries == 0
+    finally:
+        await components.close()
+
+
+def test_gemini_requires_its_own_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("DOCKSIGHT_MODEL_API_KEY", raising=False)
+    monkeypatch.setenv("OPENAI_API_KEY", "unrelated-openai-key")
+    settings = Settings(api_token="test-token-at-least-24-chars", provider="gemini", _env_file=None)
+    runtime = FakeRuntime()
+    with pytest.raises(ValueError, match="GEMINI_API_KEY"):
+        build_components(settings, reader=runtime, writer=runtime)
 
 
 @pytest.mark.parametrize("provider,variable", [("openai", "OPENAI_BASE_URL"), ("anthropic", "ANTHROPIC_BASE_URL")])

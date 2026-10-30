@@ -80,8 +80,10 @@ has a two-second timeout, at most four connections, no redirects or retries, and
 `ping`, a short SDK timeout, and the existing bounded worker pool; cancelled workers retain their slots until they finish.
 The probe reuses the generation client's resolved base URL and authentication headers, including SDK environment defaults.
 
+The `provider` field is `ollama`, `openai`, `anthropic`, `gemini`, or `compatible`.
 Native metadata probes use [Ollama show](https://docs.ollama.com/api/show),
-[OpenAI model retrieval](https://developers.openai.com/api/reference/resources/models/methods/retrieve), and
+[OpenAI model retrieval](https://developers.openai.com/api/reference/resources/models/methods/retrieve),
+[Gemini model retrieval](https://ai.google.dev/gemini-api/docs/openai#retrieve_a_model), and
 [Anthropic model retrieval](https://platform.claude.com/docs/en/api/http/models/retrieve).
 Compatible providers use their model catalog. An unlisted compatible alias, denied metadata access, unsupported endpoint,
 or malformed metadata leaves the model `not_checked`. A native model lookup returning 404 reports `model_not_found`.

@@ -17,7 +17,7 @@ logs, and model explanations into one workspace, with restart and stop actions y
 
 - **Follow the evidence.** Inspect container state, logs, metrics, allowlisted environment values, and Compose context.
 - **Ask follow-up questions.** Investigate a problem in a session scoped to one Docker host.
-- **Choose your model.** Use Ollama locally, OpenAI, Anthropic, or a compatible API.
+- **Choose your model.** Use Ollama locally, OpenAI, Anthropic, Gemini, or a compatible API.
 - **Review before acting.** Models have read-only tools; restart and stop require separate confirmation.
 - **Work in English or Russian.** Switch the interface language without losing the active investigation.
 
@@ -89,7 +89,7 @@ Settings are loaded from environment variables or the root `.env` file.
 | Variable | Purpose |
 |----------|---------|
 | `DOCKSIGHT_API_TOKEN` | Required bearer token, at least 24 characters |
-| `DOCKSIGHT_PROVIDER` | `ollama` (default), `openai`, `anthropic`, or `compatible` |
+| `DOCKSIGHT_PROVIDER` | `ollama` (default), `openai`, `anthropic`, `gemini`, or `compatible` |
 | `DOCKSIGHT_MODEL` | Model name; defaults to `qwen3.5:9b` |
 | `DOCKSIGHT_MODEL_BASE_URL` | Custom model endpoint |
 | `DOCKSIGHT_MODEL_API_KEY` | Credentials for the selected provider |

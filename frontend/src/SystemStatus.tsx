@@ -79,6 +79,7 @@ export function SystemStatusPanel({
     ollama: 'Ollama',
     openai: 'OpenAI',
     anthropic: 'Anthropic',
+    gemini: 'Gemini',
     compatible: 'OpenAI-compatible',
   } as const;
   const dependency = (check?: DependencyCheck) => ({

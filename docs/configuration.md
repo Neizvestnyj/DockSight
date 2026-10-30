@@ -13,7 +13,7 @@ Names below omit the `DOCKSIGHT_` prefix. Array values use JSON, for example `DO
 | `API_TOKEN` | Required | Bearer token of at least 24 characters |
 | `PROVIDER` / `MODEL` | `ollama` / `qwen3.5:9b` | Independent provider and model selection |
 | `MODEL_BASE_URL` / `MODEL_API_KEY` | Provider default / unset | Model endpoint and credentials |
-| `MODEL_STRUCTURED_OUTPUT` | `native` | Compatible adapter also supports `tool` |
+| `MODEL_STRUCTURED_OUTPUT` | `native` | Compatible and Gemini providers also support `tool` |
 | `OLLAMA_CONTEXT_LENGTH` | `16384` tokens | Native Ollama context for prompts, tools, and replies |
 | `HOSTS_FILE` | Unset | Configured Docker hosts; see [hosts.yaml](../examples/hosts.yaml) |
 | `ENV_ALLOWLIST` / `CORS_ORIGINS` | `[]` / `[]` | Environment fields and allowed browser origins |
@@ -38,10 +38,28 @@ of your root `.env`, retaining your API token and browser settings:
 | Ollama | [Local Ollama](../examples/providers/ollama.env.example) |
 | OpenAI | [OpenAI](../examples/providers/openai.env.example) |
 | Anthropic | [Anthropic](../examples/providers/anthropic.env.example) |
+| Gemini | [Gemini](../examples/providers/gemini.env.example) |
 | Compatible API | [Compatible server](../examples/providers/compatible.env.example) |
 
-OpenAI and Anthropic also accept their standard API-key environment variables. Cloud providers receive the sanitized
+OpenAI, Anthropic, and Gemini also accept `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and `GEMINI_API_KEY`, respectively.
+`DOCKSIGHT_MODEL_API_KEY` takes precedence. Cloud providers receive the sanitized
 Docker evidence selected by the diagnostic loop. Log redaction is best effort; review what your workload writes to logs.
+
+Gemini uses Google's [OpenAI-compatible API](https://ai.google.dev/gemini-api/docs/openai) at
+`https://generativelanguage.googleapis.com/v1beta/openai/` by default. Remove an old `DOCKSIGHT_MODEL_BASE_URL`
+override when switching providers. Tool-call signatures are retained internally for multi-step Gemini diagnostics.
+Server-created preliminary reads use Google's documented signature marker; model-issued signatures replay unchanged.
+Start with `gemini-2.5-flash-lite`; select `gemini-3.5-flash-lite` to try the newer Lite model.
+For a Compose service, put these settings in its `environment` mapping and supply the key from your local environment:
+
+```yaml
+environment:
+  DOCKSIGHT_PROVIDER: gemini
+  DOCKSIGHT_MODEL: gemini-2.5-flash-lite
+  DOCKSIGHT_MODEL_API_KEY: ${GEMINI_API_KEY:?Set GEMINI_API_KEY}
+```
+
+Keep `DOCKSIGHT_API_TOKEN` as the separate credential used by the browser to authenticate to DockSight.
 
 Native Ollama requests set an explicit context window. A small server default can truncate the query and tool results.
 Increase `DOCKSIGHT_OLLAMA_CONTEXT_LENGTH` for larger inventories or logs; larger contexts need more memory.

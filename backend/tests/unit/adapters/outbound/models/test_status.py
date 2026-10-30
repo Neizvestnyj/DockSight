@@ -6,7 +6,7 @@ import pytest
 from docksight.adapters.outbound.models.status import ModelAvailability
 
 
-@pytest.mark.parametrize("provider", ["ollama", "openai", "anthropic", "compatible"])
+@pytest.mark.parametrize("provider", ["ollama", "openai", "anthropic", "compatible", "gemini"])
 async def test_checks_use_metadata_only_and_keep_model_identity(provider: str) -> None:
     calls: list[httpx.Request] = []
 

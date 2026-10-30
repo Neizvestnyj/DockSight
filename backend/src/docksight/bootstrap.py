@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     )
 
     api_token: SecretStr = SecretStr("")
-    provider: Literal["ollama", "openai", "anthropic", "compatible"] = "ollama"
+    provider: Literal["ollama", "openai", "anthropic", "compatible", "gemini"] = "ollama"
     model: str = Field(default="qwen3.5:9b", min_length=1, max_length=256)
     model_base_url: str | None = None
     model_api_key: SecretStr | None = None
@@ -125,6 +125,8 @@ def _provider_key(settings: Settings) -> str | None:
         return settings.model_api_key.get_secret_value()
     if settings.provider == "anthropic":
         return os.getenv("ANTHROPIC_API_KEY")
+    if settings.provider == "gemini":
+        return os.getenv("GEMINI_API_KEY")
     if settings.provider in {"openai", "compatible"}:
         return os.getenv("OPENAI_API_KEY")
     return None
@@ -139,10 +141,15 @@ def _openai_model(
             raise ValueError("Compatible providers require DOCKSIGHT_MODEL_BASE_URL")
         key = key or "local-no-key"
     if not key:
+        if settings.provider == "gemini":
+            raise ValueError("Configure DOCKSIGHT_MODEL_API_KEY or GEMINI_API_KEY")
         raise ValueError("Configure DOCKSIGHT_MODEL_API_KEY or OPENAI_API_KEY")
+    base_url = settings.model_base_url
+    if settings.provider == "gemini":
+        base_url = base_url or "https://generativelanguage.googleapis.com/v1beta/openai/"
     client = AsyncOpenAI(
         api_key=key,
-        base_url=settings.model_base_url,
+        base_url=base_url,
         timeout=settings.model_timeout,
         max_retries=0,
     )
@@ -150,7 +157,13 @@ def _openai_model(
     probe = _build_probe(settings, str(client.base_url), {**client.auth_headers, **client.default_headers}, closers)
     if settings.provider == "openai":
         return OpenAIModel(client, settings.model, settings.model_max_tokens), probe
-    return CompatibleModel(client, settings.model, settings.model_max_tokens, settings.model_structured_output), probe
+    return CompatibleModel(
+        client,
+        settings.model,
+        settings.model_max_tokens,
+        settings.model_structured_output,
+        require_tool_signatures=settings.provider == "gemini",
+    ), probe
 
 
 def _build_model(
@@ -159,8 +172,8 @@ def _build_model(
     """Validate model capabilities and register the selected client's cleanup."""
     if not settings.model_supports_tools:
         raise ValueError("Docker diagnostics require a model with tool-calling support")
-    if settings.model_structured_output == "tool" and settings.provider != "compatible":
-        raise ValueError("Tool-based structured output requires provider=compatible")
+    if settings.model_structured_output == "tool" and settings.provider not in {"compatible", "gemini"}:
+        raise ValueError("Tool-based structured output requires provider=compatible or provider=gemini")
     if settings.provider == "ollama":
         client = httpx.AsyncClient(
             base_url=settings.model_base_url or "http://127.0.0.1:11434",
