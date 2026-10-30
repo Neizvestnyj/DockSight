@@ -27,11 +27,13 @@ export function Modal({
   close,
   children,
   returnFocusId,
+  className,
 }: {
   title: string;
   close: () => void;
   children: ReactNode;
   returnFocusId?: string;
+  className?: string;
 }) {
   const { t } = useLocale();
   const titleId = useId();
@@ -51,7 +53,7 @@ export function Modal({
   return (
     <dialog
       ref={dialog}
-      className="modal"
+      className={`modal${className ? ` ${className}` : ''}`}
       aria-labelledby={titleId}
       onCancel={(event) => {
         event.preventDefault();

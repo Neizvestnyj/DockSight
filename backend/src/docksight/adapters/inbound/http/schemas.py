@@ -3,6 +3,7 @@ from uuid import UUID
 
 from pydantic import Field, StrictBool, model_validator
 
+from docksight.application.model_catalog import ModelSelection
 from docksight.application.views.schemas import Contract, GroupTarget
 from docksight.domain.actions import Operation
 
@@ -18,6 +19,7 @@ class ChatTurn(Contract):
     session_id: UUID | None = None
     group: GroupTarget | None = None
     container_id: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
+    model_selection: ModelSelection | None = None
 
     @model_validator(mode="after")
     def single_target(self) -> Self:

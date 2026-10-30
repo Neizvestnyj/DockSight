@@ -9,6 +9,8 @@ and `/openapi.json` are public.
 |--------|------------------------------------------------|--------------------------------------------------------|
 | GET    | `/hosts`                                       | Configured host IDs and display names                  |
 | GET    | `/system/status?host=local`                    | Safe configuration and independent availability checks |
+| GET    | `/model-providers`                            | Configured providers and the default model             |
+| GET    | `/model-providers/{provider}/models`          | Lazy, bounded model catalog and freshness              |
 | GET    | `/hosts/{host}/containers`                     | Up to 200 inspected containers                         |
 | GET    | `/hosts/{host}/containers/{id}`                | Sanitized snapshot                                     |
 | GET    | `/hosts/{host}/containers/{id}/logs?lines=200` | Bounded timestamped logs                               |
@@ -53,6 +55,8 @@ until a manual retry verifies authorization or the connection changes. Status ch
 `GET /system/status` is authenticated and returns `Cache-Control: no-store`. Its optional `host` query selects a configured
 host ID; an unknown ID is rejected before any external work. Without a host, Docker is `not_checked`. The response exposes
 only the configured provider type and model name, never credentials, provider URLs, Docker URLs, or raw upstream errors.
+Optional `provider` and `model` query parameters select another configured model; supply both or neither.
+The response identity and metadata checks belong to that selection. Omission retains the server default.
 
 ```json
 {
@@ -95,6 +99,32 @@ An unreachable provider leaves the model `not_checked`, keeping provider failure
 These probes do not generate text, load or pull models, run tools, validate structured output, or change Docker state.
 They do not establish generation health or tool compatibility. Full diagnostic validation requires an explicit diagnostic
 request. `/health/live` still reports process liveness; `/health/ready` still reports successful configuration and wiring.
+
+## Model selection
+
+`GET /model-providers` returns `schema_version: 1`, `default: {provider, model}`, and up to five `providers`.
+Each provider has `id`, `name`, `configured`, and nullable `default_model`. This read makes no provider request.
+Credentials and endpoints remain server settings; unconfigured providers cannot be selected.
+
+`GET /model-providers/{provider}/models` returns `schema_version: 1`, `provider`, `models: [{id}]`,
+`state` (`ready`, `stale`, or `unavailable`), a safe `code`, nullable UTC `checked_at`, and `refreshing`.
+Both endpoints require authentication and return `Cache-Control: no-store`.
+Model IDs are 1–256 characters. Results contain at most 2,000 IDs, including explicit defaults and fallback aliases.
+
+Catalogs load on demand and remain fresh for 300 seconds in process memory. Concurrent requests share one fetch;
+stale reads return prior rows immediately and start a background refresh. Initial reads wait at most five seconds.
+`refresh=true` requests a manual refresh, sharing in-flight work and respecting the 30-second failure cooldown.
+Failures preserve prior/default rows and expose safe codes, including `unsupported`, `timeout`, `metadata_forbidden`,
+`credentials_rejected`, `invalid_response`, and `partial_catalog`. `checked_at` records the last attempt, including failure.
+Metadata pages have a 256 KiB bound, at most 20 pages and 1,900 external IDs; partial catalogs are rejected explicitly.
+Catalog listing does not establish generation access or diagnostic capability.
+
+Turns accept optional `model_selection: {"provider":"ollama","model":"your-installed-model"}`.
+The server validates the configured connection and catalog membership before streaming. Explicit default/fallback models
+work without a catalog request. Unknown/unconfigured providers and unlisted models fail with HTTP 422.
+Omitting selection keeps the legacy default path. Selection never changes the process-wide default or other callers.
+Turns share existing session history, action state, redaction, and the global diagnostic concurrency budget.
+The trace records the actual selected identity. The client retains selection only in tab memory and resets it on reconnect.
 
 ## Diagnostic stream
 

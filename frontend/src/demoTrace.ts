@@ -1,16 +1,18 @@
 import type { TraceStep, TurnEvent } from './contracts';
+import type { ModelSelection } from './model-contracts';
 
 /** Measure simulated transport delays while emitting the same owned trace contract as the backend. */
 export function demoTrace(
   envelope: { schema_version: 1; request_id: string; turn_id: string },
   receive: (event: TurnEvent) => void,
+  selection?: ModelSelection,
 ) {
   let sequence = 0;
   receive({
     ...envelope,
     type: 'trace.started',
-    provider: 'ollama',
-    model: 'qwen3.5:9b',
+    provider: selection?.provider ?? 'ollama',
+    model: selection?.model ?? 'qwen3.5:9b',
     started_at: new Date().toISOString(),
   });
   return (kind: TraceStep['kind'], operation: string) => {

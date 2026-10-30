@@ -14,6 +14,50 @@ from docksight.domain.runtime import ContainerSnapshot, LogBatch, StackSummary
 from tests.fakes import DiscoveryRuntime, FakeRuntime, ScriptedModel
 
 
+async def test_selected_diagnoses_share_global_capacity_and_preserve_turn_identity() -> None:
+    """Two provider selections cannot bypass the original shared concurrency budget."""
+    default = ScriptedModel([])
+    first_model, second_model = ScriptedModel([]), ScriptedModel([])
+    diagnostics = Diagnostics(FakeRuntime(), default, MemorySessions(), Redactor(), concurrency=1)
+    first = diagnostics.with_model(first_model, ("openai", "first"))
+    second = diagnostics.with_model(second_model, ("anthropic", "second"))
+    stream = first.stream("alice", "local", "Inspect")
+    try:
+        assert (await anext(stream))["type"] == "turn.started"
+        trace = await anext(stream)
+        assert trace["type"] == "trace.started"
+        assert trace["provider"] == "openai" and trace["model"] == "first"
+        rejected = [event async for event in second.stream("alice", "local", "Inspect")]
+        assert rejected[-1]["type"] == "turn.failed" and rejected[-1]["code"] == "turn_capacity"
+        assert diagnostics.model is default
+        assert second_model.requests == []
+        assert first.sessions is second.sessions is diagnostics.sessions
+        assert first.assembler is second.assembler is diagnostics.assembler
+        assert first.redactor is second.redactor is diagnostics.redactor
+    finally:
+        await stream.aclose()
+
+
+async def test_switching_model_preserves_session_history_and_trace() -> None:
+    """A later selection uses the existing session while earlier events retain their original model identity."""
+    answer = '{"summary":"Insufficient evidence","uncertain":true,"evidence_ids":[],"widgets":[]}'
+    first_model = ScriptedModel([ModelReply("Ready"), ModelReply(answer)])
+    second_model = ScriptedModel([ModelReply("Ready"), ModelReply(answer)])
+    diagnostics = Diagnostics(
+        FakeRuntime(), first_model, MemorySessions(), Redactor(), model_identity=("ollama", "one")
+    )
+    first = [event async for event in diagnostics.stream("alice", "local", "Inspect")]
+    session_id = next(event["session_id"] for event in first if event["type"] == "turn.started")
+    second = diagnostics.with_model(second_model, ("openai", "two"))
+    events = [event async for event in second.stream("alice", "local", "What next?", session_id)]
+    assert events[-1]["type"] == "turn.completed"
+    history = second_model.requests[0][0]
+    assert any(message.role == "user" and message.content == "Inspect" for message in history)
+    assert any(message.role == "assistant" and message.content == "Insufficient evidence" for message in history)
+    assert next(event for event in first if event["type"] == "trace.started")["model"] == "one"
+    assert next(event for event in events if event["type"] == "trace.started")["model"] == "two"
+
+
 def proposal(evidence_id: str = "e1") -> str:
     """Build a valid diagnosis proposal linked to collected test evidence."""
     return json.dumps(

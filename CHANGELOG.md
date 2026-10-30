@@ -32,6 +32,9 @@ Dates below record each version's merge into `master` in Europe/Moscow. Version 
 
 ### Added
 
+- Header provider/model selection with searchable catalogs, server-managed credentials, and temporary per-tab choices.
+  Catalogs refresh on demand with bounded caching and retain previous choices on failure. Switching preserves the
+  investigation and prepared actions; requests without a selection keep the configured default model.
 - A graceful-shutdown live scenario checks tail retention and detects unsupported attribution of process stops to SQL
   request errors. The causal check currently exposes a remaining local-model limitation.
 - Gemini provider with a default Google endpoint, environment-based API keys, metadata checks, and preserved tool-call

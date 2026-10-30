@@ -19,6 +19,9 @@ import { SystemStatusPanel, SystemStatusTrigger } from './SystemStatus';
 import { useInventory } from './useInventory';
 import { useGroups } from './useGroups';
 import { GroupScope } from './GroupScope';
+import type { ModelSelection } from './model-contracts';
+import { ModelPicker, ModelTrigger } from './ModelPicker';
+import { useModelCatalog } from './useModelCatalog';
 
 interface ConnectionState {
   client: Transport;
@@ -53,6 +56,7 @@ function ConnectedApp() {
   const [attempt, setAttempt] = useState(0);
   const [connecting, setConnecting] = useState(false);
   const [choosingHost, setChoosingHost] = useState(false);
+  const [modelSelection, setModelSelection] = useState<ModelSelection>();
   const displayHosts = connection.demo
     ? hosts.map((row) => ({ ...row, name: isMessageKey(row.name) ? t(row.name) : row.name }))
     : hosts;
@@ -90,6 +94,7 @@ function ConnectedApp() {
     setConnecting(false);
     setChoosingHost(false);
     setShowExample(demo);
+    setModelSelection(undefined);
   }
 
   /** Retry discovery without dismissing an open host picker. */
@@ -116,6 +121,8 @@ function ConnectedApp() {
         openHostPicker={() => setChoosingHost(true)}
         connect={() => setConnecting(true)}
         returnDemo={() => changeConnection(new DemoClient(), true)}
+        modelSelection={modelSelection}
+        chooseModel={setModelSelection}
       />
       {choosingHost && (
         <HostPicker
@@ -147,6 +154,8 @@ function ConnectedApp() {
 }
 
 interface WorkspaceProps {
+  modelSelection?: ModelSelection;
+  chooseModel: (selection: ModelSelection) => void;
   connection: ConnectionState;
   hosts: Host[];
   host: string;
@@ -173,6 +182,8 @@ function Workspace({
   connect,
   returnDemo,
   showExample,
+  modelSelection,
+  chooseModel,
 }: WorkspaceProps) {
   const { t } = useLocale();
   const { client, demo } = connection;
@@ -180,9 +191,14 @@ function Workspace({
   const [initial] = useState(() =>
     demoClient && showExample && host === 'demo-eu' ? demoClient.remember(demoAnswer('crash_loop', host)) : undefined,
   );
-  const investigation = useInvestigation(client, host, initial);
+  const investigation = useInvestigation(client, host, initial, modelSelection);
   const groupScope = useGroups(client, host);
-  const availability = useSystemStatus(client, host, !hostLoading, !demo);
+  const availability = useSystemStatus(client, host, !hostLoading, !demo, modelSelection);
+  const catalog = useModelCatalog(client);
+  const [modelPickerOpen, setModelPickerOpen] = useState(false);
+  const effectiveModel =
+    modelSelection ??
+    (availability.data ? { provider: availability.data.provider, model: availability.data.model } : undefined);
   const [statusOpen, setStatusOpen] = useState(false);
   const { inventory, loading, fetching, inventoryError, lastRefreshed, refreshAcknowledged, refresh } = useInventory(
     client,
@@ -353,6 +369,12 @@ function Workspace({
           <span className={`scope-dot${demo ? ' demo-dot' : ''}`} />
           {t(demo ? 'Demo' : 'API mode')}
           <SystemStatusTrigger status={availability} open={openStatus} />
+          <ModelTrigger
+            selection={effectiveModel}
+            state={availability.data?.model_check.state ?? 'not_checked'}
+            running={investigation.running}
+            open={() => setModelPickerOpen(true)}
+          />
           <button className="text-button" onClick={connect}>
             {t(demo ? 'Connect API' : 'Change connection')}
             <ArrowRight size={13} />
@@ -479,6 +501,19 @@ function Workspace({
           connect={() => {
             setStatusOpen(false);
             connect();
+          }}
+        />
+      )}
+      {modelPickerOpen && (
+        <ModelPicker
+          catalog={catalog}
+          selection={effectiveModel}
+          demo={demo}
+          close={() => setModelPickerOpen(false)}
+          choose={(selection) => {
+            if (investigation.running) return;
+            chooseModel(selection);
+            setModelPickerOpen(false);
           }}
         />
       )}

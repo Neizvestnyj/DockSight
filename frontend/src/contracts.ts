@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { ModelCatalog, ModelProviders, ModelSelection, ProviderId } from './model-contracts';
 
 export const metricsSchema = z.object({
   cpu_percent: z.number().nullable(),
@@ -292,6 +293,7 @@ export interface TurnInput {
   session_id?: string;
   group?: GroupTarget;
   container_id?: string;
+  model_selection?: ModelSelection;
 }
 
 /** Compare containers by exact identity and groups by their observed namespace and name. */
@@ -299,7 +301,9 @@ export function targetKey(target: DiagnosticTarget): string {
   return `${target.kind}:${target.kind === 'container' ? target.id : target.name}`;
 }
 export interface Transport {
-  systemStatus(host: string | null, signal: AbortSignal): Promise<SystemStatus>;
+  systemStatus(host: string | null, signal: AbortSignal, selection?: ModelSelection): Promise<SystemStatus>;
+  modelProviders(signal: AbortSignal): Promise<ModelProviders>;
+  models(provider: ProviderId, signal: AbortSignal, refresh?: boolean): Promise<ModelCatalog>;
   hosts(signal: AbortSignal): Promise<Host[]>;
   containers(host: string, signal: AbortSignal): Promise<Container[]>;
   stacks(host: string, kind: GroupTarget['kind'], signal: AbortSignal): Promise<Stack[]>;

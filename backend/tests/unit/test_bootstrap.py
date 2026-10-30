@@ -16,6 +16,26 @@ from docksight.main import create_app
 from tests.fakes import FakeRuntime
 
 
+def test_standard_provider_keys_load_from_dotenv(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Dotenv credentials configure secondary providers without relying on process environment mutation."""
+    for name in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY", "DOCKSIGHT_OPENAI_API_KEY"):
+        monkeypatch.delenv(name, raising=False)
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "OPENAI_API_KEY=openai-dotenv\nANTHROPIC_API_KEY=anthropic-dotenv\nGEMINI_API_KEY=gemini-dotenv\n"
+    )
+    settings = Settings(api_token="test-token-at-least-24-chars", _env_file=env_file)
+    assert settings.openai_api_key.get_secret_value() == "openai-dotenv"
+    assert settings.anthropic_api_key.get_secret_value() == "anthropic-dotenv"
+    assert settings.gemini_api_key.get_secret_value() == "gemini-dotenv"
+
+
+@pytest.mark.parametrize("models", [{"unknown": ["x"]}, {"openai": [""]}, {"openai": ["x"] * 101}])
+def test_fallback_configuration_rejects_unknown_or_unbounded_ids(models: dict[str, list[str]]) -> None:
+    with pytest.raises(ValidationError):
+        Settings(api_token="test-token-at-least-24-chars", provider_fallback_models=models, _env_file=None)
+
+
 @pytest.mark.parametrize("explicit_key", [None, "explicit-gemini-key"])
 @pytest.mark.parametrize("base_url", [None, "https://gateway.example.test/gemini/"])
 async def test_gemini_wiring_uses_google_credentials_and_endpoint(

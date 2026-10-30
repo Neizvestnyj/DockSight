@@ -1,9 +1,10 @@
 import asyncio
 import json
 from collections.abc import AsyncGenerator, Awaitable, Callable
+from copy import copy
 from datetime import UTC, datetime
 from functools import partial
-from typing import cast
+from typing import Self, cast
 from uuid import uuid4
 
 from pydantic import ValidationError
@@ -77,6 +78,13 @@ class Diagnostics:
         self.log_bytes = log_bytes
         self._slots = asyncio.Semaphore(concurrency)
         self.model_identity = model_identity
+
+    def with_model(self, model: ModelPort, identity: tuple[str, str]) -> Self:
+        """Share sessions, actions, redaction, and global capacity with an immutable turn selection."""
+        selected = copy(self)
+        selected.model = model
+        selected.model_identity = identity
+        return selected
 
     async def stream(
         self,

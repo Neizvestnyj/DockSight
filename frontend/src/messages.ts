@@ -7,6 +7,25 @@ export type MessageValues = Record<string, string | number>;
 
 /** Keep product copy separate from verbatim Docker, model, and server content. */
 const russian = {
+  Retry: 'Повторить',
+  'Choose model': 'Выбрать модель',
+  'Model selection is available after this answer finishes.': 'Модель можно сменить после завершения ответа.',
+  'Demo models · no provider requests': 'Демо-модели · без запросов к провайдерам',
+  'Could not load providers. Your current model is unchanged.':
+    'Не удалось загрузить провайдеров. Текущая модель сохранена.',
+  'Loading providers…': 'Загружаем провайдеров…',
+  'Not configured': 'Не настроен',
+  'Search models': 'Поиск моделей',
+  'Refresh models': 'Обновить модели',
+  'Could not refresh the catalog. Showing previously received or configured models.':
+    'Не удалось обновить список. Показаны ранее полученные модели и модели из настроек.',
+  'Refreshing models…': 'Обновляем модели…',
+  'Loading models…': 'Загружаем модели…',
+  'Models: {count}': 'Моделей: {count}',
+  Models: 'Модели',
+  'No matching models.': 'Подходящих моделей нет.',
+  'No models were returned.': 'Список моделей пуст.',
+  'Applies to the next question. History is preserved.': 'Применяется к следующему вопросу. История сохраняется.',
   ...demoMessages,
   'Group clarification': 'Уточнение группы',
   'Resource clarification': 'Уточнение ресурса',

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ApiError } from './api';
 import { targetKey } from './contracts';
 import type { Answer, DiagnosticTarget, TargetSelection, TraceStep, Transport, TurnEvent } from './contracts';
+import type { ModelSelection } from './model-contracts';
 
 export interface TurnTrace {
   provider: string | null;
@@ -32,7 +33,7 @@ export interface Turn {
 }
 
 /** Manage ephemeral turns and protect the workspace from late events after cancellation. */
-export function useInvestigation(client: Transport, host: string, initial?: Answer) {
+export function useInvestigation(client: Transport, host: string, initial?: Answer, selection?: ModelSelection) {
   const [turns, setTurns] = useState<Turn[]>(() =>
     initial
       ? [
@@ -172,6 +173,7 @@ export function useInvestigation(client: Transport, host: string, initial?: Answ
           query,
           ...(target?.kind === 'container' ? { container_id: target.id } : target ? { group: target } : {}),
           ...(session.current ? { session_id: session.current } : {}),
+          ...(selection ? { model_selection: selection } : {}),
         },
         (event) => {
           if (generation.current === current) receive(id, event);

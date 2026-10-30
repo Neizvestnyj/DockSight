@@ -37,6 +37,12 @@ continues the same question and session with an explicit group or container ID, 
 It owns independent deadlines, public reason codes, and UTC check times. The metadata adapter owns provider-specific HTTP
 routes and credentials; the status use case never calls `ModelPort.complete` or changes diagnostic or action state.
 
+`ModelChoices` validates optional provider/model selections against server-owned catalogs. `CatalogCache` coalesces
+metadata work and owns freshness, failure cooldown, and cancellation. Provider-specific pagination and HTTP handling
+remain in the catalog adapter. The composition root lazily creates one reusable connection per configured provider;
+transient selected adapters share those clients. Selected `Diagnostics` instances share sessions, redaction, action
+assembly, and the existing concurrency semaphore, without changing another turn's model or trace identity.
+
 - `domain` uses the standard library only. It owns values and business rules.
 - `application` owns use cases, ports, tool orchestration, and output contracts. Pydantic may validate application DTOs
   and widget proposals; it must not become a base class for domain entities.
@@ -70,6 +76,8 @@ backend/src/docksight/
     actions.py           # Prepare and execute workflows
     queries.py           # Host/container read workflows
     system_status.py     # Bounded dependency checks and safe public results
+    model_catalog.py     # Public model metadata and bounded in-memory refreshes
+    model_choices.py     # Validated provider/model selection
     events.py            # Transport-neutral turn events
     views/               # Widget proposals, registry, server assembly
   adapters/

@@ -93,7 +93,8 @@ See [SSE and trace contracts](api.md#diagnostic-stream).
 
 ## System status
 
-The top bar shows independent API/authentication, Docker, provider, and model results. Checks run after connection and
+The top bar keeps API/Docker status separate from the model selector; the status panel includes provider/model details.
+Checks run after connection and
 host discovery, on host changes, and through **Check again**. API mode repeats checks 60 seconds after settlement while
 visible and online. Opening the panel or returning to the foreground rechecks results at least 30 seconds old.
 Recent foreground events preserve the next check. Reads do not overlap; manual retry during a read queues one follow-up.
@@ -111,6 +112,20 @@ Metadata availability does not verify generation, tools, or structured output. U
 and allow explicit diagnosis. Confirmed unavailability disables new diagnoses, including keyboard submission and retry,
 while preserving drafts, history, and action state. Provider/model failures leave direct Docker reads available.
 See [dependency status](api.md#dependency-status).
+
+## Model selection
+
+The header names the active provider/model. **Choose model** opens configured providers, a searchable model list,
+and **Refresh models**. Unconfigured providers are disabled. Demo uses visibly simulated catalogs and makes no requests.
+Catalogs load only on opening the picker or selecting a provider. The client reuses recent results for five minutes;
+stale rows remain visible while the backend refreshes. Errors retain previous/configured choices and the active model.
+
+Selecting a row applies to the next question and updates its status checks. It preserves the current draft, session,
+evidence, historical trace, prepared actions, and execution keys. Switching is disabled during a diagnostic turn.
+The choice stays in this tab across host changes; reconnecting or reloading resets it. No provider key or model preference
+is written to browser storage. Keys remain in server environment settings; catalog availability does not verify tools.
+
+![Demo: provider and model selection in the header](screenshots/model-selection.jpg)
 
 ## Language and lifetime
 

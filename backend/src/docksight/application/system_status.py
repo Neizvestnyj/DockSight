@@ -3,8 +3,9 @@ import json
 import logging
 import traceback
 from collections.abc import Callable
+from copy import copy
 from datetime import UTC, datetime
-from typing import Final, Literal
+from typing import Final, Literal, Self
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
@@ -74,6 +75,14 @@ class SystemStatus:
         self.model = model
         self.timeout = timeout
         self.clock = clock or (lambda: datetime.now(UTC))
+
+    def with_model(self, probe: ModelStatusPort | None, provider: str, model: str) -> Self:
+        """Check the exact selection while preserving runtime and deadline configuration."""
+        selected = copy(self)
+        selected.probe = probe
+        selected.provider = provider
+        selected.model = model
+        return selected
 
     def _view(self, result: ProbeResult) -> DependencyCheck:
         """Timestamp completion and use only application-owned public reasons."""
