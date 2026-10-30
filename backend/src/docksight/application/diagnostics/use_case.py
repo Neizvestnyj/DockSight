@@ -194,7 +194,7 @@ class Diagnostics:
         trace: DiagnosticTrace,
     ) -> AsyncGenerator[TurnEvent]:
         """Retain validated answers in history without recording unresolved clarification turns."""
-        messages.append(ModelMessage("user", final_prompt(query)))
+        messages.append(ModelMessage("user", final_prompt(query, context)))
         async for event in self._finalize(messages, context, session.actor, deadline, trace):
             if event["type"] == "answer.ready":
                 session.history.extend(
@@ -361,7 +361,9 @@ class Diagnostics:
         instruction = messages[-1].content
         for attempt in range(2):
             yield trace.begin("model", "repair_response" if attempt else "final_response")
-            reply = await _before_deadline(deadline, lambda: self.model.complete(messages, schema=proposal_schema()))
+            reply = await _before_deadline(
+                deadline, lambda: self.model.complete(messages, schema=proposal_schema(tuple(context.evidence)))
+            )
             yield trace.finish(reply=reply, preview=True)
             yield trace.begin("validation", "validate_diagnosis")
             try:

@@ -6,7 +6,7 @@ from uuid import uuid4
 import httpx
 import pytest
 
-from tests.integration.live_e2e.cases import CASES, FOLLOW_UP_CASE, Case
+from tests.integration.live_e2e.cases import CASES, FOLLOW_UP_CASES, Case
 from tests.integration.live_e2e.lab import ROOT, ComposeLab
 from tests.integration.live_e2e.server import live_api, local_model_url, require_local_models
 
@@ -22,7 +22,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     group.addoption(
         "--e2e-case",
         action="append",
-        choices=[row.name for row in (*CASES, FOLLOW_UP_CASE)],
+        choices=[row.name for row in (*CASES, *FOLLOW_UP_CASES)],
         help="Select a scenario; repeat",
     )
 
@@ -35,7 +35,7 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
     selected = metafunc.config.getoption("e2e_case")
     cases = _selected_cases(selected, metafunc.function.__name__ == "test_live_browser")
     if metafunc.function.__name__ == "test_live_follow_up":
-        cases = [FOLLOW_UP_CASE] if not selected or FOLLOW_UP_CASE.name in selected else []
+        cases = [row for row in FOLLOW_UP_CASES if not selected or row.name in selected]
     metafunc.parametrize("model_name", names)
     metafunc.parametrize("case", cases, ids=lambda row: row.name)
     metafunc.parametrize("language", metafunc.config.getoption("e2e_language") or ["en", "ru"])

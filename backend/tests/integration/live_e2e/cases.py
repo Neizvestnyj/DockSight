@@ -51,6 +51,8 @@ class Case:
 
 
 FOLLOW_UP_CASE: Final = Case("compose-follow-up", ("backend", "grafana", "nginx"), group=True)
+FOLLOW_UP_NOISY_CASE: Final = Case("compose-follow-up-noisy", ("backend", "grafana", "nginx"), group=True)
+FOLLOW_UP_CASES: Final = (FOLLOW_UP_CASE, FOLLOW_UP_NOISY_CASE)
 
 CASES: Final = (
     Case("compose-explicit", ("backend", "grafana", "nginx"), group=True, explicit=True),

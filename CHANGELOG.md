@@ -10,6 +10,8 @@ Dates below record each version's merge into `master` in Europe/Moscow. Version 
 
 ### Fixed
 
+- Final and repair schemas restrict evidence references to the current turn instead of accepting arbitrary strings.
+  A noisy SQL-log follow-up covers exact-container evidence, card content, and response language.
 - Explicit English/Russian container references preserve container scope when a Compose project has the same name,
   allowing dependency follow-ups to continue the existing conversation with fresh observations. Server tool scope keeps
   earlier group context from adding unrelated container cards to the new answer. Exact-target status and bounded logs are

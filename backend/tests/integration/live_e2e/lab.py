@@ -11,7 +11,7 @@ from docker.errors import DockerException
 from docker.models.containers import Container
 
 from docksight.adapters.outbound.docker.hosts import HostConfig, connect
-from tests.integration.live_e2e.cases import FOLLOW_UP_CASE, Case
+from tests.integration.live_e2e.cases import FOLLOW_UP_CASES, FOLLOW_UP_NOISY_CASE, Case
 
 ROOT: Final = Path(__file__).resolve().parents[4]
 OWNER_LABEL: Final = "com.docksight.e2e"
@@ -92,20 +92,23 @@ class ComposeLab:
             raise RuntimeError("Compose did not create the exact requested service set")
         self._wait_ready()
         if self.case.group:
-            self._compose(self.peer_project, ("backend",))
-            self.peers = {
-                row.id: row
-                for row in self._owned_containers()
-                if row.labels["com.docker.compose.project"] != self.project
-            }
-            if len(self.peers) != 1:
-                raise RuntimeError("Compose did not create the exact peer service set")
-            self._wait_ready({"backend": next(iter(self.peers.values()))})
-            if self.case == FOLLOW_UP_CASE:
-                peer = next(iter(self.peers.values()))
-                require_owner(peer.labels, self.owner)
-                peer.rename(self.peer_project)
-                peer.reload()
+            self._start_peer()
+
+    def _start_peer(self) -> None:
+        """Create a separate dependency namespace, optionally with a colliding container name and noisy logs."""
+        service = "database" if self.case == FOLLOW_UP_NOISY_CASE else "backend"
+        self._compose(self.peer_project, (service,))
+        self.peers = {
+            row.id: row for row in self._owned_containers() if row.labels["com.docker.compose.project"] != self.project
+        }
+        if len(self.peers) != 1:
+            raise RuntimeError("Compose did not create the exact peer service set")
+        self._wait_ready({service: next(iter(self.peers.values()))})
+        if self.case in FOLLOW_UP_CASES:
+            peer = next(iter(self.peers.values()))
+            require_owner(peer.labels, self.owner)
+            peer.rename(self.peer_project)
+            peer.reload()
 
     def _compose(self, project: str, services: tuple[str, ...]) -> None:
         """Create one uniquely owned namespace from the real Compose fixture definition."""
@@ -172,7 +175,7 @@ class ComposeLab:
             return state["Status"] == "exited"
         if name == "crash":
             return row.attrs["RestartCount"] >= 2
-        if name == "logs":
+        if name in {"logs", "database"}:
             return state["Status"] == "running" and row.exec_run(["test", "-f", "/tmp/ready"]).exit_code == 0
         return state.get("Health", {}).get("Status") == "healthy"
 

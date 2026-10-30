@@ -53,6 +53,9 @@ services:
   logs:
     <<: *worker
     command: [logs]
+  database:
+    <<: *worker
+    command: [database-logs]
   unknown:
     <<: *worker
     command: [unknown]

@@ -34,6 +34,25 @@ def logs() -> None:
         time.sleep(1)
 
 
+def database_logs() -> None:
+    """Emit synthetic PostgreSQL-style SQL errors while Docker keeps this workload running; no database is hosted."""
+    for index in range(60):
+        print(
+            f'ERROR: invalid input value for enum login_provider: "invalid_provider" request={index}'
+        )
+        print(
+            'ERROR: insert or update on table "event" violates foreign key constraint "event_item_id_fkey"'
+        )
+        print('DETAIL: Key (item_id)=(2000000000) is not present in table "item".')
+    print("LOG: automatic recovery in progress")
+    print("LOG: invalid record length at 14/5A179788: expected at least 24, got 0")
+    print("LOG: redo done at 14/5A179750")
+    print("LOG: database system is ready to accept connections")
+    Path("/tmp/ready").touch()
+    while True:
+        time.sleep(1)
+
+
 def main() -> None:
     """Run one explicit workload without contacting the host or any external network."""
     mode = sys.argv[1]
@@ -43,6 +62,8 @@ def main() -> None:
         oom()
     elif mode == "logs":
         logs()
+    elif mode == "database-logs":
+        database_logs()
     elif mode == "crash":
         print("ConfigurationError: REQUIRED_SETTING is missing; initialization aborted")
         raise SystemExit(1)

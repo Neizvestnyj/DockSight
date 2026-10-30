@@ -172,6 +172,30 @@ async def test_unknown_evidence_gets_one_repair_attempt() -> None:
     assert not any(event["type"] == "answer.ready" for event in events)
 
 
+async def test_final_and_repair_schemas_restrict_log_quotations_to_fresh_evidence_ids() -> None:
+    quoted = 'invalid input value for enum login_provider: "unknown"'
+    model = ScriptedModel([ModelReply("Ready"), ModelReply(proposal(quoted)), ModelReply(proposal())])
+    runtime = FakeRuntime()
+    service = Diagnostics(runtime, model, MemorySessions(), Redactor())
+    with patch.object(model, "complete", wraps=model.complete) as complete:
+        events = [
+            event
+            async for event in service.stream(
+                "alice", "local", "Could the database be stopped?", container_id=runtime.item.id
+            )
+        ]
+    assert events[-1]["type"] == "turn.completed"
+    assert any(event["type"] == "trace.step" and event["step"]["code"] == "invalid_evidence" for event in events)
+    for call in complete.call_args_list[1:]:
+        schema = call.kwargs["schema"]
+        assert schema["properties"]["evidence_ids"]["items"]["enum"] == ["e1", "e2"]
+        assert schema["$defs"]["WidgetProposal"]["properties"]["evidence_ids"]["items"]["enum"] == ["e1", "e2"]
+        assert schema["$defs"]["CauseAssessment"]["properties"]["evidence_ids"]["items"]["enum"] == ["e1", "e2"]
+    answer = next(event["answer"] for event in events if event["type"] == "answer.ready")
+    assert {row["id"] for row in answer["evidence"]} == {"e1", "e2"}
+    assert not runtime.mutations
+
+
 def repair_feedback(model: ScriptedModel) -> dict[str, object]:
     """Read structured correction details from the final model request."""
     content = model.requests[-1][0][-1].content

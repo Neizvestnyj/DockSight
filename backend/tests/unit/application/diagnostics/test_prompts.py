@@ -1,7 +1,18 @@
 import json
 
+from docksight.application.diagnostics.context import EvidenceContext
 from docksight.application.diagnostics.prompts import final_prompt, group_catalog
 from docksight.application.views.schemas import GroupTarget
+from tests.fakes import snapshot
+
+
+def test_final_prompt_catalog_identifies_current_evidence_without_repeating_untrusted_log_text() -> None:
+    context = EvidenceContext()
+    context.record("logs", "local", {"message": "untrusted-sql-error"}, snapshot=snapshot())
+    prompt = final_prompt("Could the database be stopped?", context)
+    catalog = json.loads(prompt.rsplit("\n", 1)[-1])
+    assert catalog == [{"id": "e1", "kind": "logs", "container_id": "a" * 64}]
+    assert "untrusted-sql-error" not in prompt
 
 
 def test_group_catalog_bounds_names_without_hiding_omitted_candidates() -> None:
