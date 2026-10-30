@@ -356,6 +356,10 @@ const russian = {
   'Diagnostic interruption': 'Прерывание диагностики',
   'Diagnosis stopped': 'Диагностика остановлена',
   'Diagnosis could not finish': 'Не удалось завершить диагностику',
+  'The configured model was not found or is unavailable to this API key. Check the model name and your access.':
+    'Настроенная модель не найдена или недоступна вашему API-ключу. Проверьте название модели и доступ к ней.',
+  'Model request rejected; verify model capabilities and configuration':
+    'Провайдер отклонил запрос к модели. Проверьте её возможности и настройки.',
   'Collection was cancelled. Submit again when you are ready.':
     'Сбор данных отменён. Когда будете готовы, отправьте запрос снова.',
   ' · Request {id}': ' · Запрос {id}',
@@ -506,6 +510,12 @@ const russian = {
 } as const;
 
 export type MessageKey = keyof typeof russian;
+export const diagnosticErrors: Readonly<Partial<Record<string, MessageKey>>> = {
+  model_unavailable:
+    'The configured model was not found or is unavailable to this API key. Check the model name and your access.',
+  model_not_supported: 'Model request rejected; verify model capabilities and configuration',
+};
+
 export const diagnosticOperations: Record<string, MessageKey> = {
   resolve_target: 'Resolving diagnostic scope',
   inspect_group: 'Inspecting group members',

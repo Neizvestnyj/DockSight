@@ -28,7 +28,14 @@ def provider_error(status: int) -> DockSightError:
     """Map an HTTP provider status to a safe public domain error."""
     if status == 429:
         return DockSightError("provider_rate_limit", "Model provider rate limit reached", 429)
-    if status in {400, 404, 422}:
+    if status == 404:
+        return DockSightError(
+            "model_unavailable",
+            "The configured model was not found or is unavailable to this API key. "
+            "Check the model name and your access.",
+            422,
+        )
+    if status in {400, 422}:
         return DockSightError(
             "model_not_supported",
             "Model request rejected; verify model capabilities and configuration",

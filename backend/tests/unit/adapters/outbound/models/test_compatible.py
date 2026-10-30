@@ -1,10 +1,48 @@
 import json
 
 import httpx2
+import pytest
 from openai import AsyncOpenAI
 
 from docksight.adapters.outbound.models.compatible import CompatibleModel
 from docksight.application.ports.models import ModelMessage, ToolCall, ToolSpec
+from docksight.domain.errors import DockSightError
+
+
+async def test_gemini_retired_model_error_is_safe_and_distinct_from_unsupported_requests() -> None:
+    """Handle Google's observed array-shaped 404 without returning its model advice or private details."""
+    upstream = [
+        {
+            "error": {
+                "code": 404,
+                "message": (
+                    "This model models/gemini-2.5-flash-lite is no longer available to new users. "
+                    "Please update your code to use models/gemini-3.5-flash-lite "
+                    "for the latest features and improvements. "
+                    "We recommend you to use the Interactions API (https://ai.google.dev/gemini-api/docs/get-started)."
+                ),
+                "status": "NOT_FOUND",
+                "details": [{"api_key": "private-provider-key", "request": "private-prompt"}],
+            }
+        }
+    ]
+    async with AsyncOpenAI(
+        api_key="private-provider-key",
+        max_retries=0,
+        base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+        http_client=httpx2.AsyncClient(transport=httpx2.MockTransport(lambda _: httpx2.Response(404, json=upstream))),
+    ) as client:
+        with pytest.raises(DockSightError) as caught:
+            await CompatibleModel(client, "gemini-2.5-flash-lite", require_tool_signatures=True).complete(
+                [ModelMessage("user", "private-prompt")]
+            )
+    error = caught.value
+    assert error.code == "model_unavailable"
+    assert error.status == 422
+    assert "Check the model name and your access" in error.message
+    assert all(
+        value not in str(error) for value in ("private-provider-key", "private-prompt", "gemini-3.5", "Interactions")
+    )
 
 
 async def test_gemini_tool_signature_survives_tool_result_and_structured_output() -> None:

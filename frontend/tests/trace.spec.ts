@@ -84,6 +84,50 @@ for (const motion of ['no-preference', 'reduce'] as const) {
   });
 }
 
+for (const failure of [
+  {
+    code: 'model_unavailable',
+    english:
+      'The configured model was not found or is unavailable to this API key. Check the model name and your access.',
+    russian: 'Настроенная модель не найдена или недоступна вашему API-ключу. Проверьте название модели и доступ к ней.',
+  },
+  {
+    code: 'model_not_supported',
+    english: 'Model request rejected; verify model capabilities and configuration',
+    russian: 'Провайдер отклонил запрос к модели. Проверьте её возможности и настройки.',
+  },
+  {
+    code: 'unknown_provider_failure',
+    english: 'Provider message retained verbatim',
+    russian: 'Provider message retained verbatim',
+  },
+  {
+    code: 'toString',
+    english: 'Provider message retained verbatim',
+    russian: 'Provider message retained verbatim',
+  },
+]) {
+  test(`explains ${failure.code} in the selected locale without changing the failed trace`, async ({ page }) => {
+    await api(page, [
+      { type: 'turn.started', session_id: '62f9fcc6-583e-4b3d-9678-10ffea8ae671' },
+      { type: 'trace.started', provider: 'gemini', model: 'gemini-2.5-flash-lite', started_at: started },
+      { type: 'trace.step', step: { ...modelStep, state: 'failed', code: failure.code } },
+      { type: 'turn.failed', code: failure.code, message: 'Provider message retained verbatim' },
+    ]);
+    await expect(page.getByRole('alert')).toHaveText(failure.english);
+    await page.getByRole('textbox').fill('Keep this follow-up');
+    await page.getByRole('combobox', { name: 'Language' }).selectOption('ru');
+    await expect(page.getByRole('alert')).toHaveText(failure.russian);
+    await expect(page.getByRole('textbox')).toHaveValue('Keep this follow-up');
+    const trace = page.locator('.diagnostic-trace');
+    await trace.locator('summary').click();
+    await expect(trace).toContainText(failure.code);
+    await expect(trace).toContainText('request-trace-test');
+    await expect(trace).toContainText('gemini-2.5-flash-lite');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  });
+}
+
 test('keeps a demo trace open across completion, supports keyboard selection and localized copy', async ({
   page,
 }, info) => {

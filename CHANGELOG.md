@@ -10,6 +10,8 @@ Dates below record each version's merge into `master` in Europe/Moscow. Version 
 
 ### Fixed
 
+- Model generation distinguishes missing or inaccessible models from unsupported requests, with English/Russian guidance
+  to check the model name and API-key access. Provider response bodies remain private.
 - Bounded Docker log reads and diagnostic byte budgets retain the latest output instead of the start of a tail window.
   Log viewers show the retained UTC date range and order; oversized scans fail explicitly rather than hiding final events.
 - Final and repair schemas restrict evidence references to the current turn instead of accepting arbitrary strings.

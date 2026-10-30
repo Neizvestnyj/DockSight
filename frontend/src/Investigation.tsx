@@ -1,4 +1,4 @@
-import { diagnosticOperations, isMessageKey, stateLabel, targetKindLabel } from './messages';
+import { diagnosticErrors, diagnosticOperations, isMessageKey, stateLabel, targetKindLabel } from './messages';
 import { useLocale } from './locale';
 import { useState } from 'react';
 import {
@@ -60,11 +60,15 @@ export function Investigation({
   const answer = turn?.answer;
   const displayedQuery = turn?.exampleQuery && isMessageKey(turn.query) ? t(turn.query) : turn?.query;
   const localError = turn?.errorSource === 'client' && turn.error;
+  const diagnosticError =
+    turn?.code && Object.hasOwn(diagnosticErrors, turn.code) ? diagnosticErrors[turn.code] : undefined;
   const errorMessage = localError
     ? t(isMessageKey(localError) ? localError : 'Connection failed. Retry manually.')
-    : demo && turn?.error && isMessageKey(turn.error)
-      ? t(turn.error)
-      : turn?.error;
+    : diagnosticError
+      ? t(diagnosticError)
+      : demo && turn?.error && isMessageKey(turn.error)
+        ? t(turn.error)
+        : turn?.error;
   const selected = answer?.evidence.find((row) => row.id === reference) ?? answer?.evidence[0];
   const narrative = (text: string) => (demo && isMessageKey(text) ? t(text) : text);
 

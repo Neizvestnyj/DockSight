@@ -179,6 +179,11 @@ authentication and host scope, add no provider requests, are not persisted, and 
 SSE comments provide heartbeats. Failures after streaming starts remain HTTP 200 and are represented by `turn.failed`.
 Disconnecting cancels diagnostic work. Streams do not support replay or automatic reconnection.
 
+Generation HTTP 404 errors use `model_unavailable`: the configured model is missing or inaccessible to the API key.
+HTTP 400/422 rejections use `model_not_supported` for request or capability mismatches. Both map to HTTP 422 before
+streaming starts. Provider response bodies are never included. The client localizes these two diagnostic codes in
+English/Russian and retains unknown server messages verbatim. Metadata checks do not verify generation access.
+
 ## Group targets and cause assessment
 
 Before model exploration, exact project/stack names in the question are resolved against Docker metadata. A matching
