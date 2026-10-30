@@ -48,7 +48,7 @@ export function Investigation({
   group,
 }: Props) {
   const { t, locale } = useLocale();
-  const { turns, running, run, stop } = investigation;
+  const { turns, running, run, chooseGroup, stop } = investigation;
   const [view, setView] = useState<{ id: string; latest: string } | null>(null);
   const latest = turns.at(-1);
   const turn = (view?.latest === latest?.id && turns.find((row) => row.id === view?.id)) || latest;
@@ -100,7 +100,15 @@ export function Investigation({
                   key={row.id}
                   onClick={() => setView({ id: row.id, latest: latest!.id })}
                 >
-                  <span>{row.exampleQuery && isMessageKey(row.query) ? t(row.query) : row.query}</span>
+                  <span>
+                    {row.exampleQuery && isMessageKey(row.query) ? t(row.query) : row.query}
+                    {row.group && (
+                      <span className="muted">
+                        {' '}
+                        · {row.group.kind === 'compose' ? 'Compose' : 'Swarm'} / {row.group.name}
+                      </span>
+                    )}
+                  </span>
                   <span className="muted">{stateLabel(row.state, t, true)}</span>
                 </button>
               ))}
@@ -116,6 +124,11 @@ export function Investigation({
               <h2>{displayedQuery}</h2>
               <span className="muted query-author">{t('Operator')}</span>
             </div>
+            {turn.group && (
+              <p className="section-note query-scope">
+                {t('Scope')}: {t(turn.group.kind === 'compose' ? 'Docker Compose' : 'Docker Swarm')} / {turn.group.name}
+              </p>
+            )}
             {turn.progress.length > 0 && (
               <div className="progress" role="status" aria-label={t('Diagnostic progress')}>
                 {turn.progress.map((row, index) => (
@@ -264,12 +277,17 @@ export function Investigation({
                 host={host}
                 disabled={running || blocked}
                 choose={(target) => {
-                  setView(null);
-                  void run(turn.query, false, target);
+                  setView({ id: turn.id, latest: latest!.id });
+                  void chooseGroup(turn.id, target);
                 }}
               />
             )}
-            <DiagnosticTrace key={turn.id} turn={turn} host={host} demo={demo} />
+            <DiagnosticTrace
+              key={`${turn.id}:${turn.group?.kind ?? ''}:${turn.group?.name ?? ''}`}
+              turn={turn}
+              host={host}
+              demo={demo}
+            />
             {answer?.group && <GroupReport report={answer.group} evidence={answer.evidence} inspect={inspect} />}
             {answer && (
               <AnswerGrid

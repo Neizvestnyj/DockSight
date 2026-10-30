@@ -134,22 +134,40 @@ export function useInvestigation(client: Transport, host: string, initial?: Answ
       session.current = undefined;
   }
 
-  /** Start exactly one manual request; retries are explicit operator submissions. */
-  async function run(query: string, freshSession = false, group?: GroupTarget) {
-    if (active.current || !query.trim() || !host) return;
+  /** Add a new operator question or explicit manual retry to this tab's history. */
+  function run(query: string, freshSession = false, group?: GroupTarget) {
+    return requestTurn({ id: crypto.randomUUID(), query, group }, freshSession);
+  }
+
+  /** Continue only an unresolved question with one of its server-observed group choices. */
+  async function chooseGroup(id: string, group: GroupTarget) {
+    const turn = turns.find((row) => row.id === id && row.state === 'awaiting_selection');
+    if (!turn?.selection?.candidates.some((row) => row.kind === group.kind && row.name === group.name)) return;
+    await requestTurn({ id, query: turn.query, group });
+  }
+
+  /** Run one transport attempt, replacing a pending choice without mixing its old events or trace into the diagnosis. */
+  async function requestTurn(input: Pick<Turn, 'id' | 'query' | 'group'>, freshSession = false) {
+    const { id, group } = input;
+    const query = input.query.trim();
+    if (active.current || !query || !host) return;
     const nextScope = group ? `${group.kind}:${group.name}` : '';
     if (freshSession || nextScope !== scope.current) session.current = undefined;
     scope.current = nextScope;
     const controller = new AbortController();
     active.current = controller;
     const current = ++generation.current;
-    const id = crypto.randomUUID();
-    setTurns((previous) => [...previous, { id, query: query.trim(), group, state: 'running', progress: [] }]);
+    const next: Turn = { id, query, group, state: 'running', progress: [] };
+    setTurns((previous) =>
+      previous.some((turn) => turn.id === id)
+        ? previous.map((turn) => (turn.id === id ? next : turn))
+        : [...previous, next],
+    );
     try {
       await client.diagnose(
         {
           host,
-          query: query.trim(),
+          query,
           ...(group ? { group } : {}),
           ...(session.current ? { session_id: session.current } : {}),
         },
@@ -180,5 +198,5 @@ export function useInvestigation(client: Transport, host: string, initial?: Answ
     }
   }
 
-  return { turns, running, run, stop, clear, example };
+  return { turns, running, run, chooseGroup, stop, clear, example };
 }

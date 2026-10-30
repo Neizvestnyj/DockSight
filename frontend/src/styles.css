@@ -2276,6 +2276,9 @@ textarea {
   font-size: 12px;
   color: var(--muted);
 }
+.query-scope {
+  overflow-wrap: anywhere;
+}
 .history-row {
   border: 0;
   border-radius: 0;

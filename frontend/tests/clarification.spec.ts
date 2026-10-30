@@ -14,7 +14,11 @@ for (const groupName of ['vintoria-infra', `vintoria-infra-${'x'.repeat(113)}`])
     const group = { ...groups[0]!, name: groupName };
     const answer = demoGroupAnswer(demoAnswer('dependency', 'local'), rows, group);
     answer.evidence.find((row) => row.kind === 'stack')!.data = { stacks: [group] };
-    await page.route('**/api/v1/**', (route) => {
+    let finishSelection = () => {};
+    const selectionGate = new Promise<void>((resolve) => {
+      finishSelection = resolve;
+    });
+    await page.route('**/api/v1/**', async (route) => {
       const request = route.request();
       const url = new URL(request.url());
       expect(request.headers()['authorization']).toBe('Bearer clarification-test-token');
@@ -23,6 +27,7 @@ for (const groupName of ['vintoria-infra', `vintoria-infra-${'x'.repeat(113)}`])
       if (url.pathname.endsWith('/containers')) return route.fulfill({ json: rows });
       expect(url.pathname).toBe('/api/v1/chat/turns');
       inputs.push(request.postDataJSON() as TurnInput);
+      if (inputs.length === 2) await selectionGate;
       const base = { schema_version: 1, request_id: `r-${inputs.length}`, turn_id: `t-${inputs.length}` };
       const events = [
         { ...base, type: 'turn.started', session_id: '62f9fcc6-583e-4b3d-9678-10ffea8ae671' },
@@ -74,15 +79,33 @@ for (const groupName of ['vintoria-infra', `vintoria-infra-${'x'.repeat(113)}`])
     const choice = localized.getByRole('button', { name: `Docker Compose ${groupName}`, exact: true });
     await choice.focus();
     await page.keyboard.press('Enter');
+    try {
+      await expect(page.locator('.session-turns')).toHaveCount(0);
+      await expect(localized).toHaveCount(0);
+      await expect(page.locator('.collecting')).toBeVisible();
+      await expect(page.locator('.query-scope')).toContainText(groupName);
+      await expect(page.getByRole('textbox')).toHaveValue('Keep this follow-up draft');
+      await page.locator('.diagnostic-trace > summary').click();
+      await page.screenshot({ path: `test-results/${info.project.name}-group-continuation-${groupName.length}.png` });
+    } finally {
+      finishSelection();
+    }
     await expect(page.locator('.widget-container_status')).toHaveCount(1);
+    await expect(page.locator('.diagnostic-trace')).toHaveJSProperty('open', true);
+    await expect(page.locator('.session-turns')).toHaveCount(0);
     expect(inputs).toHaveLength(2);
     expect(inputs[1]?.query).toBe(question);
     expect(inputs[1]?.group).toEqual({ kind: 'compose', name: groupName });
     await expect(page.getByRole('textbox')).toHaveValue('Keep this follow-up draft');
+    await page.getByRole('button', { name: 'Исследовать', exact: true }).click();
+    await expect(page.locator('.session-turns')).toBeVisible();
     await page.locator('.session-turns summary').click();
+    await expect(page.locator('.history-row')).toHaveCount(2);
     await page.locator('.history-row').first().click();
-    await expect(localized.getByRole('button')).toHaveCount(2);
-    await expect(page.locator('.widget-container_status')).toHaveCount(0);
+    await expect(page.locator('.query-line h2')).toHaveText(question);
+    await expect(page.locator('.query-scope')).toContainText(groupName);
+    await expect(page.locator('.widget-container_status')).toHaveCount(1);
+    await expect(localized).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   });
 }

@@ -188,6 +188,8 @@ Ambiguous names produce `clarification.required` rather than a diagnosis. The re
 Bare English/Russian incident questions such as "What happened?" or "Что случилось?" also require a scope choice when
 discovery finds several groups. Discovery returns the observed Compose/Swarm options before model or individual log reads.
 An explicitly selected group continues the original question with bounded evidence from that group only.
+The client's history keeps clarification and its selected-group request as one question, while the HTTP requests retain
+distinct request/turn IDs. The displayed trace belongs to the active diagnosis attempt.
 Malformed or redacted labels outside the target contract are excluded from automatic matching.
 `resolve_target` progress and trace
 events describe this read; it does not spend a model call. Model tools accept full Docker IDs or exact observed names,

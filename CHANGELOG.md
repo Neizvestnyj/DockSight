@@ -17,6 +17,8 @@ Dates below record each version's merge into `master` in Europe/Moscow. Version 
 - Diagnostics and New investigation open an empty conversation, clear the draft, and focus the question input.
 - Bare incident questions ask which observed Compose project or Swarm stack to diagnose when several are available,
   before collecting unrelated container logs. Named-group questions retain automatic scope resolution.
+- Choosing a clarification scope continues the original question in one history entry. The selected group stays visible
+  while the diagnosis runs; unrelated answers and the next question's draft are preserved.
 - Log-only answers keep the container name captured by Docker in panel headings and observation sources, even when the
   model omits the status card or its snapshot evidence.
 
