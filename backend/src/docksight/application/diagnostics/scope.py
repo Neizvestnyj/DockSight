@@ -48,11 +48,34 @@ async def resolve_target(runtime: RuntimeReadPort, host: str, query: str) -> Tar
         return container
     named_container = any(_mentioned(query, row.name) for row in rows)
     groups, code = await _group_candidates(runtime, host, rows, query, named_container)
-    exact = [row for row in groups if _mentioned(query, row.name) or _mentioned(query, row.name.replace("-", " "))]
-    targets = exact or ([] if named_container else _near_groups(groups, query))
-    group = _unambiguous_target(targets, bool(exact) and named_container)
+    targets, exact = _question_targets(groups, query, named_container)
+    group = _unambiguous_target(targets, exact and named_container)
     selection = GroupSelection(candidates=targets[:32]) if len(targets) > 1 else None
     return TargetResolution(group, rows, code, tuple(groups), selection)
+
+
+def _question_targets(groups: list[GroupTarget], query: str, named_container: bool) -> tuple[list[GroupTarget], bool]:
+    """Distinguish explicit group references from typo matches and unscoped incident alternatives."""
+    exact = [row for row in groups if _mentioned(query, row.name) or _mentioned(query, row.name.replace("-", " "))]
+    if exact:
+        return exact, True
+    targets = [] if named_container else _near_groups(groups, query)
+    if not targets and not named_container and _unscoped_incident(query):
+        targets = groups if len(groups) > 1 else []
+    return targets, False
+
+
+def _unscoped_incident(query: str) -> bool:
+    """Recognize bare incident questions without treating named or descriptive resource requests as host-wide."""
+    text = " ".join(re.findall(r"[\w']+", query.casefold().replace("\u2019", "'")))
+    return (
+        re.fullmatch(
+            r"(?:(?:\u0430 )?что (?:случилось|произошло|упало|сломалось|не так)(?: \u0443 нас)?|"
+            r"what (?:happened|failed|broke|is down|is wrong|went wrong)|what's (?:wrong|down|broken))",
+            text,
+        )
+        is not None
+    )
 
 
 async def _group_candidates(

@@ -33,7 +33,9 @@ for (const groupName of ['vintoria-infra', `vintoria-infra-${'x'.repeat(113)}`])
               selection: {
                 candidates: [
                   { kind: 'compose', name: groupName },
-                  { kind: 'swarm', name: groupName },
+                  groupName.length < 100
+                    ? { kind: 'compose', name: 'docksight-demo' }
+                    : { kind: 'swarm', name: groupName },
                 ],
               },
             }
@@ -53,7 +55,7 @@ for (const groupName of ['vintoria-infra', `vintoria-infra-${'x'.repeat(113)}`])
     await page.getByLabel('Bearer token').fill('clarification-test-token');
     await page.getByRole('button', { name: 'Connect', exact: true }).click();
     await expect(page.locator('.composer-foot')).toContainText('local');
-    const question = 'Что не так с винтория инфра?';
+    const question = groupName.length < 100 ? 'What happened?' : 'Что не так с винтория инфра?';
     await page.getByRole('textbox').fill(question);
     await page.getByRole('button', { name: 'Investigate', exact: true }).click();
     const selection = page.getByRole('region', { name: 'Group clarification' });

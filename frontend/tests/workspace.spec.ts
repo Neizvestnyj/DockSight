@@ -24,6 +24,44 @@ test.beforeEach(async ({ page }) => {
   await page.goto('/');
 });
 
+for (const name of ['vintoria-infra-grafana-1', `monitoring-${'grafana-'.repeat(18)}1`]) {
+  test(`names log-only evidence without a status card (${name.length} characters)`, async ({ page }, info) => {
+    const original = demoAnswer('dependency', 'test-host');
+    const answer = {
+      ...original,
+      summary: 'Grafana failed while reading its alerting configuration.',
+      widgets: original.widgets.filter((row) => row.widget_type === 'log_anomalies'),
+      evidence: original.evidence.filter((row) => row.kind === 'logs').map((row) => ({ ...row, container_name: name })),
+    };
+    await page.route('**/api/v1/**', (route) => {
+      const path = new URL(route.request().url()).pathname;
+      if (path.endsWith('/hosts')) return route.fulfill({ json: [{ id: 'test-host', name: 'Test host' }] });
+      if (path.endsWith('/system/status')) return route.fulfill({ json: demoSystemStatus('test-host') });
+      if (path.endsWith('/containers'))
+        return route.fulfill({ json: [demoContainer(2, 'test-host', '2026-10-30T10:00:00Z')] });
+      expect(path).toBe('/api/v1/chat/turns');
+      return route.fulfill({
+        contentType: 'text/event-stream',
+        body:
+          sse('turn.started', { session_id: '62f9fcc6-583e-4b3d-9678-10ffea8ae671' }) +
+          sse('answer.ready', { answer }) +
+          sse('turn.completed'),
+      });
+    });
+    await connectApi(page);
+    await page.getByRole('textbox').fill('Show the Grafana logs.');
+    await page.getByRole('button', { name: 'Investigate', exact: true }).click();
+    const panel = page.getByRole('region', { name: `Container evidence: ${name}`, exact: true });
+    await expect(panel.getByRole('heading', { name, exact: true })).toBeVisible();
+    await expect(panel).toContainText('State was not included in this answer.');
+    await expect(panel.getByRole('group', { name: 'Container status', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('group', { name, exact: true })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await panel.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: `test-results/${info.project.name}-log-only-${name.length}.png` });
+  });
+}
+
 for (const label of ['Diagnostics', 'New investigation']) {
   test(`${label} opens an empty investigation and focuses its input`, async ({ page }) => {
     await page.getByRole('textbox').fill('Previous investigation draft');

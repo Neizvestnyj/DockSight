@@ -9,6 +9,40 @@ from docksight.main import create_app
 from tests.fakes import DiscoveryRuntime, FakeRuntime, ScriptedModel
 
 
+def test_unscoped_question_collects_no_logs_until_the_operator_selects_a_project() -> None:
+    runtime = DiscoveryRuntime()
+    model = ScriptedModel(
+        [
+            ModelReply("Ready"),
+            ModelReply(
+                json.dumps({"summary": "Two members failed", "uncertain": True, "evidence_ids": [], "widgets": []})
+            ),
+        ]
+    )
+    settings = Settings(api_token="unscoped-integration-token-24", _env_file=None)
+    components = build_components(settings, reader=runtime, writer=runtime, model=model)
+    headers = {"Authorization": "Bearer unscoped-integration-token-24"}
+    body = {"host": "local", "query": "Что случилось?"}
+    with TestClient(create_app(settings, components)) as api:
+        first = api.post("/api/v1/chat/turns", headers=headers, json=body)
+        events = [json.loads(line[6:]) for line in first.text.splitlines() if line.startswith("data: ")]
+        assert events[-1]["type"] == "turn.completed"
+        selection = next(event["selection"] for event in events if event["type"] == "clarification.required")
+        assert {row["name"] for row in selection["candidates"]} == {"other-project", "vintoria-infra"}
+        assert not any(event["type"] == "answer.ready" for event in events)
+        assert not runtime.reads
+        assert not model.requests
+        second = api.post(
+            "/api/v1/chat/turns", headers=headers, json={**body, "group": {"kind": "compose", "name": "vintoria-infra"}}
+        )
+    completed = [json.loads(line[6:]) for line in second.text.splitlines() if line.startswith("data: ")]
+    assert completed[-1]["type"] == "turn.completed"
+    answer = next(event["answer"] for event in completed if event["type"] == "answer.ready")
+    assert answer["group"]["summary"]["name"] == "vintoria-infra"
+    assert len(answer["widgets"]) == 4
+    assert set(runtime.reads) == {"1" * 64, "2" * 64}
+
+
 def test_group_follow_up_keeps_history_and_reads_an_explicit_container_with_a_colliding_project_name() -> None:
     runtime = DiscoveryRuntime()
     runtime.rows = (*runtime.rows[:2], replace(runtime.rows[2], name="other-project"))

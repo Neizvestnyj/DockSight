@@ -148,6 +148,7 @@ export const evidenceSchema = z.object({
   host: z.string(),
   container_id: z.string().nullable(),
   observed_at: z.string(),
+  container_name: z.string().nullish(),
   data: z.record(z.string(), z.unknown()),
 });
 export const answerSchema = z

@@ -15,11 +15,17 @@ Dates below record each version's merge into `master` in Europe/Moscow. Version 
   earlier group context from adding unrelated container cards to the new answer. Exact-target status and bounded logs are
   collected before model exploration; missing model cards are filled from those facts, and unavailable logs retain status.
 - Diagnostics and New investigation open an empty conversation, clear the draft, and focus the question input.
+- Bare incident questions ask which observed Compose project or Swarm stack to diagnose when several are available,
+  before collecting unrelated container logs. Named-group questions retain automatic scope resolution.
+- Log-only answers keep the container name captured by Docker in panel headings and observation sources, even when the
+  model omits the status card or its snapshot evidence.
 
 ### Added
 
 - An opt-in two-turn live regression checks group-to-dependency follow-ups in the same session against isolated Docker
   workloads and local models, including a container/project name collision and original evidence retention.
+- An unscoped live scenario checks clarification before model calls and the selected project's complete failure cards.
+  Language assertions distinguish verbatim Docker log text from model-authored explanations.
 
 ## [0.4.0] - 2026-10-30
 

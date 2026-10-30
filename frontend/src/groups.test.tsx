@@ -125,6 +125,24 @@ describe('group selection', () => {
     expect(within(panel).queryByRole('group', { name: 'Container status' })).toBeNull();
   });
 
+  it('names log-only evidence from captured metadata when the answer omits the status observation', () => {
+    const original = demoAnswer('dependency');
+    const answer = answerSchema.parse({
+      ...original,
+      widgets: original.widgets.filter((row) => row.widget_type === 'log_anomalies'),
+      evidence: original.evidence
+        .filter((row) => row.kind === 'logs')
+        .map((row) => ({ ...row, container_name: 'monitoring-grafana-1' })),
+    });
+    render(<ObservedAnswer answer={answer} />);
+    const panel = screen.getByRole('region', { name: 'Container evidence: monitoring-grafana-1' });
+    expect(within(panel).getByRole('heading', { name: 'monitoring-grafana-1' })).toBeVisible();
+    expect(within(panel).queryByRole('group', { name: 'Container status' })).toBeNull();
+    const source = screen.getByRole('group', { name: 'monitoring-grafana-1' });
+    fireEvent.click(within(source).getByRole('button', { name: /^Logs/ }));
+    expect(screen.getByRole('region', { name: 'Evidence observation' })).toHaveTextContent('monitoring-grafana-1');
+  });
+
   it('retains repeated state observations and their distinct timestamps in one container panel', () => {
     const answer = demoAnswer('dependency');
     const status = answer.widgets.find((row) => row.widget_type === 'container_status')!;

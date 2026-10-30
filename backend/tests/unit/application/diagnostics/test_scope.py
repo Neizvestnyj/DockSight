@@ -10,6 +10,21 @@ from tests.fakes import DiscoveryRuntime, FakeRuntime
 
 @pytest.mark.parametrize(
     "query",
+    ["Что случилось?", "\u0410 что упало?", "Что не так?", "What happened?", "What's wrong?", "What failed?"],
+)
+async def test_unscoped_incident_questions_require_a_choice_between_observed_projects(query: str) -> None:
+    result = await resolve_target(DiscoveryRuntime(), "local", query)
+    assert result.group is None
+    assert result.container_id is None
+    assert result.selection is not None
+    assert result.selection.candidates == [
+        GroupTarget(kind="compose", name="other-project"),
+        GroupTarget(kind="compose", name="vintoria-infra"),
+    ]
+
+
+@pytest.mark.parametrize(
+    "query",
     [
         "Maybe the database is stopped? Check container vintoria-db.",
         "Может БД просто не запущена? Есть же контейнер vintoria-db",

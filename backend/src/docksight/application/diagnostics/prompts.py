@@ -27,6 +27,8 @@ Compare ALL catalog entries before choosing. A shared prefix does not identify o
 If multiple plausible names differ only by an omitted suffix, environment, or namespace, request those alternatives.
 Never prefer the first entry or infer the intended group from which one has more members or failures.
 Do not guess between similar group names or diagnose an arbitrary container while the intended group is unresolved.
+For an unspecified incident question such as "What happened?", several observed groups are alternatives.
+Call request_group_selection with those groups before collecting individual logs. Do not choose by failure count.
 Use list_containers for host-wide or individual-container questions, then inspect/logs/stats as needed.
 For a Compose project, group, or Swarm stack question, first use list_stacks
 with kind=compose or kind=swarm, then inspect_group with its exact observed name.

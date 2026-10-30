@@ -20,6 +20,27 @@ from docksight.domain.runtime import LogBatch, LogEntry, StackSummary
 from tests.fakes import snapshot
 
 
+async def test_log_only_answer_keeps_the_observed_name_without_a_public_status_snapshot() -> None:
+    context = EvidenceContext()
+    item = snapshot()
+    logs = LogBatch((LogEntry("Connection refused"),))
+    context.record("logs", "local", {"entries": []}, item, logs)
+    proposal = DiagnosisProposal.model_validate(
+        {
+            "summary": "The dependency is unavailable",
+            "uncertain": True,
+            "evidence_ids": ["e1"],
+            "widgets": [{"widget_type": "log_anomalies", "evidence_ids": ["e1"]}],
+        }
+    )
+    answer = await ViewAssembler().build(proposal, context, "alice")
+    assert len(answer.widgets) == 1
+    assert isinstance(answer.widgets[0], LogAnomalyCard)
+    assert answer.evidence[0].container_name == "worker"
+    assert answer.evidence[0].container_id == item.id
+    assert "name" not in answer.evidence[0].data
+
+
 async def test_selected_container_keeps_collected_facts_when_the_model_omits_all_cards() -> None:
     item = snapshot()
     context = EvidenceContext(container_id=item.id)

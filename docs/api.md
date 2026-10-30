@@ -123,6 +123,10 @@ uses separate cards, with at most eight cards per response. Repair feedback incl
 evidence IDs grouped by exact container, and available log/stack references. Schema errors omit submitted values and
 replace unknown field names with a fixed marker.
 
+Container-scoped evidence includes `container_name`, captured with the snapshot used for that observation. This name
+remains available in log-only answers without a status card. It is historical metadata, not a lookup in current inventory;
+non-container observations use `null`. Clients may accept older responses without the field and retain an ID fallback.
+
 </details>
 
 Events carry `schema_version: 1`, `request_id`, and `turn_id`:
@@ -181,6 +185,9 @@ snapshot so missing logs do not erase available container facts.
 Collected status and log facts retain their cards even when the model omits them, using the same assembly policy as
 collected problem members in a group report.
 Ambiguous names produce `clarification.required` rather than a diagnosis. The report identifies the canonical group.
+Bare English/Russian incident questions such as "What happened?" or "Что случилось?" also require a scope choice when
+discovery finds several groups. Discovery returns the observed Compose/Swarm options before model or individual log reads.
+An explicitly selected group continues the original question with bounded evidence from that group only.
 Malformed or redacted labels outside the target contract are excluded from automatic matching.
 `resolve_target` progress and trace
 events describe this read; it does not spend a model call. Model tools accept full Docker IDs or exact observed names,

@@ -43,7 +43,15 @@ class EvidenceContext:
         if len(self.evidence) >= 64 or size > self.remaining_bytes:
             raise DockSightError("evidence_limit", "Evidence budget reached; finalize with collected evidence", 409)
         evidence_id = f"e{len(self.evidence) + 1}"
-        item = EvidenceRef(evidence_id, kind, host, snapshot.id if snapshot else None, datetime.now(UTC), data)
+        item = EvidenceRef(
+            evidence_id,
+            kind,
+            host,
+            snapshot.id if snapshot else None,
+            datetime.now(UTC),
+            data,
+            container_name=snapshot.name if snapshot else None,
+        )
         self.evidence[evidence_id] = item
         self.used_bytes += size
         if snapshot is not None:

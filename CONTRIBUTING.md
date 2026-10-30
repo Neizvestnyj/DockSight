@@ -203,6 +203,9 @@ an explicitly named dependency container whose name equals its Compose project. 
 checks fresh dependency cards and actual log content, and retains the first turn in the ignored report. It reuses the
 existing failure workload; it does not simulate a database engine or execute product actions.
 
+`--e2e-case compose-unscoped` asks "What happened?" in English/Russian with two observed projects. It requires clarification
+before model calls or individual log reads, then selects one project and checks all its failure cards and observed names.
+
 To include real browser flows, install frontend dependencies and Chrome, build the client, and add `--e2e-browser`:
 
 ```sh

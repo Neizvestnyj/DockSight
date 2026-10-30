@@ -25,11 +25,12 @@ export function evidenceResource(row: Evidence, answer: Answer): { key: string; 
         typeof item.data.name === 'string',
     );
     const name =
-      card?.widget_type === 'container_status'
+      row.container_name ??
+      (card?.widget_type === 'container_status'
         ? card.snapshot.name
         : typeof snapshot?.data.name === 'string'
           ? snapshot.data.name
-          : answer.group?.logs.find((item) => item.container_id === row.container_id)?.name;
+          : answer.group?.logs.find((item) => item.container_id === row.container_id)?.name);
     return { key: `${row.host}/${row.container_id}`, name: name ?? `${row.container_id.slice(0, 12)}…` };
   }
   const stacks = row.kind === 'stack' && Array.isArray(row.data.stacks) ? row.data.stacks : [];

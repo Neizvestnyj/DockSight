@@ -27,9 +27,13 @@ def test_live_diagnosis(
     started = datetime.now(UTC).isoformat()
     try:
         _read_turn(api, payload, events)
-        if case.spelling == "ambiguous":
+        if case.needs_selection:
             clarification_events, events = events, []
             check_selection(clarification_events, lab)
+            if case.spelling == "unscoped":
+                assert not any(
+                    row["type"] == "trace.step" and row["step"]["kind"] == "model" for row in clarification_events
+                )
             payload["group"] = {"kind": "compose", "name": lab.project}
             _read_turn(api, payload, events)
         check_answer(events, lab, case, language)

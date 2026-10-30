@@ -95,14 +95,18 @@ def test_russian_summary_cannot_hide_an_english_cause_or_unknown_detail(field: s
 
 
 @pytest.mark.parametrize("language", ["ru", "en"])
-def test_language_check_preserves_observed_logs_without_requiring_their_translation(language: str) -> None:
+@pytest.mark.parametrize("quoted", [False, True])
+def test_language_check_preserves_observed_logs_without_requiring_their_translation(
+    language: str, quoted: bool
+) -> None:
     message = "Worker ended without recording the reason for termination"
+    observed = f"'{message}'" if quoted else message
     answer = DiagnosisResponse.model_validate(
         {
             "summary": "Контейнер завершился. Причина пока неизвестна." if language == "ru" else "The worker exited.",
             "uncertain": True,
             "cause": {
-                "immediate": "Контейнер завершился без установленной причины." if language == "ru" else message,
+                "immediate": f"Ошибка запуска: {observed}." if language == "ru" else message,
                 "unknowns": [f"Точная причина в логах не указана однозначно (только фраза '{message}')."]
                 if language == "ru"
                 else ["The underlying cause remains unknown."],

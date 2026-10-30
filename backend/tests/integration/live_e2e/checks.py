@@ -53,7 +53,6 @@ def check_language(text: str, language: str, verbatim: tuple[str, ...] = ()) -> 
 def check_narrative(answer: DiagnosisResponse, language: str, identifiers: tuple[str, ...]) -> None:
     """Check every displayed model explanation independently while excluding raw observations and traces."""
     fields = [answer.summary]
-    verbatim = (*identifiers, *_quoted_logs(answer))
     if answer.cause:
         fields.extend([answer.cause.immediate, *answer.cause.unknowns])
         if answer.cause.underlying:
@@ -62,18 +61,18 @@ def check_narrative(answer: DiagnosisResponse, language: str, identifiers: tuple
         if isinstance(card, ContainerStatusCard) and card.recommendation and card.recommendation.reason:
             fields.append(card.recommendation.reason)
     for text in fields:
-        check_language(text, language, verbatim)
+        check_language(text, language, (*identifiers, *_verbatim_logs(answer, text)))
 
 
-def _quoted_logs(answer: DiagnosisResponse) -> tuple[str, ...]:
-    """Exclude quoted observed messages while retaining unquoted English error explanations as prose."""
+def _verbatim_logs(answer: DiagnosisResponse, text: str) -> tuple[str, ...]:
+    """Exclude quoted or embedded observations without accepting an untranslated log as the entire explanation."""
+    messages = tuple(
+        entry.message for card in answer.widgets if isinstance(card, LogAnomalyCard) for entry in card.logs.entries
+    )
     quotes = (("'", "'"), ('"', '"'), ("\u00ab", "\u00bb"), ("\u201c", "\u201d"))
-    return tuple(
-        f"{left}{entry.message}{right}"
-        for card in answer.widgets
-        if isinstance(card, LogAnomalyCard)
-        for entry in card.logs.entries
-        for left, right in quotes
+    return (
+        *(f"{left}{message}{right}" for message in messages for left, right in quotes),
+        *(message for message in messages if message.rstrip(".") != text.strip().rstrip(".")),
     )
 
 
@@ -87,6 +86,8 @@ def check_answer(events: list[dict[str, Any]], lab: ComposeLab, case: Case, lang
     answer = DiagnosisResponse.model_validate(ready[0]["answer"])
     ids = {row.id for row in lab.containers.values()}
     _check_references(answer, ids)
+    names = {row.id: row.name for row in lab.containers.values()}
+    assert all(row.container_name == names.get(row.container_id or "") for row in answer.evidence)
     identifiers = (lab.project, *ids, *(row.name for row in lab.containers.values()))
     check_narrative(answer, language, identifiers)
     check_resource_scope(answer, ids, lab.project)

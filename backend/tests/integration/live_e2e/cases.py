@@ -13,7 +13,12 @@ class Case:
     group: bool = False
     explicit: bool = False
     typo: bool = False
-    spelling: Literal["exact", "spaced", "cyrillic", "ambiguous"] = "exact"
+    spelling: Literal["exact", "spaced", "cyrillic", "ambiguous", "unscoped"] = "exact"
+
+    @property
+    def needs_selection(self) -> bool:
+        """Require an observed scope choice for ambiguous names or bare incident questions."""
+        return self.spelling in {"ambiguous", "unscoped"}
 
     def query(self, project: str, container_id: str, language: Language = "en") -> str:
         """Ask about the observed namespace or exact ID without suggesting a failure explanation."""
@@ -31,6 +36,8 @@ class Case:
 
     def _group_query(self, project: str, language: Language) -> str:
         """Vary how a real group is named while keeping its diagnostic intent unchanged."""
+        if self.spelling == "unscoped":
+            return "Что случилось?" if language == "ru" else "What happened?"
         if self.spelling in {"cyrillic", "ambiguous"}:
             return (
                 "Что не так \u0441 винтория инфра?"
@@ -52,6 +59,7 @@ CASES: Final = (
     Case("compose-spaced", ("backend", "grafana", "nginx"), group=True, spelling="spaced"),
     Case("compose-cyrillic", ("backend", "grafana", "nginx"), group=True, spelling="cyrillic"),
     Case("compose-ambiguous", ("backend", "grafana", "nginx"), group=True, spelling="ambiguous"),
+    Case("compose-unscoped", ("backend", "grafana", "nginx"), group=True, spelling="unscoped"),
     Case("oom", ("oom",)),
     Case("crash-loop", ("crash",)),
     Case("truncated-logs", ("logs",)),
