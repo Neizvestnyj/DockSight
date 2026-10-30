@@ -1133,7 +1133,8 @@ textarea {
   color: var(--muted);
 }
 .language-switch select {
-  width: 114px;
+  width: auto;
+  flex-shrink: 0;
   font-size: 12px;
 }
 .sr-only {
@@ -2819,7 +2820,6 @@ textarea {
     gap: 4px;
   }
   .language-switch select {
-    width: 106px;
     min-height: 44px;
   }
   .language-switch svg {

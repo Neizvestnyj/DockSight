@@ -10,6 +10,7 @@ Dates below record each version's merge into `master` in Europe/Moscow. Version 
 
 ### Fixed
 
+- Language selection sizes to its localized options so the Russian system-language label remains fully visible.
 - Dialogs close on an outside click while preserving drafts and prepared actions. Clicks inside and text selection
   remain within the dialog without dismissing it.
 - Model generation distinguishes missing or inaccessible models from unsupported requests, with English/Russian guidance
