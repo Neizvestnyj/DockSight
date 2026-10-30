@@ -9,6 +9,32 @@ from tests.fakes import DiscoveryRuntime, FakeRuntime
 
 
 @pytest.mark.parametrize(
+    "query", ["Could vintoria-db simply be stopped?", "\u0410 может потому-что vintoria-db не запущен?"]
+)
+async def test_untyped_container_project_collision_offers_both_exact_resources(query: str) -> None:
+    runtime = FakeRuntime()
+    runtime.item = replace(runtime.item, name="vintoria-db", compose_project="vintoria-db")
+    result = await resolve_target(runtime, "local", query)
+    assert result.group is None and result.container_id is None
+    assert result.selection is not None
+    assert result.selection.model_dump() == {
+        "candidates": [
+            {"kind": "container", "id": "a" * 64, "name": "vintoria-db"},
+            {"kind": "compose", "name": "vintoria-db"},
+        ]
+    }
+    assert not runtime.mutations
+
+
+async def test_explicit_compose_reference_disambiguates_a_container_project_collision() -> None:
+    runtime = FakeRuntime()
+    runtime.item = replace(runtime.item, name="vintoria-db", compose_project="vintoria-db")
+    result = await resolve_target(runtime, "local", "Check Compose vintoria-db")
+    assert result.group == GroupTarget(kind="compose", name="vintoria-db")
+    assert result.selection is None and result.container_id is None
+
+
+@pytest.mark.parametrize(
     "query",
     ["Что случилось?", "\u0410 что упало?", "Что не так?", "What happened?", "What's wrong?", "What failed?"],
 )

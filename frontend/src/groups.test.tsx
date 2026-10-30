@@ -32,6 +32,24 @@ function ObservedAnswer({ answer }: { answer: Answer }) {
 }
 
 describe('group selection', () => {
+  it('accepts a same-name container/project choice and validates exact container identity', () => {
+    const container = { kind: 'container', id: 'a'.repeat(64), name: 'vintoria-db' };
+    const event = {
+      schema_version: 1,
+      request_id: 'r',
+      turn_id: 't',
+      type: 'clarification.required',
+      selection: { candidates: [container, { kind: 'compose', name: 'vintoria-db' }] },
+    };
+    expect(eventSchema.safeParse(event).success).toBe(true);
+    for (const candidates of [
+      [container, container],
+      [{ ...container, id: 'a'.repeat(12) }],
+      [{ ...container, host: 'foreign' }],
+    ])
+      expect(eventSchema.safeParse({ ...event, selection: { candidates } }).success).toBe(false);
+  });
+
   it('retains a typed group clarification after completion without manufacturing an answer', async () => {
     const client = new DemoClient();
     vi.spyOn(client, 'diagnose').mockImplementation(async (_input, receive) => {

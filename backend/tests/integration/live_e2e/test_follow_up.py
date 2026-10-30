@@ -15,6 +15,7 @@ from tests.integration.live_e2e.test_diagnostics import _read_turn
 pytestmark = [pytest.mark.live, pytest.mark.docker]
 
 
+@pytest.mark.parametrize("clarify", [False, True], ids=["explicit-container", "mixed-clarification"])
 def test_live_follow_up(
     api: httpx.Client,
     lab: ComposeLab,
@@ -22,10 +23,12 @@ def test_live_follow_up(
     language: Language,
     model_name: str,
     artifacts: Path,
+    clarify: bool,
 ) -> None:
-    """Continue one real session from a group failure to an exact dependency sharing its project's name."""
+    """Continue a real group investigation through typed or clarified same-name dependency selection."""
     first_events: list[dict[str, Any]] = []
     events: list[dict[str, Any]] = []
+    clarification: list[dict[str, Any]] = []
     first_input = {"host": "e2e", "query": case.query(lab.project, "", language)}
     payload: dict[str, Any] = {}
     started = datetime.now(UTC).isoformat()
@@ -39,7 +42,16 @@ def test_live_follow_up(
             if language == "ru"
             else f"Could the dependency simply be stopped? Check container {peer.name}, its state and logs."
         )
+        if clarify:
+            query = (
+                f"\u0410 может потому-что {peer.name} не запущен?"
+                if language == "ru"
+                else f"Could {peer.name} simply be stopped?"
+            )
         payload = {"host": "e2e", "query": query, "session_id": first_events[0]["session_id"]}
+        if clarify:
+            _select_dependency(api, payload, clarification, lab)
+            payload["container_id"] = peer.id
         _read_turn(api, payload, events)
         assert events[0]["session_id"] == first_events[0]["session_id"]
         _check_follow_up(events, lab, language)
@@ -47,14 +59,31 @@ def test_live_follow_up(
         assert {row.id for row in original.group.summary.members} == {row.id for row in lab.containers.values()}
     finally:
         record_run(
-            report_path(artifacts, model_name, case, language),
+            report_path(artifacts, model_name, case, language, "mixed" if clarify else "explicit"),
             lab,
             model_name,
             started,
             payload,
             events,
+            clarification_events=clarification,
             previous_turn={"input": first_input, "events": first_events},
         )
+
+
+def _select_dependency(
+    api: httpx.Client, payload: dict[str, Any], events: list[dict[str, Any]], lab: ComposeLab
+) -> None:
+    """Verify real same-name alternatives are returned without asking a model to guess."""
+    _read_turn(api, payload, events)
+    assert events[-1]["type"] == "turn.completed"
+    assert not any(row["type"] in {"turn.failed", "answer.ready"} for row in events)
+    assert not any(row["type"] == "trace.step" and row["step"]["kind"] == "model" for row in events)
+    peer = next(iter(lab.peers.values()))
+    selection = next(row["selection"] for row in events if row["type"] == "clarification.required")
+    assert selection["candidates"] == [
+        {"kind": "container", "id": peer.id, "name": peer.name},
+        {"kind": "compose", "name": lab.peer_project},
+    ]
 
 
 def _check_follow_up(events: list[dict[str, Any]], lab: ComposeLab, language: Language) -> None:

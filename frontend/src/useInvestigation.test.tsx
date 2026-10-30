@@ -16,6 +16,55 @@ function requireSelection(receive: (event: TurnEvent) => void) {
 }
 
 describe('host-scoped diagnostic session', () => {
+  it.each(['container', 'compose'] as const)(
+    'continues a mixed %s choice in the same session and history row',
+    async (kind) => {
+      const client = new DemoClient();
+      const inputs: TurnInput[] = [];
+      const session = '62f9fcc6-583e-4b3d-9678-10ffea8ae671';
+      const container = { kind: 'container' as const, id: 'a'.repeat(64), name: 'vintoria-db' };
+      const group = { kind: 'compose' as const, name: 'vintoria-db' };
+      const answer = demoAnswer('oom', 'local');
+      client.diagnose = async (input, receive) => {
+        inputs.push(input);
+        const base = { schema_version: 1 as const, request_id: `r${inputs.length}`, turn_id: `t${inputs.length}` };
+        receive({ ...base, type: 'turn.started', session_id: session });
+        if (inputs.length === 1) receive({ ...base, type: 'answer.ready', answer });
+        else if (inputs.length === 2)
+          receive({ ...base, type: 'clarification.required', selection: { candidates: [container, group] } });
+        else receive({ ...base, type: 'answer.ready', answer });
+        receive({ ...base, type: 'turn.completed' });
+      };
+      const { result } = renderHook(() => useInvestigation(client, 'local'));
+      await act(() => result.current.run('Why did vintoria-infra fail?'));
+      const query = 'А может потому-что vintoria-db не запущен?';
+      await act(() => result.current.run(query));
+      const id = result.current.turns[1]!.id;
+      await act(() => result.current.chooseTarget(id, { ...container, id: 'b'.repeat(64) }));
+      expect(inputs).toHaveLength(2);
+      await act(() => result.current.chooseTarget(id, kind === 'container' ? container : group));
+      expect(inputs[2]).toEqual({
+        host: 'local',
+        query,
+        session_id: session,
+        ...(kind === 'container' ? { container_id: 'a'.repeat(64) } : { group }),
+      });
+      expect(result.current.turns).toHaveLength(2);
+      expect(result.current.turns[1]).toMatchObject({
+        id,
+        query,
+        state: 'completed',
+        target: kind === 'container' ? container : group,
+      });
+      expect(result.current.turns[1]?.selection).toBeUndefined();
+      expect(result.current.turns[0]?.answer).toBe(answer);
+      await act(() => result.current.run('What should I inspect next?'));
+      expect(inputs[3]).toEqual({ host: 'local', query: 'What should I inspect next?', session_id: session });
+      await act(() => result.current.run('Inspect a different scope', false, target));
+      expect(inputs[4]?.session_id).toBeUndefined();
+    },
+  );
+
   it('continues a pending scope choice in one row and retains earlier answers', async () => {
     const inputs: TurnInput[] = [];
     const answer = demoAnswer('dependency', 'local');
@@ -41,12 +90,12 @@ describe('host-scoped diagnostic session', () => {
     const { result } = renderHook(() => useInvestigation(client, 'local', answer));
     await act(() => result.current.run('What happened?'));
     const id = result.current.turns[1]!.id;
-    await act(() => result.current.chooseGroup(id, { kind: 'compose', name: 'unobserved-project' }));
+    await act(() => result.current.chooseTarget(id, { kind: 'compose', name: 'unobserved-project' }));
     expect(inputs).toHaveLength(1);
     try {
       act(() => {
-        void result.current.chooseGroup(id, target);
-        void result.current.chooseGroup(id, target);
+        void result.current.chooseTarget(id, target);
+        void result.current.chooseTarget(id, target);
       });
       await waitFor(() => expect(result.current.running).toBe(true));
       expect(inputs).toHaveLength(2);
@@ -54,7 +103,7 @@ describe('host-scoped diagnostic session', () => {
       expect(result.current.turns).toHaveLength(2);
       expect(result.current.turns[1]).toMatchObject({
         id,
-        group: target,
+        target,
         state: 'running',
         requestId: 'diagnose-request',
         progress: [{ tool: 'inspect_group', state: 'running' }],
@@ -68,7 +117,7 @@ describe('host-scoped diagnostic session', () => {
     await waitFor(() => expect(result.current.turns[1]?.state).toBe('completed'));
     expect(result.current.turns).toHaveLength(2);
     expect(result.current.turns[0]?.answer).toBe(answer);
-    await act(() => result.current.chooseGroup(id, target));
+    await act(() => result.current.chooseTarget(id, target));
     expect(inputs).toHaveLength(2);
     await act(() => result.current.run('A separate question'));
     expect(result.current.turns).toHaveLength(3);
@@ -92,7 +141,7 @@ describe('host-scoped diagnostic session', () => {
     await act(() => result.current.run('What happened?'));
     const id = result.current.turns[0]!.id;
     act(() => {
-      void result.current.chooseGroup(id, target);
+      void result.current.chooseTarget(id, target);
     });
     await waitFor(() => expect(result.current.running).toBe(true));
     if (state === 'stopped') act(() => result.current.stop());
@@ -108,7 +157,7 @@ describe('host-scoped diagnostic session', () => {
     );
     await act(async () => finish());
     expect(result.current.turns).toHaveLength(1);
-    expect(result.current.turns[0]).toMatchObject({ id, state, group: target });
+    expect(result.current.turns[0]).toMatchObject({ id, state, target });
     expect(result.current.turns[0]?.selection).toBeUndefined();
   });
 

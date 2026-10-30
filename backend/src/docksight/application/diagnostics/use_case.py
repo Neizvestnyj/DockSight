@@ -79,19 +79,25 @@ class Diagnostics:
         self.model_identity = model_identity
 
     async def stream(
-        self, actor: str, host: str, query: str, session_id: str | None = None, group: GroupTarget | None = None
+        self,
+        actor: str,
+        host: str,
+        query: str,
+        session_id: str | None = None,
+        group: GroupTarget | None = None,
+        container_id: str | None = None,
     ) -> AsyncGenerator[TurnEvent]:
         """Lease a scoped session and emit one terminal event for a bounded turn."""
         turn_id = str(uuid4())
         trace = DiagnosticTrace(turn_id, self.redactor)
         deadline = asyncio.get_running_loop().time() + self.timeout
         try:
-            self._validate_turn(host, query)
+            self._validate_turn(host, query, group, container_id)
             async with (
                 self._slots,
                 self.sessions.lease(session_id, actor, host) as session,
             ):
-                async for event in self._run_turn(session, query, deadline, trace, group):
+                async for event in self._run_turn(session, query, deadline, trace, group, container_id):
                     yield event
         except (TimeoutError, DockSightError) as exc:
             code, message = (
@@ -110,7 +116,7 @@ class Diagnostics:
                 "message": message,
             }
 
-    def _validate_turn(self, host: str, query: str) -> None:
+    def _validate_turn(self, host: str, query: str, group: GroupTarget | None, container_id: str | None) -> None:
         """Reject invalid scope, query size, or exhausted capacity before leasing a session."""
         if host not in {item.id for item in self.runtime.hosts()}:
             raise DockSightError("host_not_found", "Configured host not found", 404)
@@ -118,9 +124,17 @@ class Diagnostics:
             raise DockSightError("invalid_query", "Query must contain 1-4000 characters", 422)
         if self._slots.locked():
             raise DockSightError("turn_capacity", "Diagnostic capacity reached; retry later", 503)
+        if group is not None and container_id is not None:
+            raise DockSightError("invalid_target", "Choose either a group or an exact container", 422)
 
     async def _run_turn(
-        self, session: Session, query: str, deadline: float, trace: DiagnosticTrace, group: GroupTarget | None
+        self,
+        session: Session,
+        query: str,
+        deadline: float,
+        trace: DiagnosticTrace,
+        group: GroupTarget | None,
+        container_id: str | None,
     ) -> AsyncGenerator[TurnEvent]:
         """Collect fresh evidence and retain only the validated summary in session history."""
         yield {"type": "turn.started", "turn_id": trace.turn_id, "session_id": session.id}
@@ -139,7 +153,7 @@ class Diagnostics:
         context = EvidenceContext()
         tools = DiagnosticTools(self.runtime, context, session.host, self.log_lines, self.log_bytes, group, query=query)
         if group is None:
-            async for event in self._discover(query, tools, messages, deadline, trace):
+            async for event in self._discover(query, tools, messages, deadline, trace, container_id):
                 yield event
         call = self._selected_read(tools)
         if call:
@@ -192,12 +206,20 @@ class Diagnostics:
             yield event
 
     async def _discover(
-        self, query: str, tools: DiagnosticTools, messages: list[ModelMessage], deadline: float, trace: DiagnosticTrace
+        self,
+        query: str,
+        tools: DiagnosticTools,
+        messages: list[ModelMessage],
+        deadline: float,
+        trace: DiagnosticTrace,
+        container_id: str | None = None,
     ) -> AsyncGenerator[TurnEvent]:
         """Retain discovered identities and expose group choices before model-selected evidence reads."""
         yield {"type": "tool.started", "turn_id": trace.turn_id, "tool": "resolve_target"}
         yield trace.begin("tool", "resolve_target")
-        resolved = await _before_deadline(deadline, lambda: resolve_target(self.runtime, tools.host, query))
+        resolved = await _before_deadline(
+            deadline, lambda: resolve_target(self.runtime, tools.host, query, container_id)
+        )
         tools.inventory, tools.group, tools.candidates = resolved.containers, resolved.group, resolved.candidates
         tools.context.container_id = resolved.container_id
         tools.context.selection = resolved.selection

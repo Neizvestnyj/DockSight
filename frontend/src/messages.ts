@@ -9,10 +9,14 @@ export type MessageValues = Record<string, string | number>;
 const russian = {
   ...demoMessages,
   'Group clarification': 'Уточнение группы',
+  'Resource clarification': 'Уточнение ресурса',
+  'Which resource do you mean?': 'Какой ресурс вы имеете в виду?',
+  'This name matches different resources. Choose one to continue the same question.':
+    'Это имя совпадает у разных ресурсов. Выберите нужный, чтобы продолжить тот же вопрос.',
   'Choose a group to continue': 'Выберите группу, чтобы продолжить',
   'Select the observed group you meant. The original question will continue with that exact scope.':
     'Выберите нужную группу из найденных. Исходный вопрос продолжится для выбранной группы.',
-  awaiting_selection: 'Ожидает выбора группы',
+  awaiting_selection: 'Ожидает выбора ресурса',
   'Requesting group selection': 'Уточнение выбора группы',
   'Container evidence: {name}': 'Доказательства контейнера: {name}',
   'State was not included in this answer.': 'Состояние не включено в этот ответ.',
@@ -518,7 +522,7 @@ export const diagnosticOperations: Record<string, MessageKey> = {
 export type Translator = (key: MessageKey, values?: MessageValues) => string;
 
 const englishOverrides: Partial<Record<MessageKey, string | Plurals>> = {
-  awaiting_selection: 'Awaiting group selection',
+  awaiting_selection: 'Awaiting resource selection',
   actionRunning: 'running',
   '{count} lines returned': { one: '{count} line returned', other: '{count} lines returned' },
   '{count} references': { one: '{count} reference', other: '{count} references' },
@@ -560,4 +564,9 @@ export function translate(locale: Locale, key: MessageKey, values: MessageValues
 export function stateLabel(state: string, t: Translator, action = false): string {
   if (action && state === 'running') return t('actionRunning');
   return Object.hasOwn(russian, state) ? t(state as MessageKey) : state;
+}
+
+/** Name the observed resource namespace consistently in clarification, scope and history. */
+export function targetKindLabel(kind: 'container' | 'compose' | 'swarm', t: Translator): string {
+  return t(kind === 'container' ? 'Container' : kind === 'compose' ? 'Docker Compose' : 'Docker Swarm');
 }

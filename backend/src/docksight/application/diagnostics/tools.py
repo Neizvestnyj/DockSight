@@ -10,7 +10,7 @@ from docksight.application.diagnostics.logs import fit_logs, log_data
 from docksight.application.diagnostics.scope import group_alternatives
 from docksight.application.ports.models import ToolCall, ToolSpec
 from docksight.application.ports.runtime import RuntimeReadPort
-from docksight.application.views.schemas import Contract, GroupSelection, GroupTarget
+from docksight.application.views.schemas import Contract, GroupSelection, GroupTarget, TargetSelection
 from docksight.domain.diagnostics import JsonObject, JsonValue
 from docksight.domain.errors import DockSightError
 from docksight.domain.runtime import ContainerSnapshot, StackSummary
@@ -133,7 +133,7 @@ class DiagnosticTools:
             raise DockSightError("scope_already_selected", "A group is already selected for this turn", 409)
         if any(row not in self.candidates for row in selection.candidates):
             raise DockSightError("invalid_group_candidate", "Selection requires an observed group on this host", 422)
-        self.context.selection = GroupSelection(
+        self.context.selection = TargetSelection(
             candidates=[row for row in self.candidates if row in selection.candidates]
         )
         return cast(JsonObject, self.context.selection.model_dump(mode="json"))

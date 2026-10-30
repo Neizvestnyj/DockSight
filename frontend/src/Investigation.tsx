@@ -1,4 +1,4 @@
-import { diagnosticOperations, isMessageKey, stateLabel } from './messages';
+import { diagnosticOperations, isMessageKey, stateLabel, targetKindLabel } from './messages';
 import { useLocale } from './locale';
 import { useState } from 'react';
 import {
@@ -12,7 +12,8 @@ import {
   MessageSquare,
   TriangleAlert,
 } from 'lucide-react';
-import type { Action, Answer, Container, GroupTarget, Transport } from './contracts';
+import { targetKey } from './contracts';
+import type { Action, Answer, Container, DiagnosticTarget, GroupTarget, Transport } from './contracts';
 import { ActionReview } from './ActionReview';
 import { EvidenceInspector, WidgetCard } from './Widgets';
 import type { useInvestigation } from './useInvestigation';
@@ -48,7 +49,7 @@ export function Investigation({
   group,
 }: Props) {
   const { t, locale } = useLocale();
-  const { turns, running, run, chooseGroup, stop } = investigation;
+  const { turns, running, run, chooseTarget, stop } = investigation;
   const [view, setView] = useState<{ id: string; latest: string } | null>(null);
   const latest = turns.at(-1);
   const turn = (view?.latest === latest?.id && turns.find((row) => row.id === view?.id)) || latest;
@@ -80,7 +81,7 @@ export function Investigation({
   }
 
   /** Submit one host-bound query and keep its text available for a manual retry. */
-  function submit(query: string, target?: GroupTarget) {
+  function submit(query: string, target?: DiagnosticTarget) {
     if (blocked) return;
     setView(null);
     void run(query, false, target);
@@ -102,10 +103,10 @@ export function Investigation({
                 >
                   <span>
                     {row.exampleQuery && isMessageKey(row.query) ? t(row.query) : row.query}
-                    {row.group && (
+                    {row.target && (
                       <span className="muted">
                         {' '}
-                        · {row.group.kind === 'compose' ? 'Compose' : 'Swarm'} / {row.group.name}
+                        · {targetKindLabel(row.target.kind, t)} / {row.target.name}
                       </span>
                     )}
                   </span>
@@ -124,9 +125,9 @@ export function Investigation({
               <h2>{displayedQuery}</h2>
               <span className="muted query-author">{t('Operator')}</span>
             </div>
-            {turn.group && (
+            {turn.target && (
               <p className="section-note query-scope">
-                {t('Scope')}: {t(turn.group.kind === 'compose' ? 'Docker Compose' : 'Docker Swarm')} / {turn.group.name}
+                {t('Scope')}: {targetKindLabel(turn.target.kind, t)} / {turn.target.name}
               </p>
             )}
             {turn.progress.length > 0 && (
@@ -263,7 +264,7 @@ export function Investigation({
                   <button
                     className="secondary"
                     disabled={running || blocked}
-                    onClick={() => submit(turn.query, turn.group)}
+                    onClick={() => submit(turn.query, turn.target)}
                   >
                     {t('Retry diagnosis')}
                     <ArrowRight size={14} />
@@ -278,12 +279,12 @@ export function Investigation({
                 disabled={running || blocked}
                 choose={(target) => {
                   setView({ id: turn.id, latest: latest!.id });
-                  void chooseGroup(turn.id, target);
+                  void chooseTarget(turn.id, target);
                 }}
               />
             )}
             <DiagnosticTrace
-              key={`${turn.id}:${turn.group?.kind ?? ''}:${turn.group?.name ?? ''}`}
+              key={`${turn.id}:${turn.target ? targetKey(turn.target) : ''}`}
               turn={turn}
               host={host}
               demo={demo}

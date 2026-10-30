@@ -6,7 +6,7 @@ from typing import Literal
 from pydantic import ValidationError
 
 from docksight.application.ports.runtime import RuntimeReadPort
-from docksight.application.views.schemas import GroupSelection, GroupTarget
+from docksight.application.views.schemas import ContainerTarget, GroupSelection, GroupTarget, TargetSelection
 from docksight.domain.errors import DockSightError
 from docksight.domain.runtime import ContainerSnapshot
 
@@ -19,7 +19,7 @@ class TargetResolution:
     containers: tuple[ContainerSnapshot, ...]
     discovery_code: str | None = None
     candidates: tuple[GroupTarget, ...] = ()
-    selection: GroupSelection | None = None
+    selection: TargetSelection | None = None
     container_id: str | None = None
 
 
@@ -40,17 +40,23 @@ def _container_target(query: str, rows: tuple[ContainerSnapshot, ...]) -> Target
     return TargetResolution(None, rows, container_id=ids[0] if len(ids) == 1 else None) if ids else None
 
 
-async def resolve_target(runtime: RuntimeReadPort, host: str, query: str) -> TargetResolution:
+async def resolve_target(
+    runtime: RuntimeReadPort, host: str, query: str, container_id: str | None = None
+) -> TargetResolution:
     """Prefer observed identities, space-separated spelling, or one unambiguous edit in a long group name."""
     rows = await runtime.containers(host)
+    if container_id is not None:
+        if not any(row.id == container_id for row in rows):
+            raise DockSightError("container_not_found", "Selected container is no longer available on this host", 404)
+        return TargetResolution(None, rows, container_id=container_id)
     container = _container_target(query, rows)
     if container:
         return container
     named_container = any(_mentioned(query, row.name) for row in rows)
     groups, code = await _group_candidates(runtime, host, rows, query, named_container)
     targets, exact = _question_targets(groups, query, named_container)
-    group = _unambiguous_target(targets, exact and named_container)
-    selection = GroupSelection(candidates=targets[:32]) if len(targets) > 1 else None
+    selection = _target_selection(targets, rows, query, exact)
+    group = targets[0] if len(targets) == 1 and selection is None else None
     return TargetResolution(group, rows, code, tuple(groups), selection)
 
 
@@ -131,11 +137,17 @@ def _one_edit(left: str, right: str) -> bool:
     return a[1:] == b[1:] or (len(a) > 1 and a[:2] == b[1::-1] and a[2:] == b[2:])
 
 
-def _unambiguous_target(targets: list[GroupTarget], named_container: bool) -> GroupTarget | None:
-    """Require explicit selection when observed identities collide across resource types."""
-    if targets and named_container:
-        raise DockSightError("ambiguous_target", "Resource name is ambiguous; select one group or exact container", 422)
-    return targets[0] if len(targets) == 1 else None
+def _target_selection(
+    targets: list[GroupTarget], rows: tuple[ContainerSnapshot, ...], query: str, exact: bool
+) -> TargetSelection | None:
+    """Ask for an exact resource when an untyped name spans container and group namespaces."""
+    containers = (
+        [ContainerTarget(id=row.id, name=row.name) for row in rows if _mentioned(query, row.name)]
+        if targets and exact and _requested_kind(query) is None
+        else []
+    )
+    choices: list[GroupTarget | ContainerTarget] = [*containers, *targets]
+    return TargetSelection(candidates=choices[:32]) if len(choices) > 1 else None
 
 
 def _requested_kind(query: str) -> Literal["compose", "swarm"] | None:

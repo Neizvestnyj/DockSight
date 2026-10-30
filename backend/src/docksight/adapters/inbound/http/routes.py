@@ -109,7 +109,12 @@ def build_router(
         """Stream a bounded diagnostic turn as server-sent events."""
         queries.check_host(turn.host)
         source = diagnostics.stream(
-            "operator", turn.host, turn.query, str(turn.session_id) if turn.session_id else None, turn.group
+            "operator",
+            turn.host,
+            turn.query,
+            str(turn.session_id) if turn.session_id else None,
+            turn.group,
+            turn.container_id,
         )
 
         return EventResponse(source, request.state.request_id)

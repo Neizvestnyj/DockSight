@@ -30,7 +30,8 @@ the application and implemented by outbound adapters.
 
 Scope discovery supplies observed Compose/Swarm identities to the existing model tool loop. The application validates
 clarification choices against that catalog and ends the turn without diagnosis or session history when a choice is
-required. The client continues the original question with an explicit, freshly revalidated group in a separate session.
+required. Container/group name collisions include the observed container's exact identity in those choices. The client
+continues the same question and session with an explicit group or container ID, revalidated against fresh Docker data.
 
 `SystemStatus` checks a selected Docker host through `RuntimeReadPort.ping` and provider metadata through `ModelStatusPort`.
 It owns independent deadlines, public reason codes, and UTC check times. The metadata adapter owns provider-specific HTTP

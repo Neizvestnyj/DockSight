@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Final, Literal
 
-from docksight.application.views.schemas import GroupInspection, GroupSelection
+from docksight.application.views.schemas import GroupInspection, TargetSelection
 from docksight.domain.diagnostics import EvidenceRef, JsonObject
 from docksight.domain.errors import DockSightError
 from docksight.domain.runtime import ContainerSnapshot, LogBatch, StackSummary
@@ -21,7 +21,7 @@ class EvidenceContext:
     stacks: dict[str, tuple[StackSummary, ...]] = field(default_factory=dict[str, tuple[StackSummary, ...]])
     used_bytes: int = 0
     group: GroupInspection | None = None
-    selection: GroupSelection | None = None
+    selection: TargetSelection | None = None
     container_id: str | None = None
 
     @property

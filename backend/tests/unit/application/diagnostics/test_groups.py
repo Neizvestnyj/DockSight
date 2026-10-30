@@ -311,7 +311,7 @@ async def test_two_failed_members_keep_separate_cards_when_model_only_selects_th
     }
 
 
-async def test_scope_failure_finishes_its_tool_progress_without_calling_the_model() -> None:
+async def test_scope_clarification_finishes_its_tool_progress_without_calling_the_model() -> None:
     runtime = GroupRuntime()
     runtime.item = replace(runtime.item, name="infra")
     model = ScriptedModel([])
@@ -321,22 +321,25 @@ async def test_scope_failure_finishes_its_tool_progress_without_calling_the_mode
             "alice", "local", "What happened to infra?"
         )
     ]
-    assert events[-1]["type"] == "turn.failed"
+    assert events[-1]["type"] == "turn.completed"
+    assert any(event["type"] == "clarification.required" for event in events)
     assert any(
-        event["type"] == "tool.completed" and event["tool"] == "resolve_target" and not event["ok"] for event in events
+        event["type"] == "tool.completed" and event["tool"] == "resolve_target" and event["ok"] for event in events
     )
     assert not model.requests
 
 
-async def test_scope_resolution_keeps_exact_containers_and_rejects_an_ambiguous_group_name() -> None:
+async def test_scope_resolution_keeps_exact_containers_and_clarifies_an_ambiguous_group_name() -> None:
     runtime = GroupRuntime()
     exact = await resolve_target(runtime, "local", f"Investigate infra worker {runtime.rows[0].id}")
     assert exact.group is None
     named = await resolve_target(runtime, "local", "What happened to worker-1?")
     assert named.group is None
     runtime.item = replace(runtime.item, name="infra")
-    with pytest.raises(DockSightError, match="ambiguous"):
-        await resolve_target(runtime, "local", "What happened to infra?")
+    ambiguous = await resolve_target(runtime, "local", "What happened to infra?")
+    assert ambiguous.group is None and ambiguous.container_id is None
+    assert ambiguous.selection is not None
+    assert {row.kind for row in ambiguous.selection.candidates} == {"container", "compose"}
 
 
 async def test_scope_resolution_does_not_match_a_project_name_inside_a_container_name() -> None:

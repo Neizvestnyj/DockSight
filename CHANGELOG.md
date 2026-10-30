@@ -14,6 +14,8 @@ Dates below record each version's merge into `master` in Europe/Moscow. Version 
   allowing dependency follow-ups to continue the existing conversation with fresh observations. Server tool scope keeps
   earlier group context from adding unrelated container cards to the new answer. Exact-target status and bounded logs are
   collected before model exploration; missing model cards are filled from those facts, and unavailable logs retain status.
+- Untyped container/project name collisions ask which resource to investigate instead of failing with `ambiguous_target`.
+  The choice retains the original question and conversation; container reads use a freshly validated full Docker ID.
 - Diagnostics and New investigation open an empty conversation, clear the draft, and focus the question input.
 - Bare incident questions ask which observed Compose project or Swarm stack to diagnose when several are available,
   before collecting unrelated container logs. Named-group questions retain automatic scope resolution.

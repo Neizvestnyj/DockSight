@@ -1,7 +1,9 @@
 import json
 from dataclasses import replace
 
+import pytest
 from fastapi.testclient import TestClient
+from httpx import Response
 
 from docksight.application.ports.models import ModelReply, ToolCall
 from docksight.bootstrap import Settings, build_components
@@ -43,7 +45,8 @@ def test_unscoped_question_collects_no_logs_until_the_operator_selects_a_project
     assert set(runtime.reads) == {"1" * 64, "2" * 64}
 
 
-def test_group_follow_up_keeps_history_and_reads_an_explicit_container_with_a_colliding_project_name() -> None:
+@pytest.mark.parametrize("clarify", [False, True])
+def test_group_follow_up_keeps_history_and_reads_a_container_with_a_colliding_project_name(clarify: bool) -> None:
     runtime = DiscoveryRuntime()
     runtime.rows = (*runtime.rows[:2], replace(runtime.rows[2], name="other-project"))
     first_query = "What happened to vintoria-infra?"
@@ -76,15 +79,19 @@ def test_group_follow_up_keeps_history_and_reads_an_explicit_container_with_a_co
         events = [json.loads(line[6:]) for line in first.text.splitlines() if line.startswith("data: ")]
         original = next(event["answer"] for event in events if event["type"] == "answer.ready")
         session_id = events[0]["session_id"]
-        second = api.post(
-            "/api/v1/chat/turns",
-            headers=headers,
-            json={
-                "host": "local",
-                "session_id": session_id,
-                "query": "Maybe the dependency is stopped? Check container other-project.",
-            },
-        )
+        body = {
+            "host": "local",
+            "session_id": session_id,
+            "query": "Could other-project simply be stopped?"
+            if clarify
+            else "Maybe the dependency is stopped? Check container other-project.",
+        }
+        second = api.post("/api/v1/chat/turns", headers=headers, json=body)
+        if clarify:
+            _check_mixed_clarification(second)
+            assert len(model.requests) == 2
+            assert runtime.reads == ["1" * 64, "2" * 64]
+            second = api.post("/api/v1/chat/turns", headers=headers, json={**body, "container_id": "3" * 64})
     followup = [json.loads(line[6:]) for line in second.text.splitlines() if line.startswith("data: ")]
     assert followup[0]["session_id"] == session_id
     assert followup[-1]["type"] == "turn.completed"
@@ -99,6 +106,17 @@ def test_group_follow_up_keeps_history_and_reads_an_explicit_container_with_a_co
     assert len(original["widgets"]) == 4
     assert original["group"]["summary"]["name"] == "vintoria-infra"
     assert runtime.reads == ["1" * 64, "2" * 64, "3" * 64]
+
+
+def _check_mixed_clarification(response: Response) -> None:
+    """Require distinct exact container and project choices before any follow-up diagnosis."""
+    pending = [json.loads(line[6:]) for line in response.text.splitlines() if line.startswith("data: ")]
+    assert pending[-1]["type"] == "turn.completed"
+    selection = next(event["selection"] for event in pending if event["type"] == "clarification.required")
+    assert selection["candidates"] == [
+        {"kind": "container", "id": "3" * 64, "name": "other-project"},
+        {"kind": "compose", "name": "other-project"},
+    ]
 
 
 def test_authorized_clarification_completes_without_answer_and_continues_with_exact_group() -> None:

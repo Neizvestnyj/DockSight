@@ -42,15 +42,18 @@ export const groupTargetSchema = z.strictObject({
     .max(128)
     .regex(/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/),
 });
-export const groupSelectionSchema = z.strictObject({
+export const containerTargetSchema = z.strictObject({
+  kind: z.literal('container'),
+  id: z.string().regex(/^[a-f0-9]{64}$/),
+  name: z.string().min(1).max(256),
+});
+export const diagnosticTargetSchema = z.union([groupTargetSchema, containerTargetSchema]);
+export const targetSelectionSchema = z.strictObject({
   candidates: z
-    .array(groupTargetSchema)
+    .array(diagnosticTargetSchema)
     .min(1)
     .max(32)
-    .refine(
-      (rows) => new Set(rows.map((row) => `${row.kind}:${row.name}`)).size === rows.length,
-      'Group candidates must be distinct.',
-    ),
+    .refine((rows) => new Set(rows.map(targetKey)).size === rows.length, 'Target candidates must be distinct.'),
 });
 export const stackSchema = z.object({
   name: z.string(),
@@ -219,7 +222,7 @@ export const eventSchema = z.discriminatedUnion('type', [
   z.object({ ...envelope, type: z.literal('tool.started'), tool: z.string() }),
   z.object({ ...envelope, type: z.literal('tool.completed'), tool: z.string(), ok: z.boolean() }),
   z.object({ ...envelope, type: z.literal('answer.ready'), answer: answerSchema }),
-  z.strictObject({ ...envelope, type: z.literal('clarification.required'), selection: groupSelectionSchema }),
+  z.strictObject({ ...envelope, type: z.literal('clarification.required'), selection: targetSelectionSchema }),
   z.object({ ...envelope, type: z.literal('turn.completed') }),
   z.object({
     ...envelope,
@@ -277,7 +280,8 @@ export type Widget = z.infer<typeof widgetSchema>;
 export type Evidence = z.infer<typeof evidenceSchema>;
 export type Answer = z.infer<typeof answerSchema>;
 export type GroupTarget = z.infer<typeof groupTargetSchema>;
-export type GroupSelection = z.infer<typeof groupSelectionSchema>;
+export type DiagnosticTarget = z.infer<typeof diagnosticTargetSchema>;
+export type TargetSelection = z.infer<typeof targetSelectionSchema>;
 export type Stack = z.infer<typeof stackSchema>;
 export type GroupInspection = z.infer<typeof groupInspectionSchema>;
 export type TurnEvent = z.infer<typeof eventSchema>;
@@ -287,6 +291,12 @@ export interface TurnInput {
   query: string;
   session_id?: string;
   group?: GroupTarget;
+  container_id?: string;
+}
+
+/** Compare containers by exact identity and groups by their observed namespace and name. */
+export function targetKey(target: DiagnosticTarget): string {
+  return `${target.kind}:${target.kind === 'container' ? target.id : target.name}`;
 }
 export interface Transport {
   systemStatus(host: string | null, signal: AbortSignal): Promise<SystemStatus>;

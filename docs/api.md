@@ -133,7 +133,7 @@ Events carry `schema_version: 1`, `request_id`, and `turn_id`:
 
 1. `turn.started` includes the session ID.
 2. `tool.started` and `tool.completed` report progress without exposing arguments.
-3. `answer.ready` includes the validated summary, evidence, and typed widgets, or `clarification.required` asks for a group.
+3. `answer.ready` includes the validated summary, evidence, and typed widgets, or `clarification.required` asks for a target.
 4. Exactly one terminal event is `turn.completed` or `turn.failed`.
 
 The stream also carries a diagnostic trace. `trace.started` follows `turn.started` with the public `provider`, `model`,
@@ -176,8 +176,9 @@ Compose project is inspected automatically; otherwise stack names are discovered
 IDs/names preserve container scope. A whole query token with one substitution, insertion, deletion, or adjacent
 transposition can match a known group name of at least six characters, only when no exact resource matches.
 The complete canonical group name may also be written with spaces in place of hyphens; a prefix alone is not an exact match.
-Explicit `container NAME` or Russian container references take precedence over an identically named group. An unqualified
-container/group collision still requires a typed name or exact container ID and returns `ambiguous_target`.
+Explicit `container NAME` or Russian container references take precedence over an identically named group. Explicit
+Compose/Swarm references select that group namespace. An unqualified container/group collision produces typed choices
+for the observed container and group, without calling the model or reading their logs.
 A single explicit container name or full ID binds the turn's tool reads to that observed container, including inventory
 results. Earlier group summaries remain conversational context and cannot expand the new target's scope.
 The server collects its fresh snapshot and bounded logs before model exploration. A log-read failure retains any collected
@@ -188,7 +189,7 @@ Ambiguous names produce `clarification.required` rather than a diagnosis. The re
 Bare English/Russian incident questions such as "What happened?" or "Что случилось?" also require a scope choice when
 discovery finds several groups. Discovery returns the observed Compose/Swarm options before model or individual log reads.
 An explicitly selected group continues the original question with bounded evidence from that group only.
-The client's history keeps clarification and its selected-group request as one question, while the HTTP requests retain
+The client's history keeps clarification and its selected-target request as one question, while the HTTP requests retain
 distinct request/turn IDs. The displayed trace belongs to the active diagnosis attempt.
 Malformed or redacted labels outside the target contract are excluded from automatic matching.
 `resolve_target` progress and trace
@@ -205,14 +206,20 @@ The server also requires a choice when an inferred `inspect_group` target has a 
 and its canonical name was not stated in the question. This prevents a model tool call from bypassing that ambiguity.
 
 `clarification.required` carries `selection: {"candidates":[{"kind":"compose","name":"infra"}]}` with 1–32 distinct
-observed targets and no extra fields. It is followed by `turn.completed`, without `answer.ready`. The frontend presents
-localized choices and continues the original question in a separate session with the selected `group`; the server
-revalidates that target against fresh Docker data. Pending choices are local to the tab, not durable conversation state.
+observed targets and no extra fields. Container choices have `kind: "container"`, a full 64-character Docker `id`, and
+the observed `name`; group choices use `kind: "compose" | "swarm"` and `name`. The event is followed by `turn.completed`,
+without `answer.ready`. The frontend presents localized choices and continues the original question with its existing
+`session_id`, preserving earlier conversation summaries. It sends the selected `group` or `container_id`; the server
+revalidates the target against fresh Docker data. Pending choices are local to the tab, not durable conversation state.
 
 `POST /chat/turns` also accepts an optional `group`: `{"kind":"compose","name":"infra"}` or
 `{"kind":"swarm","name":"infra"}`. The name identifies an observed group on the configured host. Group objects
 reject extra fields, including host overrides. Explicit targets are inspected before model exploration; a failed group
-read produces `turn.failed` without falling back to an individual container. Start a separate session when changing scope.
+read produces `turn.failed` without falling back to an individual container.
+An optional `container_id` instead binds reads to one full Docker ID observed on the configured host. ID prefixes and
+requests containing both `group` and `container_id` are rejected. A removed or foreign container produces
+`container_not_found` before model calls or individual reads; its previous name never selects a replacement container.
+Clarifying a pending question retains its session; independently changing the selected scope starts a separate session.
 
 The read-only `inspect_group` tool provides the same workflow for model-discovered targets. It collects a group summary
 and logs for at most four local problem containers, at most 200 configured lines and 4 KiB per read. Collected payloads

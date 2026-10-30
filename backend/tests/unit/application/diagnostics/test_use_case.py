@@ -8,6 +8,7 @@ from docksight.adapters.outbound.memory.sessions import MemorySessions
 from docksight.application.diagnostics.use_case import Diagnostics
 from docksight.application.ports.models import ModelReply, ToolCall
 from docksight.application.redaction import Redactor
+from docksight.application.views.schemas import GroupTarget
 from docksight.domain.errors import DockSightError
 from docksight.domain.runtime import ContainerSnapshot, LogBatch, StackSummary
 from tests.fakes import DiscoveryRuntime, FakeRuntime, ScriptedModel
@@ -49,6 +50,19 @@ async def test_selected_container_retains_its_status_when_prefetched_logs_are_un
         event["type"] == "tool.completed" and event["tool"] == "get_container_logs" and not event["ok"]
         for event in events
     )
+
+
+async def test_conflicting_explicit_targets_fail_before_model_or_tool_execution() -> None:
+    model = ScriptedModel([])
+    events = [
+        event
+        async for event in Diagnostics(FakeRuntime(), model, MemorySessions(), Redactor()).stream(
+            "alice", "local", "Inspect", group=GroupTarget(kind="compose", name="infra"), container_id="a" * 64
+        )
+    ]
+    assert len(events) == 1
+    assert events[0]["type"] == "turn.failed" and events[0]["code"] == "invalid_target"
+    assert not model.requests
 
 
 async def test_observed_namespace_collision_requests_selection_without_calling_the_model() -> None:

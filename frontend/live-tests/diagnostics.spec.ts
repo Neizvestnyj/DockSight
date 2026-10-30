@@ -1,6 +1,6 @@
 import { writeFile } from 'node:fs/promises';
 import { expect, test, type Page, type Response } from '@playwright/test';
-import { answerSchema, groupSelectionSchema, type Answer, type TurnInput } from '../src/contracts';
+import { answerSchema, targetSelectionSchema, type Answer, type TurnInput } from '../src/contracts';
 
 interface Input {
   project: string;
@@ -86,7 +86,7 @@ async function clarifyGroup(page: Page, events: Record<string, unknown>[], scena
   const choices = events.filter((event) => event.type === 'clarification.required');
   expect(choices).toHaveLength(1);
   expect(events.some((event) => event.type === 'answer.ready' || event.type === 'turn.failed')).toBe(false);
-  const selection = groupSelectionSchema.parse(choices[0]!.selection);
+  const selection = targetSelectionSchema.parse(choices[0]!.selection);
   expect(selection.candidates.map((row) => `${row.kind}:${row.name}`).sort()).toEqual(
     [`compose:${scenario.project}`, `compose:${scenario.peer_project}`].sort(),
   );
