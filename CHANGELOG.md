@@ -10,6 +10,8 @@ Dates below record each version's merge into `master` in Europe/Moscow. Version 
 
 ### Fixed
 
+- Dialogs close on an outside click while preserving drafts and prepared actions. Clicks inside and text selection
+  remain within the dialog without dismissing it.
 - Model generation distinguishes missing or inaccessible models from unsupported requests, with English/Russian guidance
   to check the model name and API-key access. Provider response bodies remain private.
 - Bounded Docker log reads and diagnostic byte budgets retain the latest output instead of the start of a tail window.

@@ -1,6 +1,6 @@
 import { stateLabel } from './messages';
 import { useLocale } from './locale';
-import { useEffect, useId, useRef, type ReactNode } from 'react';
+import { useEffect, useId, useRef, type MouseEvent, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 
 /** Pair a semantic status color with readable text rather than relying on color alone. */
@@ -21,7 +21,14 @@ export function Status({ state, action = false }: { state: string; action?: bool
   );
 }
 
-/** Use the native modal's focus containment and restore the invoking control on close. */
+/** Recognize native backdrop clicks while treating dialog padding and descendants as inside. */
+function isBackdrop(event: MouseEvent<HTMLDialogElement>): boolean {
+  if (event.target !== event.currentTarget) return false;
+  const { left, right, top, bottom } = event.currentTarget.getBoundingClientRect();
+  return event.clientX < left || event.clientX > right || event.clientY < top || event.clientY > bottom;
+}
+
+/** Contain focus, dismiss backdrop clicks and restore the invoking control without treating text drags as clicks. */
 export function Modal({
   title,
   close,
@@ -38,6 +45,7 @@ export function Modal({
   const { t } = useLocale();
   const titleId = useId();
   const dialog = useRef<HTMLDialogElement>(null);
+  const backdropPress = useRef(false);
   useEffect(() => {
     const element = dialog.current;
     const previous = document.activeElement;
@@ -55,6 +63,17 @@ export function Modal({
       ref={dialog}
       className={`modal${className ? ` ${className}` : ''}`}
       aria-labelledby={titleId}
+      onPointerDown={(event) => {
+        backdropPress.current = event.isPrimary && event.button === 0 && isBackdrop(event);
+      }}
+      onPointerCancel={() => {
+        backdropPress.current = false;
+      }}
+      onClick={(event) => {
+        const dismiss = backdropPress.current && isBackdrop(event);
+        backdropPress.current = false;
+        if (dismiss) close();
+      }}
       onCancel={(event) => {
         event.preventDefault();
         close();

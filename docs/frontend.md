@@ -25,6 +25,8 @@ IBM Plex Sans is used for interface text and IBM Plex Mono for code and identifi
 Logs, environment values, observation JSON, and model text render as text, never executable HTML.
 
 Tab follows reading order, Enter activates controls, Escape closes dialogs, and Ctrl/Cmd+Enter submits a query.
+Clicking outside a dialog also closes it; clicks inside its content or padding and text drags do not.
+Closing action review preserves the prepared action and never confirms execution.
 **Ask DockSight** focuses the composer. Source links focus the selected observation.
 The workspace breadcrumb opens host selection, including on mobile. Closing it or choosing the current host preserves
 the draft, investigation, and prepared actions. Changing hosts or connections cancels outstanding work and discards
