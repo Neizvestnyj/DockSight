@@ -134,6 +134,10 @@ actions. Models provide explanations and select from approved tools and widgets.
   breaking changes. Keep `backend/pyproject.toml` and its lockfile aligned with the current changelog version.
 - Keep release notes short, specific, and understandable to users. Group changes by outcome rather than listing commits.
   Documentation and workflow changes require a changelog update but do not by themselves require a version bump.
+- Follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/): use applicable `Added`, `Changed`, `Deprecated`, `Removed`,
+  `Fixed`, and `Security` sections, omitting empty categories. Cover notable outcomes across commits rather than one entry
+  per commit. For merged versions, use linked `[version] - YYYY-MM-DD` headings dated by the merge into `master` in
+  Europe/Moscow, unless a separate release date is recorded. Keep version links tied to the corresponding changes.
 
 ## Frontend
 

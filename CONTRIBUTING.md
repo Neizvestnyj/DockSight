@@ -61,6 +61,9 @@ Docker and live-model tests remain separate opt-in commands described below.
   do not create a version per task or commit. Use the intended numeric version immediately, not `Unreleased`.
   Choose PATCH for compatible fixes, MINOR for compatible additions, and MAJOR for breaking changes; keep the backend
   package metadata and lockfile aligned. Documentation alone needs no bump.
+  Follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/): group notable outcomes under applicable categories and
+  omit empty ones. Use linked `[version] - YYYY-MM-DD` headings for merged versions, dated by the merge into `master`
+  in Europe/Moscow unless a separate release date is recorded. Several commits can contribute to one entry.
 
 Keep Python and Markdown prose within 120 characters per line. Use UTF-8 without BOM and LF line endings.
 Write documentation, comments, docstrings, and runtime messages in English; product copy belongs in the English/Russian
