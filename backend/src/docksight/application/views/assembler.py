@@ -29,7 +29,7 @@ class ViewAssembler:
 
     async def build(self, proposal: DiagnosisProposal, context: EvidenceContext, actor: str) -> DiagnosisResponse:
         """Validate references and assemble cards without trusting model-supplied runtime values."""
-        cards = _group_cards(proposal.widgets, context)
+        cards = _target_cards(proposal.widgets, context)
         extra = [row.evidence_id for row in context.group.logs if row.evidence_id] if context.group else []
         references: list[str] = list(
             dict.fromkeys(
@@ -98,12 +98,17 @@ class ViewAssembler:
         ]
 
 
-def _group_cards(proposed: list[WidgetProposal], context: EvidenceContext) -> list[WidgetProposal]:
-    """Keep up to four collected problem containers visible even when a model omits their detail cards."""
+def _target_cards(proposed: list[WidgetProposal], context: EvidenceContext) -> list[WidgetProposal]:
+    """Keep collected exact-target facts and up to four group failures visible when model detail cards are missing."""
     cards: list[WidgetProposal] = []
     for card in proposed:
         if card not in cards:
             cards.append(card)
+    if context.container_id:
+        log_ref = next(
+            (ref for ref in context.logs if context.evidence[ref].container_id == context.container_id), None
+        )
+        _member_cards(cards, context, context.container_id, log_ref)
     if context.group is None:
         return cards
     for member in context.group.logs[:4]:

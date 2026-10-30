@@ -6,6 +6,21 @@ This file records notable changes to DockSight. The format follows
 
 Dates below record each version's merge into `master` in Europe/Moscow. Version links show the corresponding changes.
 
+## 0.4.1
+
+### Fixed
+
+- Explicit English/Russian container references preserve container scope when a Compose project has the same name,
+  allowing dependency follow-ups to continue the existing conversation with fresh observations. Server tool scope keeps
+  earlier group context from adding unrelated container cards to the new answer. Exact-target status and bounded logs are
+  collected before model exploration; missing model cards are filled from those facts, and unavailable logs retain status.
+- Diagnostics and New investigation open an empty conversation, clear the draft, and focus the question input.
+
+### Added
+
+- An opt-in two-turn live regression checks group-to-dependency follow-ups in the same session against isolated Docker
+  workloads and local models, including a container/project name collision and original evidence retention.
+
 ## [0.4.0] - 2026-10-30
 
 ### Added

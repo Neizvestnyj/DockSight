@@ -23,6 +23,7 @@ def record_run(
     payload: dict[str, Any],
     events: list[dict[str, Any]],
     clarification_events: list[dict[str, Any]] | None = None,
+    previous_turn: dict[str, Any] | None = None,
 ) -> None:
     """Retain successful and failed public responses without credentials or raw inspect documents."""
     target.write_text(
@@ -35,6 +36,7 @@ def record_run(
                 "fixture": lab.facts(),
                 "events": events,
                 "clarification_events": clarification_events or [],
+                "previous_turn": previous_turn,
             },
             ensure_ascii=False,
             indent=2,

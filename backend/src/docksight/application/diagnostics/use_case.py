@@ -141,13 +141,14 @@ class Diagnostics:
         if group is None:
             async for event in self._discover(query, tools, messages, deadline, trace):
                 yield event
-        group = tools.group
-        if group:
-            call = ToolCall("selected-group", "inspect_group", group.model_dump())
+        call = self._selected_read(tools)
+        if call:
             messages.append(ModelMessage("assistant", "", (call,)))
-            async for event in self._record_tool(call, tools, messages, deadline, 0, trace, strict=True):
+            async for event in self._record_tool(
+                call, tools, messages, deadline, 0, trace, strict=tools.group is not None
+            ):
                 yield event
-        async for event in self._explore(messages, tools, deadline, trace, int(group is not None)):
+        async for event in self._explore(messages, tools, deadline, trace, int(call is not None)):
             yield event
         if context.selection:
             yield {
@@ -160,6 +161,14 @@ class Diagnostics:
         async for event in self._answer_turn(query, messages, context, session, deadline, trace):
             yield event
         yield {"type": "turn.completed", "turn_id": trace.turn_id}
+
+    def _selected_read(self, tools: DiagnosticTools) -> ToolCall | None:
+        """Collect bounded facts for an exact selected target before model explanations or follow-up decisions."""
+        if tools.group:
+            return ToolCall("selected-group", "inspect_group", tools.group.model_dump())
+        if tools.context.container_id:
+            return ToolCall("selected-container", "get_container_logs", {"container_id": tools.context.container_id})
+        return None
 
     async def _answer_turn(
         self,
@@ -190,6 +199,7 @@ class Diagnostics:
         yield trace.begin("tool", "resolve_target")
         resolved = await _before_deadline(deadline, lambda: resolve_target(self.runtime, tools.host, query))
         tools.inventory, tools.group, tools.candidates = resolved.containers, resolved.group, resolved.candidates
+        tools.context.container_id = resolved.container_id
         tools.context.selection = resolved.selection
         yield trace.finish(code=resolved.discovery_code)
         yield {
@@ -206,7 +216,21 @@ class Diagnostics:
                     "do not infer absence. Container observations remain usable.",
                 )
             )
-        if tools.group is None and tools.candidates:
+        if tools.context.container_id:
+            messages.append(
+                ModelMessage(
+                    "system",
+                    json.dumps(
+                        {
+                            "selected_container_id": tools.context.container_id,
+                            "instruction": "This turn explicitly targets this observed container. "
+                            "Earlier group conclusions are conversation context only. "
+                            "Collect its fresh state and logs; do not return to the previous group.",
+                        }
+                    ),
+                )
+            )
+        elif tools.group is None and tools.candidates:
             messages.append(ModelMessage("system", group_catalog(tools.candidates)))
 
     async def _explore(

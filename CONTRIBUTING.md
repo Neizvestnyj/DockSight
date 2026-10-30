@@ -198,6 +198,11 @@ Group cases also create an independently failing peer Compose project. Spaced an
 target without including that peer. The ambiguous case gives both projects the same human-readable prefix: the first
 turn must ask for the two observed choices without individual evidence reads, and a second request selects the target.
 
+`--e2e-case compose-follow-up` selects an independent two-turn HTTP scenario: diagnose the primary project, then ask about
+an explicitly named dependency container whose name equals its Compose project. The second request reuses the session,
+checks fresh dependency cards and actual log content, and retains the first turn in the ignored report. It reuses the
+existing failure workload; it does not simulate a database engine or execute product actions.
+
 To include real browser flows, install frontend dependencies and Chrome, build the client, and add `--e2e-browser`:
 
 ```sh

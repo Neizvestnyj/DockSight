@@ -301,7 +301,8 @@ function Workspace({
     },
     newInvestigation: () => {
       investigation.clear();
-      openInvestigation();
+      setDraft('');
+      openInvestigation(true);
     },
     openInvestigation: () => openInvestigation(),
     about: () => {

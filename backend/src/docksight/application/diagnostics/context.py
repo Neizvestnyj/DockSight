@@ -22,6 +22,7 @@ class EvidenceContext:
     used_bytes: int = 0
     group: GroupInspection | None = None
     selection: GroupSelection | None = None
+    container_id: str | None = None
 
     @property
     def remaining_bytes(self) -> int:

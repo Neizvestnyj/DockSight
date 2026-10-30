@@ -112,7 +112,7 @@ export function Sidebar({
       )}
       <div className="workspace-nav">
         <Activity size={16} />
-        <button className="text-button" onClick={openInvestigation}>
+        <button className="text-button" onClick={newInvestigation}>
           {t('Diagnostics')}
         </button>
         <button

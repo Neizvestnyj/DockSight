@@ -6,7 +6,7 @@ from uuid import uuid4
 import httpx
 import pytest
 
-from tests.integration.live_e2e.cases import CASES, Case
+from tests.integration.live_e2e.cases import CASES, FOLLOW_UP_CASE, Case
 from tests.integration.live_e2e.lab import ROOT, ComposeLab
 from tests.integration.live_e2e.server import live_api, local_model_url, require_local_models
 
@@ -20,17 +20,22 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     group.addoption("--e2e-language", action="append", choices=["en", "ru"], help="Select a language; default both")
     group.addoption("--e2e-browser", action="store_true", help="Also run real Chrome group diagnostics")
     group.addoption(
-        "--e2e-case", action="append", choices=[row.name for row in CASES], help="Select a scenario; repeat"
+        "--e2e-case",
+        action="append",
+        choices=[row.name for row in (*CASES, FOLLOW_UP_CASE)],
+        help="Select a scenario; repeat",
     )
 
 
 def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
     """Collect the requested case/model cross product while leaving unrelated tests untouched."""
-    if metafunc.function.__name__ not in {"test_live_diagnosis", "test_live_browser"}:
+    if metafunc.function.__name__ not in {"test_live_diagnosis", "test_live_browser", "test_live_follow_up"}:
         return
     names = metafunc.config.getoption("e2e_model") or ["disabled"]
     selected = metafunc.config.getoption("e2e_case")
     cases = _selected_cases(selected, metafunc.function.__name__ == "test_live_browser")
+    if metafunc.function.__name__ == "test_live_follow_up":
+        cases = [FOLLOW_UP_CASE] if not selected or FOLLOW_UP_CASE.name in selected else []
     metafunc.parametrize("model_name", names)
     metafunc.parametrize("case", cases, ids=lambda row: row.name)
     metafunc.parametrize("language", metafunc.config.getoption("e2e_language") or ["en", "ru"])

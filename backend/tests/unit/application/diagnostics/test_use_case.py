@@ -8,7 +8,8 @@ from docksight.adapters.outbound.memory.sessions import MemorySessions
 from docksight.application.diagnostics.use_case import Diagnostics
 from docksight.application.ports.models import ModelReply, ToolCall
 from docksight.application.redaction import Redactor
-from docksight.domain.runtime import ContainerSnapshot, StackSummary
+from docksight.domain.errors import DockSightError
+from docksight.domain.runtime import ContainerSnapshot, LogBatch, StackSummary
 from tests.fakes import DiscoveryRuntime, FakeRuntime, ScriptedModel
 
 
@@ -21,6 +22,32 @@ def proposal(evidence_id: str = "e1") -> str:
             "evidence_ids": [evidence_id],
             "widgets": [{"widget_type": "container_status", "evidence_ids": [evidence_id], "action": None}],
         }
+    )
+
+
+async def test_selected_container_retains_its_status_when_prefetched_logs_are_unavailable() -> None:
+    class MissingLogs(FakeRuntime):
+        """Expose an inspectable container whose log driver cannot return a batch."""
+
+        async def logs(self, host: str, container_id: str, lines: int, max_bytes: int) -> LogBatch:
+            """Fail only the log read after the runtime snapshot has been recorded."""
+            raise DockSightError("logs_unavailable", "Container logs are unavailable", 502)
+
+    model = ScriptedModel([ModelReply("Ready"), ModelReply(proposal())])
+    events = [
+        event
+        async for event in Diagnostics(MissingLogs(), model, MemorySessions(), Redactor()).stream(
+            "alice",
+            "local",
+            "Check container worker",
+        )
+    ]
+    assert events[-1]["type"] == "turn.completed"
+    answer = next(event["answer"] for event in events if event["type"] == "answer.ready")
+    assert answer["widgets"][0]["snapshot"]["id"] == "a" * 64
+    assert any(
+        event["type"] == "tool.completed" and event["tool"] == "get_container_logs" and not event["ok"]
+        for event in events
     )
 
 

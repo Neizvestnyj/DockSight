@@ -20,6 +20,7 @@ class TargetResolution:
     discovery_code: str | None = None
     candidates: tuple[GroupTarget, ...] = ()
     selection: GroupSelection | None = None
+    container_id: str | None = None
 
 
 def _mentioned(query: str, name: str) -> bool:
@@ -27,11 +28,24 @@ def _mentioned(query: str, name: str) -> bool:
     return re.search(r"(?<![\w.-])" + re.escape(name) + r"(?![\w-]|\.[\w-])", query, re.IGNORECASE) is not None
 
 
+def _container_reference(query: str, name: str) -> bool:
+    """Honor an explicitly typed exact container name without interpreting an unqualified name collision."""
+    prefix = r"\b(?:container|контейнер(?:а|у|ом|е|ы|ов)?)\s+(?:(?:named|called|\u0441 именем)\s+)?[\"'`«]?"  # noqa: RUF001
+    return re.search(prefix + re.escape(name) + r"(?![\w-]|\.[\w-])", query, re.IGNORECASE) is not None
+
+
+def _container_target(query: str, rows: tuple[ContainerSnapshot, ...]) -> TargetResolution | None:
+    """Bind one explicit container, while leaving intentionally multi-container questions unrestricted."""
+    ids = [row.id for row in rows if row.id in query or _container_reference(query, row.name)]
+    return TargetResolution(None, rows, container_id=ids[0] if len(ids) == 1 else None) if ids else None
+
+
 async def resolve_target(runtime: RuntimeReadPort, host: str, query: str) -> TargetResolution:
     """Prefer observed identities, space-separated spelling, or one unambiguous edit in a long group name."""
     rows = await runtime.containers(host)
-    if any(row.id in query for row in rows):
-        return TargetResolution(None, rows)
+    container = _container_target(query, rows)
+    if container:
+        return container
     named_container = any(_mentioned(query, row.name) for row in rows)
     groups, code = await _group_candidates(runtime, host, rows, query, named_container)
     exact = [row for row in groups if _mentioned(query, row.name) or _mentioned(query, row.name.replace("-", " "))]

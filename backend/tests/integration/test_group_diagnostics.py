@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 
 from fastapi.testclient import TestClient
 
@@ -6,6 +7,64 @@ from docksight.application.ports.models import ModelReply, ToolCall
 from docksight.bootstrap import Settings, build_components
 from docksight.main import create_app
 from tests.fakes import DiscoveryRuntime, FakeRuntime, ScriptedModel
+
+
+def test_group_follow_up_keeps_history_and_reads_an_explicit_container_with_a_colliding_project_name() -> None:
+    runtime = DiscoveryRuntime()
+    runtime.rows = (*runtime.rows[:2], replace(runtime.rows[2], name="other-project"))
+    first_query = "What happened to vintoria-infra?"
+    summary = "Two members exited while connecting to their dependency."
+    model = ScriptedModel(
+        [
+            ModelReply("Ready"),
+            ModelReply(json.dumps({"summary": summary, "uncertain": True, "evidence_ids": ["e1"], "widgets": []})),
+            ModelReply("Ready"),
+            ModelReply(
+                json.dumps(
+                    {
+                        "summary": "The dependency container exited.",
+                        "uncertain": True,
+                        "evidence_ids": ["e1", "e2"],
+                        "widgets": [
+                            {"widget_type": "container_status", "evidence_ids": ["e1"]},
+                            {"widget_type": "log_anomalies", "evidence_ids": ["e2"]},
+                        ],
+                    }
+                )
+            ),
+        ]
+    )
+    settings = Settings(api_token="followup-integration-token-24", _env_file=None)
+    components = build_components(settings, reader=runtime, writer=runtime, model=model)
+    headers = {"Authorization": "Bearer followup-integration-token-24"}
+    with TestClient(create_app(settings, components)) as api:
+        first = api.post("/api/v1/chat/turns", headers=headers, json={"host": "local", "query": first_query})
+        events = [json.loads(line[6:]) for line in first.text.splitlines() if line.startswith("data: ")]
+        original = next(event["answer"] for event in events if event["type"] == "answer.ready")
+        session_id = events[0]["session_id"]
+        second = api.post(
+            "/api/v1/chat/turns",
+            headers=headers,
+            json={
+                "host": "local",
+                "session_id": session_id,
+                "query": "Maybe the dependency is stopped? Check container other-project.",
+            },
+        )
+    followup = [json.loads(line[6:]) for line in second.text.splitlines() if line.startswith("data: ")]
+    assert followup[0]["session_id"] == session_id
+    assert followup[-1]["type"] == "turn.completed"
+    answer = next(event["answer"] for event in followup if event["type"] == "answer.ready")
+    assert answer["group"] is None
+    assert answer["widgets"][0]["snapshot"]["id"] == "3" * 64
+    assert answer["widgets"][1]["container_id"] == "3" * 64
+    assert [(row.role, row.content) for row in model.requests[2][0] if row.role != "system"][:2] == [
+        ("user", first_query),
+        ("assistant", summary),
+    ]
+    assert len(original["widgets"]) == 4
+    assert original["group"]["summary"]["name"] == "vintoria-infra"
+    assert runtime.reads == ["1" * 64, "2" * 64, "3" * 64]
 
 
 def test_authorized_clarification_completes_without_answer_and_continues_with_exact_group() -> None:

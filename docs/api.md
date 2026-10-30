@@ -97,6 +97,10 @@ POST a JSON body containing `host`, `query` (1-4000 characters), and optionally 
 authenticated operator and selected host. Use streaming `fetch`, an HTTP client, or `curl -N`; browser EventSource
 cannot POST this request or attach its bearer header.
 
+Follow-up questions send the same `session_id` to retain bounded earlier questions and validated answer summaries.
+Each turn collects fresh observations; existing cards keep their original values. Starting a new investigation clears
+the client session and draft. Explicit group-scope changes start a separate session.
+
 For a query such as "Why did this container exit?", the successful path is:
 
 ![Successful diagnostic request and Docker evidence collection](diagrams/diagnostic-overview.png)
@@ -168,6 +172,14 @@ Compose project is inspected automatically; otherwise stack names are discovered
 IDs/names preserve container scope. A whole query token with one substitution, insertion, deletion, or adjacent
 transposition can match a known group name of at least six characters, only when no exact resource matches.
 The complete canonical group name may also be written with spaces in place of hyphens; a prefix alone is not an exact match.
+Explicit `container NAME` or Russian container references take precedence over an identically named group. An unqualified
+container/group collision still requires a typed name or exact container ID and returns `ambiguous_target`.
+A single explicit container name or full ID binds the turn's tool reads to that observed container, including inventory
+results. Earlier group summaries remain conversational context and cannot expand the new target's scope.
+The server collects its fresh snapshot and bounded logs before model exploration. A log-read failure retains any collected
+snapshot so missing logs do not erase available container facts.
+Collected status and log facts retain their cards even when the model omits them, using the same assembly policy as
+collected problem members in a group report.
 Ambiguous names produce `clarification.required` rather than a diagnosis. The report identifies the canonical group.
 Malformed or redacted labels outside the target contract are excluded from automatic matching.
 `resolve_target` progress and trace

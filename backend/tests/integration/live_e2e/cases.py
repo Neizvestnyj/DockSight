@@ -43,6 +43,8 @@ class Case:
         return f"Что произошло в {name}?" if language == "ru" else f"What happened to {name}?"
 
 
+FOLLOW_UP_CASE: Final = Case("compose-follow-up", ("backend", "grafana", "nginx"), group=True)
+
 CASES: Final = (
     Case("compose-explicit", ("backend", "grafana", "nginx"), group=True, explicit=True),
     Case("compose-chat", ("backend", "grafana", "nginx"), group=True),

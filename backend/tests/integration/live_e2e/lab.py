@@ -11,7 +11,7 @@ from docker.errors import DockerException
 from docker.models.containers import Container
 
 from docksight.adapters.outbound.docker.hosts import HostConfig, connect
-from tests.integration.live_e2e.cases import Case
+from tests.integration.live_e2e.cases import FOLLOW_UP_CASE, Case
 
 ROOT: Final = Path(__file__).resolve().parents[4]
 OWNER_LABEL: Final = "com.docksight.e2e"
@@ -101,6 +101,11 @@ class ComposeLab:
             if len(self.peers) != 1:
                 raise RuntimeError("Compose did not create the exact peer service set")
             self._wait_ready({"backend": next(iter(self.peers.values()))})
+            if self.case == FOLLOW_UP_CASE:
+                peer = next(iter(self.peers.values()))
+                require_owner(peer.labels, self.owner)
+                peer.rename(self.peer_project)
+                peer.reload()
 
     def _compose(self, project: str, services: tuple[str, ...]) -> None:
         """Create one uniquely owned namespace from the real Compose fixture definition."""

@@ -24,6 +24,20 @@ test.beforeEach(async ({ page }) => {
   await page.goto('/');
 });
 
+for (const label of ['Diagnostics', 'New investigation']) {
+  test(`${label} opens an empty investigation and focuses its input`, async ({ page }) => {
+    await page.getByRole('textbox').fill('Previous investigation draft');
+    if ((page.viewportSize()?.width ?? 1440) <= 1100)
+      await page.getByRole('button', { name: 'Open host and containers' }).click();
+    const navigation = page.locator('.workspace-nav:visible');
+    await navigation.getByRole('button', { name: label, exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Start an investigation' })).toBeVisible();
+    await expect(page.getByRole('textbox')).toHaveValue('');
+    await expect(page.getByRole('textbox')).toBeFocused();
+    await expect(page.locator('.session-turns')).toHaveCount(0);
+  });
+}
+
 test('retains host choice through a discovery retry and restores focus after the workspace remounts', async ({
   page,
 }) => {

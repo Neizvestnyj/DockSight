@@ -8,6 +8,24 @@ from docksight.domain.runtime import StackSummary
 from tests.fakes import DiscoveryRuntime, FakeRuntime
 
 
+@pytest.mark.parametrize(
+    "query",
+    [
+        "Maybe the database is stopped? Check container vintoria-db.",
+        "Может БД просто не запущена? Есть же контейнер vintoria-db",
+        'Inspect the container named "vintoria-db"',
+    ],
+)
+async def test_explicit_container_reference_wins_over_an_identically_named_project(query: str) -> None:
+    runtime = FakeRuntime()
+    runtime.item = replace(runtime.item, name="vintoria-db", compose_project="vintoria-db")
+    result = await resolve_target(runtime, "local", query)
+    assert result.group is None
+    assert result.selection is None
+    assert result.containers == (runtime.item,)
+    assert result.container_id == runtime.item.id
+
+
 @pytest.mark.parametrize("name", ["vintoria-infta", "vintoria-infar", "vintoria-infr", "vintoria-iinfra"])
 async def test_unique_single_edit_project_reference_resolves_to_observed_identity(name: str) -> None:
     runtime = FakeRuntime()
@@ -23,6 +41,12 @@ async def test_space_separated_canonical_name_resolves_without_expanding_a_prefi
     resolved = await resolve_target(runtime, "local", "What happened to vintoria infra?")
     assert resolved.group == GroupTarget(kind="compose", name="vintoria-infra")
     assert (await resolve_target(runtime, "local", "What happened to vintoria?")).group is None
+
+
+async def test_explicit_multi_container_question_does_not_silently_bind_the_first_container() -> None:
+    result = await resolve_target(DiscoveryRuntime(), "local", "Compare container backend-1 and container grafana-1")
+    assert result.group is None
+    assert result.container_id is None
 
 
 async def test_similar_group_names_require_selection_instead_of_guessing() -> None:
