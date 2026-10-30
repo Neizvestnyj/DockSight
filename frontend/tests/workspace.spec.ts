@@ -178,7 +178,14 @@ test('renders OOM, uncertainty, absent logs, and truncated data honestly', async
   await expect(page.getByText('Cause uncertain', { exact: true })).toBeVisible();
   await expect(page.getByText(/No log entries returned/)).toBeVisible();
   await page.getByLabel('Demo scenario').selectOption('truncated_logs');
-  await expect(page.getByText('Truncated · partial evidence')).toBeVisible();
+  const logs = page.getByRole('group', { name: 'Container logs', exact: true });
+  const truncation = logs.getByText('Truncated · partial evidence', { exact: true });
+  await expect(truncation).toBeVisible();
+  await logs.getByRole('button', { name: 'Collapse logs', exact: true }).click();
+  await expect(logs.getByText('3 lines returned · Truncated · partial evidence', { exact: true })).toBeVisible();
+  await expect(logs.getByRole('group', { name: 'Timestamped container logs', exact: true })).toBeHidden();
+  await logs.getByRole('button', { name: 'Expand logs', exact: true }).click();
+  await expect(truncation).toBeVisible();
   await page.getByLabel('Demo scenario').selectOption('dependency');
   await expect(page.getByRole('region', { name: 'Model explanation' })).toContainText('unavailable dependency');
   await page.getByLabel('Demo scenario').selectOption('running');

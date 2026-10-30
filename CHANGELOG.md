@@ -7,7 +7,8 @@
 - Suppress identical model card proposals before preparing actions, keeping repeated output from duplicating controls.
 - Present each container's diagnostic state, logs, and environment together with links to original observations;
   keep snapshots and action confirmations intact.
-- Animate log, trace, and observation-data disclosure with short transitions that respect reduced motion.
+- Animate log, trace, and observation-data disclosure with short transitions that respect reduced motion;
+  check truncation indicators in both expanded and collapsed log views.
 - Make permitted operations easier to find with accented action controls, and select live end-to-end checks by
   integration risk while retaining focused browser checks for interface changes.
 - Ground Ollama structured replies in schema descriptions and reject placeholder or reference-only cause explanations;
