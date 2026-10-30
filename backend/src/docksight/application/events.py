@@ -54,6 +54,14 @@ class AnswerReady(TypedDict):
     answer: JsonObject
 
 
+class ClarificationRequired(TypedDict):
+    """Finish discovery with server-verified group choices instead of a diagnostic answer."""
+
+    type: Literal["clarification.required"]
+    turn_id: str
+    selection: JsonObject
+
+
 class TurnCompleted(TypedDict):
     """Mark a diagnostic turn as successfully finished."""
 
@@ -71,5 +79,13 @@ class TurnFailed(TypedDict):
 
 
 type TurnEvent = (
-    TurnStarted | TraceStarted | TraceStepEvent | ToolStarted | ToolCompleted | AnswerReady | TurnCompleted | TurnFailed
+    TurnStarted
+    | TraceStarted
+    | TraceStepEvent
+    | ToolStarted
+    | ToolCompleted
+    | AnswerReady
+    | ClarificationRequired
+    | TurnCompleted
+    | TurnFailed
 )

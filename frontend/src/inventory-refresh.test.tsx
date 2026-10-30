@@ -84,7 +84,7 @@ describe('automatic runtime refresh', () => {
     await connect();
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Explain this container' } });
     await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Investigate' })));
-    const card = screen.getByRole('region', { name: 'Container status' });
+    const card = screen.getByRole('group', { name: 'Container status' });
     const observed = card.querySelector('time')!.dateTime;
     const action = screen.getByRole('button', { name: 'Review stop' });
     const draft = screen.getByRole('textbox');

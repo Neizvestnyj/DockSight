@@ -19,7 +19,9 @@ import type { useInvestigation } from './useInvestigation';
 import { DiagnosticTrace } from './DiagnosticTrace';
 import { GroupReport } from './GroupReport';
 import { EvidenceTrail } from './EvidenceTrail';
-import { evidenceResource } from './evidence';
+import { containerWidgetGroups, evidenceResource, widgetSource } from './evidence';
+import { ContainerEvidence } from './ContainerEvidence';
+import { GroupClarification } from './GroupClarification';
 
 interface Props {
   investigation: ReturnType<typeof useInvestigation>;
@@ -68,6 +70,10 @@ export function Investigation({
   /** Move keyboard focus with the selected source so the evidence chain works without a pointer. */
   function inspect(id: string) {
     setReference(id);
+    for (const card of document.querySelectorAll<HTMLElement>('[data-evidence-id]')) {
+      if (card.dataset.evidenceId === id)
+        card.querySelector<HTMLButtonElement>('[data-log-toggle][aria-expanded="false"]')?.click();
+    }
     const panel = document.getElementById('evidence-observation');
     panel?.focus({ preventScroll: true });
     panel?.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
@@ -252,10 +258,22 @@ export function Investigation({
                 </div>
               </section>
             )}
+            {turn.state === 'awaiting_selection' && turn.selection && (
+              <GroupClarification
+                selection={turn.selection}
+                host={host}
+                disabled={running || blocked}
+                choose={(target) => {
+                  setView(null);
+                  void run(turn.query, false, target);
+                }}
+              />
+            )}
             <DiagnosticTrace key={turn.id} turn={turn} host={host} demo={demo} />
             {answer?.group && <GroupReport report={answer.group} evidence={answer.evidence} inspect={inspect} />}
             {answer && (
               <AnswerGrid
+                key={`answer-${turn.id}`}
                 answer={answer}
                 selected={selected?.id ?? null}
                 inspect={inspect}
@@ -371,7 +389,7 @@ export function Investigation({
   );
 }
 
-/** Balance the two diagnostic fact widgets against provenance and contextual observations. */
+/** Keep each container's retained observations together beside their sources and group context. */
 function AnswerGrid({
   answer,
   selected,
@@ -389,7 +407,7 @@ function AnswerGrid({
 }) {
   const { t } = useLocale();
   const evidence = answer.evidence.find((row) => row.id === selected);
-  const card = (widget: Answer['widgets'][number], index: number) => (
+  const card = (widget: Answer['widgets'][number], index: number, embedded = false) => (
     <WidgetCard
       key={`${widget.widget_type}-${index}`}
       widget={widget}
@@ -399,6 +417,7 @@ function AnswerGrid({
       review={review}
       outcomes={outcomes}
       demo={demo}
+      embedded={embedded}
     />
   );
   return (
@@ -408,9 +427,15 @@ function AnswerGrid({
           <h2>{t('Runtime evidence')}</h2>
           <span>{t('Server observations')}</span>
         </div>
-        {answer.widgets
-          .filter((row) => row.widget_type === 'container_status' || row.widget_type === 'log_anomalies')
-          .map(card)}
+        {containerWidgetGroups(answer).map((group) => (
+          <ContainerEvidence
+            key={group.key}
+            group={group}
+            active={group.widgets.some((widget) => widgetSource(widget, answer.evidence) === selected)}
+          >
+            {group.widgets.map((widget, index) => card(widget, index, true))}
+          </ContainerEvidence>
+        ))}
         {!answer.widgets.length && <p className="empty-note">{t('No UI cards were returned for this answer.')}</p>}
       </div>
       <aside className="context-column" aria-label={t('Evidence and context')}>
@@ -424,8 +449,8 @@ function AnswerGrid({
           resourceName={evidence ? evidenceResource(evidence, answer).name : undefined}
         />
         {answer.widgets
-          .filter((row) => row.widget_type === 'compose_stack' || row.widget_type === 'env_inspector')
-          .map(card)}
+          .filter((row) => row.widget_type === 'compose_stack')
+          .map((widget, index) => card(widget, index))}
       </aside>
     </div>
   );

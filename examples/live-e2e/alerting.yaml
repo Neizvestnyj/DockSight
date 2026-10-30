@@ -1,0 +1,9 @@
+apiVersion: 1
+contactPoints:
+  - orgId: 1
+    name: broken-telegram-fixture
+    receivers:
+      - uid: missing-chat-id
+        type: telegram
+        settings:
+          bottoken: fixture-not-a-real-token

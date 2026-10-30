@@ -37,6 +37,74 @@
   font-variant-numeric: tabular-nums;
 }
 
+.group-clarification {
+  margin: 24px 0;
+  padding: 20px;
+  border: 1px solid var(--control);
+  border-radius: var(--radius-card);
+  background: var(--raised);
+}
+.clarification-heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.clarification-heading > svg {
+  color: var(--accent);
+}
+.clarification-heading h2 {
+  font-size: 16px;
+  font-weight: 600;
+}
+.clarification-heading > span {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.group-clarification > p {
+  margin: 8px 0 16px;
+  color: var(--muted);
+}
+.group-choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: 12px;
+}
+.group-choices > button {
+  min-width: 0;
+  min-height: 64px;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px;
+  white-space: normal;
+  text-align: left;
+  border-color: var(--control);
+}
+.group-choices > button:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.group-choices small,
+.group-choices strong {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.group-choices small {
+  margin-bottom: 4px;
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--muted);
+}
+.group-choices strong {
+  font-weight: 500;
+  font-size: 14px;
+}
+.group-choices > button > svg {
+  color: var(--accent);
+  flex-shrink: 0;
+}
 .diagnostic-trace {
   margin: 20px 0 24px;
   border-block: 1px solid var(--border);
@@ -1274,6 +1342,151 @@ textarea {
   border-radius: var(--radius-card);
   overflow: hidden;
 }
+.container-evidence {
+  min-width: 0;
+  margin-bottom: var(--gap);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  overflow: hidden;
+  background: var(--surface);
+}
+.container-evidence.linked {
+  border-color: var(--accent);
+}
+.container-evidence-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px 16px;
+  padding: 16px;
+  background: var(--raised);
+  border-bottom: 1px solid var(--border);
+}
+.container-evidence-heading h3 {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 16px;
+  font-weight: 600;
+}
+.container-evidence-heading > span {
+  font-size: 12px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.container-evidence-note {
+  padding: 12px 16px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.container-evidence .widget.embedded {
+  border: 0;
+  border-radius: 0;
+}
+.container-evidence .widget.embedded + .widget {
+  border-top: 1px solid var(--border);
+}
+.widget.embedded .widget-head {
+  flex-wrap: wrap;
+}
+.widget.embedded .widget-head h4 {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.widget.embedded .widget-head h4 > svg {
+  color: var(--muted);
+}
+.widget.embedded .source-link {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.widget.embedded .log-toggle {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.log-toggle svg,
+.trace-chevron {
+  transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.log-toggle .collapsed {
+  transform: rotate(-90deg);
+}
+.log-disclosure {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 120ms ease;
+}
+.log-disclosure[data-open='true'] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+.log-disclosure > div {
+  min-height: 0;
+  overflow: hidden;
+}
+@supports (interpolate-size: allow-keywords) and (interactivity: inert) and selector(details::details-content) {
+  .diagnostic-trace,
+  .raw-evidence {
+    interpolate-size: allow-keywords;
+  }
+  .diagnostic-trace::details-content,
+  .raw-evidence::details-content {
+    display: flow-root;
+    block-size: 0;
+    opacity: 0;
+    overflow: clip;
+    transition:
+      block-size 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      opacity 120ms ease,
+      content-visibility 180ms allow-discrete;
+  }
+  .diagnostic-trace[open]::details-content,
+  .raw-evidence[open]::details-content {
+    block-size: auto;
+    opacity: 1;
+  }
+  .diagnostic-trace:not([open]) > :not(summary),
+  .raw-evidence:not([open]) > :not(summary) {
+    interactivity: inert;
+  }
+}
+.log-collapsed-note {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 16px;
+  font-size: 12px;
+  color: var(--muted);
+  background: var(--raised);
+}
+@media (max-width: 560px) {
+  .widget.embedded.widget-log_anomalies .widget-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .widget.embedded.widget-log_anomalies .source-link {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .widget.embedded .log-toggle {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-self: start;
+    margin-left: 0;
+    min-height: 44px;
+  }
+}
 .facts-column > .widget + .widget {
   margin-top: var(--gap);
 }
@@ -1405,6 +1618,24 @@ textarea {
   flex-wrap: wrap;
   justify-content: flex-end;
 }
+.actions .action-trigger {
+  min-height: 32px;
+  padding: 6px 10px;
+  color: var(--surface);
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-control);
+}
+.actions .action-trigger:hover,
+.card-actions-menu[open] > .action-trigger {
+  background: color-mix(in srgb, var(--accent) 85%, var(--text));
+  border-color: color-mix(in srgb, var(--accent) 85%, var(--text));
+}
+@media (max-width: 560px) {
+  .actions .action-trigger {
+    min-height: 44px;
+  }
+}
 .card-actions-menu {
   position: relative;
 }
@@ -1417,6 +1648,12 @@ textarea {
 }
 .card-actions-menu > summary::-webkit-details-marker {
   display: none;
+}
+.card-actions-menu > summary > svg:last-child {
+  transition: transform 180ms ease;
+}
+.card-actions-menu[open] > summary > svg:last-child {
+  transform: rotate(180deg);
 }
 .available-operations {
   position: absolute;
@@ -2789,7 +3026,9 @@ textarea {
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
-  *::after {
+  *::after,
+  .diagnostic-trace::details-content,
+  .raw-evidence::details-content {
     animation: none !important;
     transition: none !important;
     scroll-behavior: auto !important;

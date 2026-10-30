@@ -116,6 +116,10 @@ actions. Models provide explanations and select from approved tools and widgets.
   `pytest --dup-fixtures`; duplicate return values are review hints, not proof that fixtures have the same purpose.
 - Mock provider HTTP calls in automated tests. Live model calls are opt-in; cloud smoke tests require supplied
   credentials and explicit authorization.
+- Choose live Docker/local-model end-to-end runs and additional scenarios according to integration risk. Frontend-only
+  presentation changes normally need relevant browser checks, not live model runs. Reconsider live coverage when changing
+  provider/tool orchestration, evidence assembly, API contracts, or client behavior that affects real diagnoses. State
+  which live checks were run or omitted and why; a backend change alone does not require the whole live matrix.
 - Isolate Docker integration fixtures with labels and unique names. Cleanup must address only resources created by that
   fixture; never use global prune.
 - Install pre-commit, commit-msg, and pre-push hooks with `uv run --project backend python scripts/git_hooks.py install`.
@@ -125,7 +129,9 @@ actions. Models provide explanations and select from approved tools and widgets.
 - Update `CHANGELOG.md` at the end of every task that changes repository files, before committing or reporting completion.
   Cover the delivered behavior, documentation, or development workflow; consolidate related changes and avoid duplicates.
 - Keep updating the same version section while work continues on the same feature branch. Do not create a version per task
-  or commit. Mark an unfinished release as `Unreleased`; choose a new version when preparing a separate release.
+  or commit. Use the intended numeric version immediately instead of `Unreleased` (currently `0.4.0`).
+- Choose versions using Semantic Versioning: PATCH for compatible fixes, MINOR for compatible additions, and MAJOR for
+  breaking changes. Keep `backend/pyproject.toml` and its lockfile aligned with the current changelog version.
 - Keep release notes short, specific, and understandable to users. Group changes by outcome rather than listing commits.
   Documentation and workflow changes require a changelog update but do not by themselves require a version bump.
 
@@ -143,4 +149,5 @@ actions. Models provide explanations and select from approved tools and widgets.
   Never retry a Docker mutation automatically. Require separate confirmation of the exact server-prepared target.
 - Run `rtk proxy npm --prefix frontend run check`, `rtk proxy npm --prefix frontend test`, and
   `rtk proxy npm --prefix frontend run build`. Run browser checks against the production preview with
-  `rtk proxy npm --prefix frontend run test:browser` when changing layout or user flows.
+  `rtk proxy npm --prefix frontend run test:browser` when changing layout or user flows; select relevant specs for focused
+  changes and broaden the run when shared behavior or unresolved failures justify it.

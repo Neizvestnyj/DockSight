@@ -10,6 +10,7 @@ from docksight.domain.runtime import (
     LogBatch,
     LogEntry,
     ResourceMetrics,
+    StackMember,
     StackSummary,
 )
 
@@ -75,6 +76,50 @@ class FakeRuntime:
         """Stop the exact container selected by a validated action."""
         self.mutations.append("stop")
         self.item = replace(self.item, state="exited", started_at=datetime.now(UTC))
+
+
+class DiscoveryRuntime(FakeRuntime):
+    """Expose two project failures and an unrelated failed container for scope-selection tests."""
+
+    def __init__(self) -> None:
+        """Keep independent identities and record reads before any diagnostic explanation."""
+        super().__init__()
+        self.rows = (
+            replace(self.item, id="1" * 64, name="backend-1", compose_project="vintoria-infra"),
+            replace(self.item, id="2" * 64, name="grafana-1", compose_project="vintoria-infra"),
+            replace(self.item, id="3" * 64, name="unrelated-1", compose_project="other-project"),
+        )
+        self.reads: list[str] = []
+
+    async def containers(self, host: str) -> tuple[ContainerSnapshot, ...]:
+        """Return the observed names that the agent may select."""
+        return self.rows
+
+    async def inspect(self, host: str, container_id: str) -> ContainerSnapshot:
+        """Resolve only exact fixture identities."""
+        return next(row for row in self.rows if row.id == container_id)
+
+    async def logs(self, host: str, container_id: str, lines: int, max_bytes: int) -> LogBatch:
+        """Record log scope so unrelated collection cannot pass unnoticed."""
+        self.reads.append(container_id)
+        return self.log_batch
+
+    async def stacks(self, host: str, kind: str) -> tuple[StackSummary, ...]:
+        """Derive actual Compose membership without exposing a fictional Swarm stack."""
+        if kind == "swarm":
+            return ()
+        return tuple(
+            StackSummary(
+                name,
+                "compose",
+                len(rows),
+                0,
+                tuple(row.id for row in rows),
+                tuple(StackMember(row.id, row.name, "container", row.state, 1, 0, row.exit_code) for row in rows),
+            )
+            for name in ("vintoria-infra", "other-project")
+            if (rows := tuple(row for row in self.rows if row.compose_project == name))
+        )
 
 
 class ScriptedModel:

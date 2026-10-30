@@ -4,19 +4,25 @@ import pytest
 
 from docksight.application.diagnostics.scope import resolve_target
 from docksight.application.views.schemas import GroupTarget
-from docksight.domain.errors import DockSightError
 from docksight.domain.runtime import StackSummary
-from tests.fakes import FakeRuntime
+from tests.fakes import DiscoveryRuntime, FakeRuntime
 
 
 @pytest.mark.parametrize("name", ["vintoria-infta", "vintoria-infar", "vintoria-infr", "vintoria-iinfra"])
 async def test_unique_single_edit_project_reference_resolves_to_observed_identity(name: str) -> None:
     runtime = FakeRuntime()
     runtime.item = replace(runtime.item, compose_project="vintoria-infra")
-    query = f"\u0427\u0442\u043e \u043d\u0435 \u0442\u0430\u043a \u0441 {name}?"
-    resolved = await resolve_target(runtime, "local", query)
+    resolved = await resolve_target(runtime, "local", f"Что не так \u0441 {name}?")
     assert resolved.group == GroupTarget(kind="compose", name="vintoria-infra")
     assert not runtime.mutations
+
+
+async def test_space_separated_canonical_name_resolves_without_expanding_a_prefix() -> None:
+    runtime = FakeRuntime()
+    runtime.item = replace(runtime.item, compose_project="vintoria-infra")
+    resolved = await resolve_target(runtime, "local", "What happened to vintoria infra?")
+    assert resolved.group == GroupTarget(kind="compose", name="vintoria-infra")
+    assert (await resolve_target(runtime, "local", "What happened to vintoria?")).group is None
 
 
 async def test_similar_group_names_require_selection_instead_of_guessing() -> None:
@@ -29,8 +35,10 @@ async def test_similar_group_names_require_selection_instead_of_guessing() -> No
 
     runtime = SimilarGroups()
     runtime.item = replace(runtime.item, compose_project="vintoria-infra")
-    with pytest.raises(DockSightError, match="ambiguous"):
-        await resolve_target(runtime, "local", "Check vintoria-infta?")
+    ambiguous = await resolve_target(runtime, "local", "Check vintoria-infta?")
+    assert ambiguous.group is None
+    assert ambiguous.selection is not None
+    assert len(ambiguous.selection.candidates) == 2
     resolved = await resolve_target(runtime, "local", "Check Compose vintoria-infta?")
     assert resolved.group == GroupTarget(kind="compose", name="vintoria-infra")
 
@@ -65,3 +73,31 @@ async def test_invalid_swarm_identity_does_not_hide_a_valid_observed_stack() -> 
 
     resolved = await resolve_target(MalformedStack(), "local", "What happened to production?")
     assert resolved.group == GroupTarget(kind="swarm", name="production")
+
+
+async def test_unresolved_cyrillic_question_retains_real_group_candidates_for_the_agent() -> None:
+    result = await resolve_target(DiscoveryRuntime(), "local", "Что не так \u0441 винтория инфра?")
+    assert result.group is None
+    assert result.selection is None
+    assert {row.name for row in result.candidates} == {"vintoria-infra", "other-project"}
+
+
+async def test_colliding_names_return_typed_choices_instead_of_a_failed_diagnosis() -> None:
+    class DualNamespace(DiscoveryRuntime):
+        """Expose a real-name collision between different orchestration namespaces."""
+
+        async def stacks(self, host: str, kind: str) -> tuple[StackSummary, ...]:
+            """Add one Swarm candidate without changing observed Compose membership."""
+            return (
+                (StackSummary("vintoria-infra", "swarm", 1, 0),)
+                if kind == "swarm"
+                else await super().stacks(host, kind)
+            )
+
+    result = await resolve_target(DualNamespace(), "local", "What happened to vintoria-infra?")
+    assert result.group is None
+    assert result.selection is not None
+    assert result.selection.candidates == [
+        GroupTarget(kind="compose", name="vintoria-infra"),
+        GroupTarget(kind="swarm", name="vintoria-infra"),
+    ]

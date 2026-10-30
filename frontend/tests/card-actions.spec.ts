@@ -18,8 +18,11 @@ test('ordinary operations stay in Actions with keyboard dismissal and confirmati
 }, info) => {
   await page.goto('/');
   await page.getByRole('combobox', { name: 'Scenario' }).selectOption('running');
-  const card = page.getByRole('region', { name: 'Container status', exact: true });
+  const card = page.getByRole('group', { name: 'Container status', exact: true });
   const trigger = card.locator('.card-actions-menu summary');
+  expect((await trigger.boundingBox())!.height).toBeGreaterThanOrEqual(
+    (page.viewportSize()?.width ?? 1440) <= 560 ? 44 : 32,
+  );
   await expect(card.getByRole('button', { name: 'Review restart' })).toHaveCount(0);
   await expect(card.getByRole('button', { name: 'Review stop' })).toHaveCount(0);
   await trigger.focus();
@@ -77,7 +80,7 @@ test('an explicit suggestion on a running container remains visible and uses the
   await connect(page);
   await page.getByRole('textbox').fill('Check the worker');
   await page.getByRole('button', { name: 'Investigate', exact: true }).click();
-  const card = page.getByRole('region', { name: 'Container status', exact: true });
+  const card = page.getByRole('group', { name: 'Container status', exact: true });
   await expect(card.getByRole('button', { name: 'Review stop' })).toBeVisible();
   await expect(card.getByRole('button', { name: 'Review restart' })).toHaveCount(0);
   await expect(card).toContainText('Suggested by model');

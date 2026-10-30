@@ -49,6 +49,36 @@ test('keeps empty Swarm discovery explicit without calling the model', async ({ 
   await expect(page.getByRole('button', { name: 'Diagnose group' }).filter({ visible: true })).toBeDisabled();
 });
 
+for (const motion of ['no-preference', 'reduce'] as const) {
+  test(`settles repeated log toggles and preserves evidence with motion preference ${motion}`, async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: motion });
+    await page.goto('/');
+    await page.getByRole('combobox', { name: 'Language' }).selectOption('en');
+    const card = page.getByRole('group', { name: 'Container logs', exact: true });
+    const toggle = card.getByRole('button', { name: /^(Collapse|Expand) logs$/ });
+    const content = page.locator(`[id="${await toggle.getAttribute('aria-controls')}"]`);
+    const lines = await content.locator('.log-line').allTextContents();
+    await toggle.focus();
+    await page.keyboard.press('Enter');
+    await toggle.click();
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(content).toHaveAttribute('aria-hidden', 'true');
+    await expect(content).toHaveAttribute('inert', '');
+    await expect.poll(() => content.evaluate((node) => node.getBoundingClientRect().height)).toBe(0);
+    await page.keyboard.press('Tab');
+    const source = card.getByRole('button', { name: 'View container logs source' });
+    await expect(source).toBeFocused();
+    await source.click();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await expect(content).not.toHaveAttribute('inert');
+    await expect.poll(() => content.evaluate((node) => node.getBoundingClientRect().height)).toBeGreaterThan(0);
+    expect(await content.locator('.log-line').allTextContents()).toEqual(lines);
+    await expect(page.getByRole('region', { name: 'Evidence observation' })).toBeFocused();
+    if (motion === 'reduce') expect(await content.evaluate((node) => node.getAnimations().length)).toBe(0);
+  });
+}
+
 test('sends an authenticated exact group target and retries its original scope after a filter change', async ({
   page,
 }, info) => {
@@ -119,8 +149,26 @@ test('sends an authenticated exact group target and retries its original scope a
   await expect(page.getByRole('region', { name: 'Group observations' })).toBeVisible();
   expect(inputs).toHaveLength(2);
   expect(inputs[1]?.group).toEqual(inputs[0]?.group);
-  await expect(page.getByRole('region', { name: 'Container status', exact: true })).toHaveCount(2);
-  await expect(page.getByRole('region', { name: 'Container logs', exact: true })).toHaveCount(2);
+  await expect(page.getByRole('group', { name: 'Container status', exact: true })).toHaveCount(2);
+  await expect(page.getByRole('group', { name: 'Container logs', exact: true })).toHaveCount(2);
+  const panels = page.locator('.container-evidence');
+  await expect(panels).toHaveCount(2);
+  const secondPanel = page.getByRole('region', { name: `Container evidence: ${second.name}`, exact: true });
+  await expect(secondPanel.getByRole('group', { name: 'Container status', exact: true })).toContainText(second.image);
+  await expect(secondPanel.getByRole('group', { name: 'Container logs', exact: true })).toContainText(
+    entries[0]!.message,
+  );
+  const collapse = secondPanel.getByRole('button', { name: 'Collapse logs' });
+  await collapse.focus();
+  await page.keyboard.press('Enter');
+  await expect(secondPanel.getByRole('button', { name: 'Expand logs' })).toHaveAttribute('aria-expanded', 'false');
+  await expect(secondPanel.getByRole('group', { name: 'Timestamped container logs' })).toBeHidden();
+  await secondPanel.getByRole('button', { name: 'View container logs source' }).click();
+  await expect(secondPanel.getByRole('group', { name: 'Timestamped container logs' })).toBeVisible();
+  await panels.first().scrollIntoViewIfNeeded();
+  await page.screenshot({ path: `test-results/${info.project.name}-container-evidence.png`, fullPage: true });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   const sources = page.getByRole('region', { name: 'Observation sources' });
   const member = sources.getByRole('group', { name: 'migration-runner', exact: true });
   await member.getByRole('button', { name: /^Logs/ }).click();

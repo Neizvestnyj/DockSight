@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ApiError } from './api';
-import type { Answer, GroupTarget, TraceStep, Transport, TurnEvent } from './contracts';
+import type { Answer, GroupSelection, GroupTarget, TraceStep, Transport, TurnEvent } from './contracts';
 
 export interface TurnTrace {
   provider: string | null;
@@ -18,9 +18,10 @@ export interface Turn {
   query: string;
   group?: GroupTarget;
   exampleQuery?: true;
-  state: 'running' | 'completed' | 'failed' | 'stopped';
+  state: 'running' | 'completed' | 'failed' | 'stopped' | 'awaiting_selection';
   progress: ToolProgress[];
   answer?: Answer;
+  selection?: GroupSelection;
   error?: string;
   errorSource?: 'server' | 'client';
   code?: string;
@@ -118,8 +119,10 @@ export function useInvestigation(client: Transport, host: string, initial?: Answ
           }
           case 'answer.ready':
             return { ...common, answer: event.answer };
+          case 'clarification.required':
+            return { ...common, selection: event.selection };
           case 'turn.completed':
-            return { ...common, state: 'completed' };
+            return { ...common, state: turn.selection ? 'awaiting_selection' : 'completed' };
           case 'turn.failed':
             return { ...common, state: 'failed', error: event.message, errorSource: 'server', code: event.code };
           default:

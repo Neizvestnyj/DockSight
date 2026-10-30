@@ -8,6 +8,17 @@ export type MessageValues = Record<string, string | number>;
 /** Keep product copy separate from verbatim Docker, model, and server content. */
 const russian = {
   ...demoMessages,
+  'Group clarification': 'Уточнение группы',
+  'Choose a group to continue': 'Выберите группу, чтобы продолжить',
+  'Select the observed group you meant. The original question will continue with that exact scope.':
+    'Выберите нужную группу из найденных. Исходный вопрос продолжится для выбранной группы.',
+  awaiting_selection: 'Ожидает выбора группы',
+  'Requesting group selection': 'Уточнение выбора группы',
+  'Container evidence: {name}': 'Доказательства контейнера: {name}',
+  'State was not included in this answer.': 'Состояние не включено в этот ответ.',
+  'No log card was returned for this container.': 'Карточка логов для этого контейнера не получена.',
+  'Collapse logs': 'Свернуть логи',
+  'Expand logs': 'Развернуть логи',
   'Investigation scope': 'Область диагностики',
   Automatic: 'Автоматически',
   Scope: 'Область',
@@ -491,6 +502,7 @@ export type MessageKey = keyof typeof russian;
 export const diagnosticOperations: Record<string, MessageKey> = {
   resolve_target: 'Resolving diagnostic scope',
   inspect_group: 'Inspecting group members',
+  request_group_selection: 'Requesting group selection',
   list_containers: 'Reading container inventory',
   inspect_container: 'Inspecting container state',
   get_container_logs: 'Reading container logs',
@@ -506,6 +518,7 @@ export const diagnosticOperations: Record<string, MessageKey> = {
 export type Translator = (key: MessageKey, values?: MessageValues) => string;
 
 const englishOverrides: Partial<Record<MessageKey, string | Plurals>> = {
+  awaiting_selection: 'Awaiting group selection',
   actionRunning: 'running',
   '{count} lines returned': { one: '{count} line returned', other: '{count} lines returned' },
   '{count} references': { one: '{count} reference', other: '{count} references' },

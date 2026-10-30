@@ -1,6 +1,10 @@
+from collections.abc import Iterator
 from unittest.mock import MagicMock, patch
 
 import pytest
+from docker.errors import DockerException, NotFound
+from paramiko import SSHException
+from requests import RequestException
 
 from docksight.adapters.outbound.docker.hosts import HostConfig
 from docksight.adapters.outbound.docker.runtime import DockerRuntime
@@ -32,6 +36,59 @@ async def test_ping_rejects_unconfigured_hosts_and_false_engine_responses() -> N
     with patch("docksight.adapters.outbound.docker.runtime.connect", return_value=sdk):
         with pytest.raises(DockSightError, match="Docker ping failed"):
             await runtime.ping("local")
+    await runtime.close()
+
+
+@pytest.mark.parametrize(
+    ("failure", "code", "status"),
+    [
+        (NotFound("missing"), "container_not_found", 404),
+        (DockerException("disconnected"), "runtime_unavailable", 503),
+        (RequestException("connection lost"), "runtime_unavailable", 503),
+        (SSHException("connection lost"), "runtime_unavailable", 503),
+        (OSError("socket closed"), "runtime_unavailable", 503),
+    ],
+)
+async def test_failed_restart_translates_sdk_errors_without_retrying(
+    failure: Exception, code: str, status: int
+) -> None:
+    runtime = DockerRuntime((HostConfig(id="local"),), Redactor(()))
+    sdk = MagicMock()
+    sdk.api.restart.side_effect = failure
+    with patch("docksight.adapters.outbound.docker.runtime.connect", return_value=sdk):
+        with pytest.raises(DockSightError) as caught:
+            await runtime.restart("local", "a" * 64)
+    assert (caught.value.code, caught.value.status) == (code, status)
+    assert caught.value.__cause__ is failure
+    sdk.api.restart.assert_called_once_with("a" * 64, timeout=10)
+    sdk.close.assert_called_once()
+    await runtime.close()
+
+
+@pytest.mark.parametrize(("max_bytes", "truncated"), [(64, True), (256, False)])
+async def test_logs_redact_environment_secrets_bound_output_and_close_stream(max_bytes: int, truncated: bool) -> None:
+    runtime = DockerRuntime((HostConfig(id="local"),), Redactor(()))
+    sdk = MagicMock()
+    sdk.api.inspect_container.return_value = {"Config": {"Env": ["DB_PASSWORD=secret-value"]}}
+    stream = sdk.api.logs.return_value
+
+    def log_chunks() -> Iterator[bytes]:
+        """Reject further stream consumption once the byte budget has been exceeded."""
+        yield b"2026-01-01T00:00:00Z connected secret-value\n"
+        yield b"x" * 64 + b"\n"
+        if truncated:
+            raise AssertionError("Log stream was read beyond the byte budget")
+
+    stream.__iter__.return_value = log_chunks()
+    with patch("docksight.adapters.outbound.docker.runtime.connect", return_value=sdk):
+        result = await runtime.logs("local", "a" * 64, lines=2, max_bytes=max_bytes)
+    assert result.truncated is truncated
+    assert result.entries[0].message == "connected [REDACTED]"
+    assert result.entries[0].timestamp is not None
+    assert len(result.entries) == (1 if truncated else 2)
+    sdk.api.logs.assert_called_once_with("a" * 64, tail=2, timestamps=True, stream=True, follow=False)
+    stream.close.assert_called_once()
+    sdk.close.assert_called_once()
     await runtime.close()
 
 

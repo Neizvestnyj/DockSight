@@ -7,9 +7,10 @@ from pydantic import Field, TypeAdapter, ValidationError
 from docksight.application.diagnostics.context import EvidenceContext
 from docksight.application.diagnostics.groups import group_result, inspect_group
 from docksight.application.diagnostics.logs import fit_logs, log_data
+from docksight.application.diagnostics.scope import group_alternatives
 from docksight.application.ports.models import ToolCall, ToolSpec
 from docksight.application.ports.runtime import RuntimeReadPort
-from docksight.application.views.schemas import Contract, GroupTarget
+from docksight.application.views.schemas import Contract, GroupSelection, GroupTarget
 from docksight.domain.diagnostics import JsonObject, JsonValue
 from docksight.domain.errors import DockSightError
 from docksight.domain.runtime import ContainerSnapshot, StackSummary
@@ -47,6 +48,10 @@ _TOOLS: Final[dict[str, tuple[type[Contract], str]]] = {
     ),
     "list_stacks": (StackArgs, "Read Compose groups or Swarm service summaries on a manager"),
     "inspect_group": (GroupTarget, "Inspect a complete Compose project or Swarm stack and bounded local failure logs"),
+    "request_group_selection": (
+        GroupSelection,
+        "Ask the operator to choose between plausible observed group candidates",
+    ),
 }
 _SNAPSHOT: Final = TypeAdapter(ContainerSnapshot)
 _STACKS: Final = TypeAdapter(tuple[StackSummary, ...])
@@ -72,6 +77,8 @@ class DiagnosticTools:
         log_bytes: int = 65536,
         group: GroupTarget | None = None,
         inventory: tuple[ContainerSnapshot, ...] | None = None,
+        candidates: tuple[GroupTarget, ...] = (),
+        query: str = "",
     ) -> None:
         """Bind one host, evidence context, and bounded log read settings."""
         self.runtime = runtime
@@ -81,6 +88,8 @@ class DiagnosticTools:
         self.log_bytes = log_bytes
         self.group = group
         self.inventory = inventory
+        self.candidates = candidates
+        self.query = query
 
     async def execute(self, call: ToolCall) -> JsonObject:
         """Reject unknown tools or arguments before dispatching a bounded runtime read."""
@@ -91,6 +100,8 @@ class DiagnosticTools:
             args = definition[0].model_validate(call.arguments)
         except ValidationError as exc:
             raise DockSightError("invalid_tool_arguments", "Tool arguments do not match its schema", 422) from exc
+        if isinstance(args, GroupSelection):
+            return self._selection(args)
         if isinstance(args, GroupTarget):
             return await self._group(args)
         if isinstance(args, NoArgs):
@@ -107,6 +118,17 @@ class DiagnosticTools:
             return {"evidence_id": item.id, "data": item.data}
         assert isinstance(args, ContainerArgs)
         return await self._container(call.name, args.container_id)
+
+    def _selection(self, selection: GroupSelection) -> JsonObject:
+        """Resolve model-proposed options back to server-discovered identities without reading container evidence."""
+        if self.group or self.context.group:
+            raise DockSightError("scope_already_selected", "A group is already selected for this turn", 409)
+        if any(row not in self.candidates for row in selection.candidates):
+            raise DockSightError("invalid_group_candidate", "Selection requires an observed group on this host", 422)
+        self.context.selection = GroupSelection(
+            candidates=[row for row in self.candidates if row in selection.candidates]
+        )
+        return cast(JsonObject, self.context.selection.model_dump(mode="json"))
 
     async def _containers(self) -> JsonObject:
         """Record bounded inventory and report truncation when evidence capacity is reached."""
@@ -143,6 +165,9 @@ class DiagnosticTools:
             if (target.kind, target.name) != (current.kind, current.name):
                 raise DockSightError("resource_outside_group", "Resource is outside the selected group", 422)
             return group_result(self.context)
+        alternatives = group_alternatives(target, self.candidates, self.query)
+        if self.group is None and alternatives:
+            return self._selection(alternatives)
         return await inspect_group(self.runtime, self.context, self.host, target, self.log_lines, self.log_bytes)
 
     async def _container(self, tool: str, container_id: str) -> JsonObject:

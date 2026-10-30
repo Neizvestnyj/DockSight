@@ -100,7 +100,10 @@ class ViewAssembler:
 
 def _group_cards(proposed: list[WidgetProposal], context: EvidenceContext) -> list[WidgetProposal]:
     """Keep up to four collected problem containers visible even when a model omits their detail cards."""
-    cards = list(proposed)
+    cards: list[WidgetProposal] = []
+    for card in proposed:
+        if card not in cards:
+            cards.append(card)
     if context.group is None:
         return cards
     for member in context.group.logs[:4]:

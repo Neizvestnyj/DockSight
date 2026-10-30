@@ -18,6 +18,34 @@ for provider credentials and remote hosts. Never commit `.env` files, tokens, pr
 The installer preserves custom hooks and stops if an active hook and its `.legacy` backup both exist.
 Resolve that conflict without deleting needed hooks before reinstalling.
 
+### Make commands
+
+With GNU Make installed, run `make` or `make help` from the repository root to list the available commands.
+Make is optional; the direct commands in this guide remain available. Recipes work on Windows and Linux/macOS
+without Bash or Unix text utilities. Help requires only GNU Make; other targets require uv and/or npm.
+
+```sh
+make install
+make hooks
+make backend
+```
+
+Run `make frontend` in another terminal. Backend configuration and credentials follow the
+[quick start](README.md#connect-your-docker-environment).
+
+| Command | Behavior |
+|---------|----------|
+| `make check` | Run backend and frontend static checks |
+| `make check-backend` / `make check-frontend` | Check one side only |
+| `make test` | Run backend tests and frontend unit tests |
+| `make test-backend` / `make test-frontend` | Test one side only |
+| `make test-browser` | Build the frontend, then run browser tests; requires Chrome |
+| `make build` | Build the frontend |
+| `make verify` | Run all shared hooks, frontend static and unit checks, and browser tests with a fresh build |
+
+Targets run sequentially even with `make -j` to avoid concurrent frontend checks and builds.
+Docker and live-model tests remain separate opt-in commands described below.
+
 ## Making changes
 
 - Start branches from `master`; use `feature/<lowercase-kebab-case>` for features.
@@ -30,7 +58,9 @@ Resolve that conflict without deleting needed hooks before reinstalling.
   when boundaries change.
 - Before finishing a task or committing, update [CHANGELOG.md](CHANGELOG.md), including documentation and workflow changes.
   Keep entries brief and group related outcomes. Reuse the current version section for ongoing work on the same branch;
-  do not create a version per task or commit. Mark unfinished releases as `Unreleased`. Documentation alone needs no bump.
+  do not create a version per task or commit. Use the intended numeric version immediately, not `Unreleased`.
+  Choose PATCH for compatible fixes, MINOR for compatible additions, and MAJOR for breaking changes; keep the backend
+  package metadata and lockfile aligned. Documentation alone needs no bump.
 
 Keep Python and Markdown prose within 120 characters per line. Use UTF-8 without BOM and LF line endings.
 Write documentation, comments, docstrings, and runtime messages in English; product copy belongs in the English/Russian
@@ -68,8 +98,22 @@ uv run --project backend lint-imports --config backend/pyproject.toml
 uv run --project backend interrogate -c backend/pyproject.toml backend/src backend/tests examples scripts
 uv run --directory backend complexipy src tests ../examples ../scripts --plain --failed
 uv run --project backend pytest backend/tests --dup-fixtures
-uv run --project backend pytest backend/tests --dead-fixtures
+uv run --project backend pytest backend/tests --dead-fixtures --no-cov
 ```
+
+Backend test runs measure line and branch coverage for the entire `docksight` package, including modules not imported
+by tests. The terminal report lists missing lines and branches and hides fully covered files. Local hooks and CI use
+the same defaults and fail below 90% combined line and branch coverage. Opt-in external tests stay disabled by default.
+
+From the repository root, generate a browsable report with:
+
+```sh
+uv run --project backend pytest backend/tests --cov-report=html
+```
+
+Open `htmlcov/index.html`. Coverage data and HTML reports are ignored by Git. Use `--no-cov` for debugging or
+collection-only fixture checks and focused test runs. Use the full suite to check the 90% backend coverage requirement;
+individual Docker and image checks in CI use `--no-cov` because they do not represent the full suite.
 
 For frontend changes:
 
@@ -86,6 +130,8 @@ Set `PLAYWRIGHT_PORT` if the default preview port is occupied. Reports and failu
 ## Protecting master on GitHub
 
 In repository Settings, protect `master` with a branch rule requiring pull requests and the Backend and Frontend checks.
+Require `Backend checks` so coverage below 90% blocks merging. A failing workflow alone does not
+block merging unless its check is required by the branch rule.
 Apply the rule to administrators as well, disable force pushes, and prevent branch deletion. A solo maintainer can require
 pull requests without requiring another reviewer's approval. Local hooks can be bypassed; server-side protection enforces
 the policy for every client. CI runs after a push and cannot reject an already accepted update.
@@ -104,7 +150,7 @@ For Docker integration tests, start Docker and pull `python:3.12-alpine`, then r
 
 ```powershell
 $env:DOCKSIGHT_TEST_DOCKER = "1"
-uv run --project backend pytest backend/tests/integration -m docker
+uv run --project backend pytest backend/tests/integration -m docker --no-cov
 Remove-Item Env:DOCKSIGHT_TEST_DOCKER
 ```
 
@@ -115,6 +161,59 @@ and run `backend/tests/integration/test_image.py` with the Docker test flag enab
 Live model tests require `DOCKSIGHT_TEST_LIVE_MODEL=1` and a configured provider. Cloud tests make paid API calls;
 run them only with supplied credentials and explicit authorization. They are disabled in CI.
 Diagnostic cases live in `backend/tests/fixtures/diagnostics.json`.
+
+### Live Docker and local-model end-to-end suite
+
+This separate suite runs the real HTTP/SSE API, Docker adapter, and Ollama adapter. It creates a unique Compose project
+per case with pinned images and an internal network, publishes no container ports, and exposes only fixture resources
+to the model. Setup and cleanup are restricted to the run's ownership labels. The API uses a random in-memory token,
+an ephemeral loopback port, and isolated settings; it does not read your `.env` or call your running backend.
+
+Start Docker and local Ollama, install the desired models yourself, then run from the repository root:
+
+```sh
+uv run --project backend pytest backend/tests/integration/live_e2e --no-cov --live-e2e --e2e-model qwen3.5:9b --e2e-model ministral-3:8b-instruct-2512-q4_K_M -vv -s
+```
+
+Repeat `--e2e-model` to add models. `--e2e-model-url` accepts loopback endpoints only. Models are never downloaded by the
+suite; missing models fail preflight. Docker pulls missing pinned fixture images. Run cases sequentially, without xdist.
+Ollama aliases marked as remote/cloud models are rejected before fixture setup or generation.
+The workloads cover a refused database connection and invalid Grafana alerting configuration alongside healthy nginx,
+an actual memory-limited OOM kill, a crash loop, truncated logs, and an exit 137 without an OOM kill.
+
+Select a smaller matrix with repeated `--e2e-case` options: `compose-explicit`, `compose-chat`, `compose-typo`,
+`compose-spaced`, `compose-cyrillic`, `compose-ambiguous`, `oom`, `crash-loop`, `truncated-logs`, or `unknown-exit`.
+Both English and Russian run by default; repeat `--e2e-language en`
+or `--e2e-language ru` to restrict the matrix. Assertions check runtime facts, exact resource identities, card coverage,
+observed log content, and evidence references rather than exact model prose. A script-based language check covers each
+summary, cause, unresolved detail, and action recommendation independently, excluding quoted observed log messages,
+inline/fenced code, resource identifiers, and common fixture terms such as PostgreSQL and Telegram.
+This detects English/Russian mismatches;
+it does not grade translation quality or model reasoning.
+
+Group cases also create an independently failing peer Compose project. Spaced and Cyrillic questions must resolve to the
+target without including that peer. The ambiguous case gives both projects the same human-readable prefix: the first
+turn must ask for the two observed choices without individual evidence reads, and a second request selects the target.
+
+To include real browser flows, install frontend dependencies and Chrome, build the client, and add `--e2e-browser`:
+
+```sh
+npm --prefix frontend run build
+uv run --project backend pytest backend/tests/integration/live_e2e --no-cov --live-e2e --e2e-browser --e2e-model qwen3.5:9b --e2e-case compose-chat --e2e-case compose-explicit -vv -s
+```
+
+Chrome connects to the isolated API using its temporary token. These flows do not mock routes: they submit a free-form
+question or select the Compose group, then compare rendered cards and source navigation with the actual SSE answer.
+The ambiguous case chooses the observed group in the UI and checks that the original question and exact scope are sent.
+Free chat uses a different UI locale from the question to check that narrative follows the operator's question.
+Preview servers use separate loopback ports and are stopped after each case. Browser traces, videos, and automatic
+error-context snapshots are disabled to avoid recording the connection form. Public responses and screenshots remain
+in ignored test artifacts.
+The regular browser suite stays mocked and requires neither Docker nor a model.
+
+Public SSE responses and allowlisted fixture facts are saved under `.test-artifacts/live-e2e/` for successful and failed
+diagnoses. These files are ignored by Git and contain no API token or request headers. Ordinary test runs skip live
+diagnoses before any Docker/model access. The existing fake-runtime live-model tests remain separate.
 
 Remote read tests require `DOCKSIGHT_TEST_REMOTE=1`, `DOCKSIGHT_HOSTS_FILE`, and `DOCKSIGHT_TEST_HOST`.
 They must not mutate the remote environment.

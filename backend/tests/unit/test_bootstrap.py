@@ -1,4 +1,5 @@
 import json
+from importlib.metadata import version
 
 import httpx
 import pytest
@@ -62,7 +63,7 @@ def test_health_does_not_require_a_docker_connection() -> None:
     with TestClient(create_app(settings)) as client:
         response = client.get("/health/live")
         assert response.status_code == 200
-        assert response.json() == {"status": "ok", "version": "0.1.0"}
+        assert response.json() == {"status": "ok", "version": version("docksight")}
         assert response.headers["x-request-id"]
 
 

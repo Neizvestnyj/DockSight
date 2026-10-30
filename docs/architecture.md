@@ -28,6 +28,10 @@ selects the concrete implementations and injects them into use cases.
 executes confirmed commands. `Diagnostics` uses `ViewAssembler` to build typed responses. Ports are interfaces owned by
 the application and implemented by outbound adapters.
 
+Scope discovery supplies observed Compose/Swarm identities to the existing model tool loop. The application validates
+clarification choices against that catalog and ends the turn without diagnosis or session history when a choice is
+required. The client continues the original question with an explicit, freshly revalidated group in a separate session.
+
 `SystemStatus` checks a selected Docker host through `RuntimeReadPort.ping` and provider metadata through `ModelStatusPort`.
 It owns independent deadlines, public reason codes, and UTC check times. The metadata adapter owns provider-specific HTTP
 routes and credentials; the status use case never calls `ModelPort.complete` or changes diagnostic or action state.

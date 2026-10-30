@@ -156,9 +156,9 @@ test('shows the product, all widgets, and accessible evidence navigation', async
     .poll(() => logo.evaluate((element: HTMLImageElement) => element.complete && element.naturalWidth > 0))
     .toBe(true);
   await expect(page.getByRole('heading', { name: 'Container investigation' })).toBeVisible();
-  await expect(page.getByRole('region', { name: 'Container status', exact: true })).toBeVisible();
-  await expect(page.getByRole('region', { name: 'Container logs', exact: true })).toBeVisible();
-  await expect(page.getByRole('region', { name: 'Environment', exact: true })).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Container status', exact: true })).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Container logs', exact: true })).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Environment', exact: true })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Stack context', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'View log evidence' }).focus();
   await page.keyboard.press('Enter');
@@ -172,17 +172,24 @@ test('shows the product, all widgets, and accessible evidence navigation', async
 
 test('renders OOM, uncertainty, absent logs, and truncated data honestly', async ({ page }) => {
   await page.getByLabel('Demo scenario').selectOption('oom');
-  await expect(page.getByRole('region', { name: 'Container status', exact: true })).toContainText('137');
-  await expect(page.getByRole('region', { name: 'Container status', exact: true })).toContainText('Unavailable');
+  await expect(page.getByRole('group', { name: 'Container status', exact: true })).toContainText('137');
+  await expect(page.getByRole('group', { name: 'Container status', exact: true })).toContainText('Unavailable');
   await page.getByLabel('Demo scenario').selectOption('unconfirmed_sigkill');
   await expect(page.getByText('Cause uncertain', { exact: true })).toBeVisible();
   await expect(page.getByText(/No log entries returned/)).toBeVisible();
   await page.getByLabel('Demo scenario').selectOption('truncated_logs');
-  await expect(page.getByText('Truncated · partial evidence')).toBeVisible();
+  const logs = page.getByRole('group', { name: 'Container logs', exact: true });
+  const truncation = logs.getByText('Truncated · partial evidence', { exact: true });
+  await expect(truncation).toBeVisible();
+  await logs.getByRole('button', { name: 'Collapse logs', exact: true }).click();
+  await expect(logs.getByText('3 lines returned · Truncated · partial evidence', { exact: true })).toBeVisible();
+  await expect(logs.getByRole('group', { name: 'Timestamped container logs', exact: true })).toBeHidden();
+  await logs.getByRole('button', { name: 'Expand logs', exact: true }).click();
+  await expect(truncation).toBeVisible();
   await page.getByLabel('Demo scenario').selectOption('dependency');
   await expect(page.getByRole('region', { name: 'Model explanation' })).toContainText('unavailable dependency');
   await page.getByLabel('Demo scenario').selectOption('running');
-  await expect(page.getByRole('region', { name: 'Container status', exact: true })).toContainText('0.0%');
+  await expect(page.getByRole('group', { name: 'Container status', exact: true })).toContainText('0.0%');
 });
 
 test('keeps retained demo controls honest across separate host sessions', async ({ page }) => {
@@ -247,7 +254,7 @@ test('keeps large logs bounded and keyboard-scrollable', async ({ page }) => {
   await connectApi(page);
   await page.getByRole('textbox', { name: 'Ask DockSight', exact: true }).fill('Read the log sample');
   await page.getByRole('button', { name: 'Investigate', exact: true }).click();
-  const logs = page.getByRole('region', { name: 'Timestamped container logs' });
+  const logs = page.getByRole('group', { name: 'Timestamped container logs' });
   await expect(logs.locator('.log-line')).toHaveCount(200);
   await logs.focus();
   await page.keyboard.press('End');
@@ -372,7 +379,7 @@ test('handles long untrusted logs, container names and environment as text', asy
   await connectApi(page);
   await page.getByRole('textbox', { name: 'Ask DockSight', exact: true }).fill('Inspect the long container name.');
   await page.getByRole('button', { name: 'Investigate', exact: true }).click();
-  await expect(page.getByRole('region', { name: 'Container logs', exact: true })).toContainText('<img src=x');
+  await expect(page.getByRole('group', { name: 'Container logs', exact: true })).toContainText('<img src=x');
   expect(await page.locator('.logs img').count()).toBe(0);
   expect(await page.locator('.env-list script').count()).toBe(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);

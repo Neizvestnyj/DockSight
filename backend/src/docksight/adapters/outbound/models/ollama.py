@@ -1,3 +1,4 @@
+import json
 from collections.abc import Sequence
 from typing import Any
 from uuid import uuid4
@@ -105,6 +106,13 @@ class OllamaModel:
         }
         if schema is not None:
             body["format"] = schema
+            body["messages"].append(
+                {
+                    "role": "user",
+                    "content": "Return only JSON matching this schema. Follow its field descriptions. "
+                    "Keep the response language requested earlier.\n" + json.dumps(schema, ensure_ascii=False),
+                }
+            )
         if tools:
             body["tools"] = [
                 {
