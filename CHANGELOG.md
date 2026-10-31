@@ -6,10 +6,12 @@ This file records notable changes to DockSight. The format follows
 
 Dates below record each version's merge into `master` in Europe/Moscow. Version links show the corresponding changes.
 
-## 0.5.0
+## [0.5.0] - 2026-10-31
 
 ### Fixed
 
+- The Docker diagnosis/restart regression uses precollected container and log evidence and reports stream failures
+  directly instead of failing with a missing-answer lookup.
 - Provider/model selection initializes on Python 3.12 and 3.13 by deferring type-only settings annotations.
   Backend CI uses Node.js 24 actions and a fixed Ubuntu image; a compatibility failure leaves the other version running.
 - Language selection sizes to its localized options so the Russian system-language label remains fully visible.

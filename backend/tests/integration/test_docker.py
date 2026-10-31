@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 from docksight.adapters.outbound.docker.hosts import HostConfig
 from docksight.adapters.outbound.docker.runtime import DockerRuntime
-from docksight.application.ports.models import ModelReply, ToolCall
+from docksight.application.ports.models import ModelReply
 from docksight.application.redaction import Redactor
 from docksight.bootstrap import Settings, build_components
 from docksight.main import create_app
@@ -70,6 +70,7 @@ async def test_real_container_reads_redaction_and_mutations() -> None:
 
 
 def test_real_docker_http_diagnosis_and_confirmed_restart() -> None:
+    """Diagnose automatically collected exact-container evidence before confirming a real restart."""
     owner = str(uuid4())
     client = docker.from_env()
     program = "\n".join(
@@ -96,25 +97,13 @@ def test_real_docker_http_diagnosis_and_confirmed_restart() -> None:
         proposal = {
             "summary": "Initial startup failed; retry initialization",
             "uncertain": False,
-            "evidence_ids": ["e1", "e3"],
+            "evidence_ids": ["e1", "e2"],
             "widgets": [
                 {"widget_type": "container_status", "evidence_ids": ["e1"]},
-                {"widget_type": "log_anomalies", "evidence_ids": ["e3"]},
+                {"widget_type": "log_anomalies", "evidence_ids": ["e2"]},
             ],
         }
-        model = ScriptedModel(
-            [
-                ModelReply(
-                    "",
-                    (
-                        ToolCall("c1", "inspect_container", {"container_id": container.id}),
-                        ToolCall("c2", "get_container_logs", {"container_id": container.id}),
-                    ),
-                ),
-                ModelReply("Ready"),
-                ModelReply(json.dumps(proposal)),
-            ]
-        )
+        model = ScriptedModel([ModelReply("Ready"), ModelReply(json.dumps(proposal))])
         settings = Settings(api_token="integration-test-token-at-least-24-chars", _env_file=None)
         headers = {"Authorization": f"Bearer {settings.api_token.get_secret_value()}"}
         with TestClient(create_app(settings, build_components(settings, model=model))) as api:
@@ -123,9 +112,15 @@ def test_real_docker_http_diagnosis_and_confirmed_restart() -> None:
                 headers=headers,
                 json={"host": "local", "query": f"Inspect {container.id}"},
             )
+            assert response.status_code == 200
             events = [json.loads(line[6:]) for line in response.text.splitlines() if line.startswith("data: ")]
+            assert events[-1]["type"] == "turn.completed", events[-1]
             answer = next(event["answer"] for event in events if event["type"] == "answer.ready")
             assert answer["widgets"][0]["snapshot"]["state"] == "exited"
+            logs = next(widget for widget in answer["widgets"] if widget["widget_type"] == "log_anomalies")
+            assert logs["container_id"] == container.id
+            assert logs["evidence_ids"] == ["e2"]
+            assert any("DemoInitializationError" in entry["message"] for entry in logs["logs"]["entries"])
             action_id = answer["widgets"][0]["actions"][0]["id"]
             result = api.post(
                 f"/api/v1/actions/{action_id}/execute",
