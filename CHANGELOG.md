@@ -10,6 +10,8 @@ Dates below record each version's merge into `master` in Europe/Moscow. Version 
 
 ### Fixed
 
+- Provider/model selection initializes on Python 3.12 and 3.13 by deferring type-only settings annotations.
+  Backend CI uses Node.js 24 actions and a fixed Ubuntu image; a compatibility failure leaves the other version running.
 - Language selection sizes to its localized options so the Russian system-language label remains fully visible.
 - Dialogs close on an outside click while preserving drafts and prepared actions. Clicks inside and text selection
   remain within the dialog without dismissing it.
