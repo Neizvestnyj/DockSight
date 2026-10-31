@@ -1,7 +1,7 @@
 import asyncio
 from collections.abc import Callable, Iterator
 from contextlib import closing
-from typing import Any, Literal, Protocol, cast
+from typing import Any, Final, Literal, Protocol, cast
 
 from docker.errors import DockerException, NotFound
 from paramiko import SSHException
@@ -19,6 +19,8 @@ from docksight.domain.runtime import (
     ResourceMetrics,
     StackSummary,
 )
+
+MAX_LOG_SCAN_BYTES: Final = 8 * 1024 * 1024
 
 
 class LogStream(Protocol):
@@ -159,7 +161,7 @@ class DockerRuntime:
         """Read finite logs with container-specific secret redaction."""
 
         def read(client: DockerAPI) -> LogBatch:
-            """Stop log consumption at the byte boundary and close the stream."""
+            """Consume a finite Docker tail within a hard scan limit, then sanitize before clipping output."""
             raw = client.inspect_container(container_id)
             config: dict[str, Any] = raw.get("Config") or {}
             environment: list[str] = config.get("Env") or []
@@ -168,9 +170,13 @@ class DockerRuntime:
             chunks = bytearray()
             with closing(stream):
                 for chunk in stream:
-                    chunks.extend(chunk[: max_bytes + 1 - len(chunks)])
-                    if len(chunks) > max_bytes:
-                        break
+                    if len(chunks) + len(chunk) > MAX_LOG_SCAN_BYTES:
+                        raise DockSightError(
+                            "log_read_limit",
+                            "Docker log tail exceeded the bounded read limit; latest output is unknown",
+                            502,
+                        )
+                    chunks.extend(chunk)
 
             return parse_logs(bytes(chunks), redactor, max_bytes, lines)
 

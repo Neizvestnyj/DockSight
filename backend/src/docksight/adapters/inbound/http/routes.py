@@ -1,7 +1,7 @@
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, Query, Request, Response
+from fastapi import APIRouter, Depends, Header, Path, Query, Request, Response
 from fastapi.security import HTTPBearer
 
 from docksight.adapters.inbound.http.schemas import (
@@ -14,11 +14,14 @@ from docksight.adapters.inbound.http.schemas import (
 from docksight.adapters.inbound.http.streaming import EventResponse
 from docksight.application.actions import Actions
 from docksight.application.diagnostics.use_case import Diagnostics
+from docksight.application.model_catalog import CatalogView, ModelSelection, ProvidersView
+from docksight.application.model_choices import ModelChoices
 from docksight.application.queries import RuntimeQueries
 from docksight.application.system_status import SystemStatus, SystemStatusView
 from docksight.application.views.registry import widget_schema
 from docksight.application.views.schemas import ActionView
 from docksight.domain.diagnostics import JsonObject
+from docksight.domain.errors import DockSightError
 from docksight.domain.runtime import (
     ContainerSnapshot,
     Host,
@@ -29,16 +32,49 @@ from docksight.domain.runtime import (
 
 
 def build_router(
-    queries: RuntimeQueries, diagnostics: Diagnostics, actions: Actions, status: SystemStatus
+    queries: RuntimeQueries,
+    diagnostics: Diagnostics,
+    actions: Actions,
+    status: SystemStatus,
+    models: ModelChoices | None = None,
 ) -> APIRouter:
     """Bind versioned HTTP endpoints to application use cases."""
     router = APIRouter(prefix="/api/v1", dependencies=[Depends(HTTPBearer())])
 
     @router.get("/system/status", tags=["System"])
-    async def system_status(request: Request, response: Response, host: HostId | None = None) -> SystemStatusView:
+    async def system_status(
+        request: Request,
+        response: Response,
+        host: HostId | None = None,
+        provider: Annotated[str | None, Query(min_length=1, max_length=32)] = None,
+        model: Annotated[str | None, Query(min_length=1, max_length=256)] = None,
+    ) -> SystemStatusView:
         """Check configured dependencies without generation or exposing private endpoints."""
         response.headers["Cache-Control"] = "no-store"
-        return await status.check(host, request.state.request_id)
+        if host is not None:
+            queries.check_host(host)
+        selected = await _selected_status(status, models, provider, model)
+        return await selected.check(host, request.state.request_id)
+
+    @router.get("/model-providers", tags=["Models"])
+    async def model_providers(response: Response) -> ProvidersView:
+        """Expose safe configured providers without fetching their model catalogs."""
+        response.headers["Cache-Control"] = "no-store"
+        if models is None:
+            raise DockSightError("provider_not_configured", "Model selection is not configured", 503)
+        return models.providers
+
+    @router.get("/model-providers/{provider}/models", tags=["Models"])
+    async def provider_models(
+        provider: Annotated[str, Path(min_length=1, max_length=32)],
+        response: Response,
+        refresh: bool = False,
+    ) -> CatalogView:
+        """Return bounded lazy metadata with explicit freshness and failure state."""
+        response.headers["Cache-Control"] = "no-store"
+        if models is None:
+            raise DockSightError("provider_not_configured", "Model selection is not configured", 503)
+        return await models.catalog(provider, refresh)
 
     @router.get("/hosts", tags=["Runtime"])
     async def hosts() -> tuple[Host, ...]:
@@ -108,10 +144,45 @@ def build_router(
     async def chat(turn: ChatTurn, request: Request) -> EventResponse:
         """Stream a bounded diagnostic turn as server-sent events."""
         queries.check_host(turn.host)
-        source = diagnostics.stream(
-            "operator", turn.host, turn.query, str(turn.session_id) if turn.session_id else None, turn.group
+        selected = await _selected_diagnostics(diagnostics, models, turn.model_selection)
+        source = selected.stream(
+            "operator",
+            turn.host,
+            turn.query,
+            str(turn.session_id) if turn.session_id else None,
+            turn.group,
+            turn.container_id,
         )
 
         return EventResponse(source, request.state.request_id)
 
     return router
+
+
+async def _selected_status(
+    status: SystemStatus,
+    models: ModelChoices | None,
+    provider: str | None,
+    model: str | None,
+) -> SystemStatus:
+    """Validate paired optional query fields before resolving a selection-specific probe."""
+    if provider is None and model is None:
+        return status
+    if provider is None or model is None or models is None:
+        raise DockSightError("invalid_model_selection", "Provider and model must be selected together", 422)
+    _, probe = await models.select(ModelSelection(provider=provider, model=model))
+    return status.with_model(probe, provider, model)
+
+
+async def _selected_diagnostics(
+    diagnostics: Diagnostics,
+    models: ModelChoices | None,
+    selection: ModelSelection | None,
+) -> Diagnostics:
+    """Resolve an optional model before SSE starts while retaining default injected adapters."""
+    if selection is None:
+        return diagnostics
+    if models is None:
+        raise DockSightError("provider_not_configured", "Model selection is not configured", 422)
+    model, _ = await models.select(selection)
+    return diagnostics.with_model(model, (selection.provider, selection.model))

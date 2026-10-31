@@ -24,6 +24,58 @@ test.beforeEach(async ({ page }) => {
   await page.goto('/');
 });
 
+for (const name of ['vintoria-infra-grafana-1', `monitoring-${'grafana-'.repeat(18)}1`]) {
+  test(`names log-only evidence without a status card (${name.length} characters)`, async ({ page }, info) => {
+    const original = demoAnswer('dependency', 'test-host');
+    const answer = {
+      ...original,
+      summary: 'Grafana failed while reading its alerting configuration.',
+      widgets: original.widgets.filter((row) => row.widget_type === 'log_anomalies'),
+      evidence: original.evidence.filter((row) => row.kind === 'logs').map((row) => ({ ...row, container_name: name })),
+    };
+    await page.route('**/api/v1/**', (route) => {
+      const path = new URL(route.request().url()).pathname;
+      if (path.endsWith('/hosts')) return route.fulfill({ json: [{ id: 'test-host', name: 'Test host' }] });
+      if (path.endsWith('/system/status')) return route.fulfill({ json: demoSystemStatus('test-host') });
+      if (path.endsWith('/containers'))
+        return route.fulfill({ json: [demoContainer(2, 'test-host', '2026-10-30T10:00:00Z')] });
+      expect(path).toBe('/api/v1/chat/turns');
+      return route.fulfill({
+        contentType: 'text/event-stream',
+        body:
+          sse('turn.started', { session_id: '62f9fcc6-583e-4b3d-9678-10ffea8ae671' }) +
+          sse('answer.ready', { answer }) +
+          sse('turn.completed'),
+      });
+    });
+    await connectApi(page);
+    await page.getByRole('textbox').fill('Show the Grafana logs.');
+    await page.getByRole('button', { name: 'Investigate', exact: true }).click();
+    const panel = page.getByRole('region', { name: `Container evidence: ${name}`, exact: true });
+    await expect(panel.getByRole('heading', { name, exact: true })).toBeVisible();
+    await expect(panel).toContainText('State was not included in this answer.');
+    await expect(panel.getByRole('group', { name: 'Container status', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('group', { name, exact: true })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await panel.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: `test-results/${info.project.name}-log-only-${name.length}.png` });
+  });
+}
+
+for (const label of ['Diagnostics', 'New investigation']) {
+  test(`${label} opens an empty investigation and focuses its input`, async ({ page }) => {
+    await page.getByRole('textbox').fill('Previous investigation draft');
+    if ((page.viewportSize()?.width ?? 1440) <= 1100)
+      await page.getByRole('button', { name: 'Open host and containers' }).click();
+    const navigation = page.locator('.workspace-nav:visible');
+    await navigation.getByRole('button', { name: label, exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Start an investigation' })).toBeVisible();
+    await expect(page.getByRole('textbox')).toHaveValue('');
+    await expect(page.getByRole('textbox')).toBeFocused();
+    await expect(page.locator('.session-turns')).toHaveCount(0);
+  });
+}
+
 test('retains host choice through a discovery retry and restores focus after the workspace remounts', async ({
   page,
 }) => {
@@ -232,8 +284,8 @@ test('keeps large logs bounded and keyboard-scrollable', async ({ page }) => {
   const answer = demoAnswer('crash_loop', 'test-host');
   const data = {
     entries: Array.from({ length: 200 }, (_, i) => ({
-      timestamp: null,
-      message: `Browser test log sample ${i + 1}: application output`,
+      timestamp: new Date(Date.parse('2026-10-27T23:58:20Z') + i * 1000).toISOString(),
+      message: i === 199 ? 'database system is shut down' : `Browser test log sample ${i + 1}: application output`,
     })),
     truncated: true,
   };
@@ -256,8 +308,11 @@ test('keeps large logs bounded and keyboard-scrollable', async ({ page }) => {
   await page.getByRole('button', { name: 'Investigate', exact: true }).click();
   const logs = page.getByRole('group', { name: 'Timestamped container logs' });
   await expect(logs.locator('.log-line')).toHaveCount(200);
+  await expect(page.locator('.log-window')).toContainText('2026-10-27 23:58:20 UTC');
+  await expect(page.locator('.log-window')).toContainText('2026-10-28 00:01:39 UTC');
   await logs.focus();
   await page.keyboard.press('End');
+  await expect(logs.getByText('database system is shut down')).toBeInViewport();
   expect(await logs.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });

@@ -7,12 +7,35 @@ export type MessageValues = Record<string, string | number>;
 
 /** Keep product copy separate from verbatim Docker, model, and server content. */
 const russian = {
+  Retry: 'Повторить',
+  'Choose model': 'Выбрать модель',
+  'Model selection is available after this answer finishes.': 'Модель можно сменить после завершения ответа.',
+  'Demo models · no provider requests': 'Демо-модели · без запросов к провайдерам',
+  'Could not load providers. Your current model is unchanged.':
+    'Не удалось загрузить провайдеров. Текущая модель сохранена.',
+  'Loading providers…': 'Загружаем провайдеров…',
+  'Not configured': 'Не настроен',
+  'Search models': 'Поиск моделей',
+  'Refresh models': 'Обновить модели',
+  'Could not refresh the catalog. Showing previously received or configured models.':
+    'Не удалось обновить список. Показаны ранее полученные модели и модели из настроек.',
+  'Refreshing models…': 'Обновляем модели…',
+  'Loading models…': 'Загружаем модели…',
+  'Models: {count}': 'Моделей: {count}',
+  Models: 'Модели',
+  'No matching models.': 'Подходящих моделей нет.',
+  'No models were returned.': 'Список моделей пуст.',
+  'Applies to the next question. History is preserved.': 'Применяется к следующему вопросу. История сохраняется.',
   ...demoMessages,
   'Group clarification': 'Уточнение группы',
+  'Resource clarification': 'Уточнение ресурса',
+  'Which resource do you mean?': 'Какой ресурс вы имеете в виду?',
+  'This name matches different resources. Choose one to continue the same question.':
+    'Это имя совпадает у разных ресурсов. Выберите нужный, чтобы продолжить тот же вопрос.',
   'Choose a group to continue': 'Выберите группу, чтобы продолжить',
   'Select the observed group you meant. The original question will continue with that exact scope.':
     'Выберите нужную группу из найденных. Исходный вопрос продолжится для выбранной группы.',
-  awaiting_selection: 'Ожидает выбора группы',
+  awaiting_selection: 'Ожидает выбора ресурса',
   'Requesting group selection': 'Уточнение выбора группы',
   'Container evidence: {name}': 'Доказательства контейнера: {name}',
   'State was not included in this answer.': 'Состояние не включено в этот ответ.',
@@ -352,6 +375,10 @@ const russian = {
   'Diagnostic interruption': 'Прерывание диагностики',
   'Diagnosis stopped': 'Диагностика остановлена',
   'Diagnosis could not finish': 'Не удалось завершить диагностику',
+  'The configured model was not found or is unavailable to this API key. Check the model name and your access.':
+    'Настроенная модель не найдена или недоступна вашему API-ключу. Проверьте название модели и доступ к ней.',
+  'Model request rejected; verify model capabilities and configuration':
+    'Провайдер отклонил запрос к модели. Проверьте её возможности и настройки.',
   'Collection was cancelled. Submit again when you are ready.':
     'Сбор данных отменён. Когда будете готовы, отправьте запрос снова.',
   ' · Request {id}': ' · Запрос {id}',
@@ -412,12 +439,15 @@ const russian = {
   },
   'Truncated · partial evidence': 'Логи обрезаны · данные неполные',
   'Within requested bounds': 'В пределах запроса',
+  'Latest log window · oldest first': 'Последние логи · сначала более ранние',
+  'No complete log lines fit within the limit. The log is incomplete.':
+    'В лимит не поместились целые строки логов. Данные неполные.',
   'Timestamped container logs': 'Логи контейнера с временными метками',
   'No time': 'Нет времени',
   'No log entries returned. An empty log does not establish the cause.':
     'Строки логов не получены. Пустые логи не объясняют причину.',
   'Docker logs · sanitized text': 'Логи Docker · очищенный текст',
-  'Earlier or later output may be missing': 'Начало или конец вывода могут отсутствовать',
+  'Earlier output was omitted': 'Более ранний вывод опущен',
   'Docker Compose': 'Docker Compose',
   'Docker Swarm': 'Docker Swarm',
   '{running} of {total} running': 'Работают {running} из {total}',
@@ -499,6 +529,12 @@ const russian = {
 } as const;
 
 export type MessageKey = keyof typeof russian;
+export const diagnosticErrors: Readonly<Partial<Record<string, MessageKey>>> = {
+  model_unavailable:
+    'The configured model was not found or is unavailable to this API key. Check the model name and your access.',
+  model_not_supported: 'Model request rejected; verify model capabilities and configuration',
+};
+
 export const diagnosticOperations: Record<string, MessageKey> = {
   resolve_target: 'Resolving diagnostic scope',
   inspect_group: 'Inspecting group members',
@@ -518,7 +554,7 @@ export const diagnosticOperations: Record<string, MessageKey> = {
 export type Translator = (key: MessageKey, values?: MessageValues) => string;
 
 const englishOverrides: Partial<Record<MessageKey, string | Plurals>> = {
-  awaiting_selection: 'Awaiting group selection',
+  awaiting_selection: 'Awaiting resource selection',
   actionRunning: 'running',
   '{count} lines returned': { one: '{count} line returned', other: '{count} lines returned' },
   '{count} references': { one: '{count} reference', other: '{count} references' },
@@ -560,4 +596,9 @@ export function translate(locale: Locale, key: MessageKey, values: MessageValues
 export function stateLabel(state: string, t: Translator, action = false): string {
   if (action && state === 'running') return t('actionRunning');
   return Object.hasOwn(russian, state) ? t(state as MessageKey) : state;
+}
+
+/** Name the observed resource namespace consistently in clarification, scope and history. */
+export function targetKindLabel(kind: 'container' | 'compose' | 'swarm', t: Translator): string {
+  return t(kind === 'container' ? 'Container' : kind === 'compose' ? 'Docker Compose' : 'Docker Swarm');
 }

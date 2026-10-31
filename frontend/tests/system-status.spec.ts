@@ -16,7 +16,7 @@ test('checks model metadata independently and retains facts and timestamps throu
   page,
 }, info) => {
   const snapshot = demoContainer(0, 'local', '2026-10-27T12:00:00Z');
-  const healthy = demoSystemStatus('local');
+  const healthy = { ...demoSystemStatus('local'), provider: 'gemini', model: 'gemini-2.5-flash-lite' };
   const initial = {
     ...healthy,
     model_check: { ...healthy.model_check, state: 'unavailable', code: 'model_not_found' },
@@ -71,7 +71,7 @@ test('checks model metadata independently and retains facts and timestamps throu
   const dialog = page.getByRole('dialog', { name: 'System status' });
   await expect(dialog.getByRole('region', { name: 'Docker', exact: true })).toContainText('Available');
   await expect(dialog.getByRole('region', { name: 'Model', exact: true })).toContainText('Unavailable');
-  await expect(dialog).toContainText('Ollama · qwen3.5:9b');
+  await expect(dialog).toContainText('Gemini · gemini-2.5-flash-lite');
   await expect(dialog).toContainText('Tools and structured output have not been tested.');
   const stamp = await dialog
     .getByRole('region', { name: 'Model', exact: true })

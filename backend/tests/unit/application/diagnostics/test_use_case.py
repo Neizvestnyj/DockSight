@@ -8,8 +8,54 @@ from docksight.adapters.outbound.memory.sessions import MemorySessions
 from docksight.application.diagnostics.use_case import Diagnostics
 from docksight.application.ports.models import ModelReply, ToolCall
 from docksight.application.redaction import Redactor
-from docksight.domain.runtime import ContainerSnapshot, StackSummary
+from docksight.application.views.schemas import GroupTarget
+from docksight.domain.errors import DockSightError
+from docksight.domain.runtime import ContainerSnapshot, LogBatch, StackSummary
 from tests.fakes import DiscoveryRuntime, FakeRuntime, ScriptedModel
+
+
+async def test_selected_diagnoses_share_global_capacity_and_preserve_turn_identity() -> None:
+    """Two provider selections cannot bypass the original shared concurrency budget."""
+    default = ScriptedModel([])
+    first_model, second_model = ScriptedModel([]), ScriptedModel([])
+    diagnostics = Diagnostics(FakeRuntime(), default, MemorySessions(), Redactor(), concurrency=1)
+    first = diagnostics.with_model(first_model, ("openai", "first"))
+    second = diagnostics.with_model(second_model, ("anthropic", "second"))
+    stream = first.stream("alice", "local", "Inspect")
+    try:
+        assert (await anext(stream))["type"] == "turn.started"
+        trace = await anext(stream)
+        assert trace["type"] == "trace.started"
+        assert trace["provider"] == "openai" and trace["model"] == "first"
+        rejected = [event async for event in second.stream("alice", "local", "Inspect")]
+        assert rejected[-1]["type"] == "turn.failed" and rejected[-1]["code"] == "turn_capacity"
+        assert diagnostics.model is default
+        assert second_model.requests == []
+        assert first.sessions is second.sessions is diagnostics.sessions
+        assert first.assembler is second.assembler is diagnostics.assembler
+        assert first.redactor is second.redactor is diagnostics.redactor
+    finally:
+        await stream.aclose()
+
+
+async def test_switching_model_preserves_session_history_and_trace() -> None:
+    """A later selection uses the existing session while earlier events retain their original model identity."""
+    answer = '{"summary":"Insufficient evidence","uncertain":true,"evidence_ids":[],"widgets":[]}'
+    first_model = ScriptedModel([ModelReply("Ready"), ModelReply(answer)])
+    second_model = ScriptedModel([ModelReply("Ready"), ModelReply(answer)])
+    diagnostics = Diagnostics(
+        FakeRuntime(), first_model, MemorySessions(), Redactor(), model_identity=("ollama", "one")
+    )
+    first = [event async for event in diagnostics.stream("alice", "local", "Inspect")]
+    session_id = next(event["session_id"] for event in first if event["type"] == "turn.started")
+    second = diagnostics.with_model(second_model, ("openai", "two"))
+    events = [event async for event in second.stream("alice", "local", "What next?", session_id)]
+    assert events[-1]["type"] == "turn.completed"
+    history = second_model.requests[0][0]
+    assert any(message.role == "user" and message.content == "Inspect" for message in history)
+    assert any(message.role == "assistant" and message.content == "Insufficient evidence" for message in history)
+    assert next(event for event in first if event["type"] == "trace.started")["model"] == "one"
+    assert next(event for event in events if event["type"] == "trace.started")["model"] == "two"
 
 
 def proposal(evidence_id: str = "e1") -> str:
@@ -22,6 +68,45 @@ def proposal(evidence_id: str = "e1") -> str:
             "widgets": [{"widget_type": "container_status", "evidence_ids": [evidence_id], "action": None}],
         }
     )
+
+
+async def test_selected_container_retains_its_status_when_prefetched_logs_are_unavailable() -> None:
+    class MissingLogs(FakeRuntime):
+        """Expose an inspectable container whose log driver cannot return a batch."""
+
+        async def logs(self, host: str, container_id: str, lines: int, max_bytes: int) -> LogBatch:
+            """Fail only the log read after the runtime snapshot has been recorded."""
+            raise DockSightError("logs_unavailable", "Container logs are unavailable", 502)
+
+    model = ScriptedModel([ModelReply("Ready"), ModelReply(proposal())])
+    events = [
+        event
+        async for event in Diagnostics(MissingLogs(), model, MemorySessions(), Redactor()).stream(
+            "alice",
+            "local",
+            "Check container worker",
+        )
+    ]
+    assert events[-1]["type"] == "turn.completed"
+    answer = next(event["answer"] for event in events if event["type"] == "answer.ready")
+    assert answer["widgets"][0]["snapshot"]["id"] == "a" * 64
+    assert any(
+        event["type"] == "tool.completed" and event["tool"] == "get_container_logs" and not event["ok"]
+        for event in events
+    )
+
+
+async def test_conflicting_explicit_targets_fail_before_model_or_tool_execution() -> None:
+    model = ScriptedModel([])
+    events = [
+        event
+        async for event in Diagnostics(FakeRuntime(), model, MemorySessions(), Redactor()).stream(
+            "alice", "local", "Inspect", group=GroupTarget(kind="compose", name="infra"), container_id="a" * 64
+        )
+    ]
+    assert len(events) == 1
+    assert events[0]["type"] == "turn.failed" and events[0]["code"] == "invalid_target"
+    assert not model.requests
 
 
 async def test_observed_namespace_collision_requests_selection_without_calling_the_model() -> None:
@@ -129,6 +214,30 @@ async def test_unknown_evidence_gets_one_repair_attempt() -> None:
     assert len(model.requests) == 3
     assert events[-1]["type"] == "turn.failed"
     assert not any(event["type"] == "answer.ready" for event in events)
+
+
+async def test_final_and_repair_schemas_restrict_log_quotations_to_fresh_evidence_ids() -> None:
+    quoted = 'invalid input value for enum login_provider: "unknown"'
+    model = ScriptedModel([ModelReply("Ready"), ModelReply(proposal(quoted)), ModelReply(proposal())])
+    runtime = FakeRuntime()
+    service = Diagnostics(runtime, model, MemorySessions(), Redactor())
+    with patch.object(model, "complete", wraps=model.complete) as complete:
+        events = [
+            event
+            async for event in service.stream(
+                "alice", "local", "Could the database be stopped?", container_id=runtime.item.id
+            )
+        ]
+    assert events[-1]["type"] == "turn.completed"
+    assert any(event["type"] == "trace.step" and event["step"]["code"] == "invalid_evidence" for event in events)
+    for call in complete.call_args_list[1:]:
+        schema = call.kwargs["schema"]
+        assert schema["properties"]["evidence_ids"]["items"]["enum"] == ["e1", "e2"]
+        assert schema["$defs"]["WidgetProposal"]["properties"]["evidence_ids"]["items"]["enum"] == ["e1", "e2"]
+        assert schema["$defs"]["CauseAssessment"]["properties"]["evidence_ids"]["items"]["enum"] == ["e1", "e2"]
+    answer = next(event["answer"] for event in events if event["type"] == "answer.ready")
+    assert {row["id"] for row in answer["evidence"]} == {"e1", "e2"}
+    assert not runtime.mutations
 
 
 def repair_feedback(model: ScriptedModel) -> dict[str, object]:

@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Final, Literal
 
-from docksight.application.views.schemas import GroupInspection, GroupSelection
+from docksight.application.views.schemas import GroupInspection, TargetSelection
 from docksight.domain.diagnostics import EvidenceRef, JsonObject
 from docksight.domain.errors import DockSightError
 from docksight.domain.runtime import ContainerSnapshot, LogBatch, StackSummary
@@ -21,7 +21,8 @@ class EvidenceContext:
     stacks: dict[str, tuple[StackSummary, ...]] = field(default_factory=dict[str, tuple[StackSummary, ...]])
     used_bytes: int = 0
     group: GroupInspection | None = None
-    selection: GroupSelection | None = None
+    selection: TargetSelection | None = None
+    container_id: str | None = None
 
     @property
     def remaining_bytes(self) -> int:
@@ -42,7 +43,15 @@ class EvidenceContext:
         if len(self.evidence) >= 64 or size > self.remaining_bytes:
             raise DockSightError("evidence_limit", "Evidence budget reached; finalize with collected evidence", 409)
         evidence_id = f"e{len(self.evidence) + 1}"
-        item = EvidenceRef(evidence_id, kind, host, snapshot.id if snapshot else None, datetime.now(UTC), data)
+        item = EvidenceRef(
+            evidence_id,
+            kind,
+            host,
+            snapshot.id if snapshot else None,
+            datetime.now(UTC),
+            data,
+            container_name=snapshot.name if snapshot else None,
+        )
         self.evidence[evidence_id] = item
         self.used_bytes += size
         if snapshot is not None:

@@ -7,12 +7,79 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from docksight.adapters.outbound.models.anthropic import AnthropicModel
+from docksight.adapters.outbound.models.compatible import CompatibleModel
 from docksight.adapters.outbound.models.openai import OpenAIModel
 from docksight.adapters.outbound.models.status import ModelAvailability
 from docksight.application.ports.models import ModelMessage
 from docksight.bootstrap import Settings, build_components
 from docksight.main import create_app
 from tests.fakes import FakeRuntime
+
+
+def test_standard_provider_keys_load_from_dotenv(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Dotenv credentials configure secondary providers without relying on process environment mutation."""
+    for name in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY", "DOCKSIGHT_OPENAI_API_KEY"):
+        monkeypatch.delenv(name, raising=False)
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "OPENAI_API_KEY=openai-dotenv\nANTHROPIC_API_KEY=anthropic-dotenv\nGEMINI_API_KEY=gemini-dotenv\n"
+    )
+    settings = Settings(api_token="test-token-at-least-24-chars", _env_file=env_file)
+    assert settings.openai_api_key.get_secret_value() == "openai-dotenv"
+    assert settings.anthropic_api_key.get_secret_value() == "anthropic-dotenv"
+    assert settings.gemini_api_key.get_secret_value() == "gemini-dotenv"
+
+
+@pytest.mark.parametrize("models", [{"unknown": ["x"]}, {"openai": [""]}, {"openai": ["x"] * 101}])
+def test_fallback_configuration_rejects_unknown_or_unbounded_ids(models: dict[str, list[str]]) -> None:
+    with pytest.raises(ValidationError):
+        Settings(api_token="test-token-at-least-24-chars", provider_fallback_models=models, _env_file=None)
+
+
+@pytest.mark.parametrize("explicit_key", [None, "explicit-gemini-key"])
+@pytest.mark.parametrize("base_url", [None, "https://gateway.example.test/gemini/"])
+async def test_gemini_wiring_uses_google_credentials_and_endpoint(
+    monkeypatch: pytest.MonkeyPatch, explicit_key: str | None, base_url: str | None
+) -> None:
+    """Keep Gemini generation and metadata on the same origin without OpenAI environment defaults."""
+    monkeypatch.setenv("GEMINI_API_KEY", "environment-gemini-key")
+    monkeypatch.setenv("OPENAI_API_KEY", "unrelated-openai-key")
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://unrelated.example.test/")
+    settings = Settings(
+        api_token="test-token-at-least-24-chars",
+        provider="gemini",
+        model="gemini-2.5-flash-lite",
+        model_api_key=explicit_key,
+        model_base_url=base_url,
+        _env_file=None,
+    )
+    runtime = FakeRuntime()
+    components = build_components(settings, reader=runtime, writer=runtime)
+    try:
+        generation, probe = components.diagnostics.model, components.status.probe
+        assert isinstance(generation, CompatibleModel)
+        assert isinstance(probe, ModelAvailability)
+        assert str(generation.client.base_url) == (
+            base_url or "https://generativelanguage.googleapis.com/v1beta/openai/"
+        )
+        assert str(probe.client.base_url) == str(generation.client.base_url)
+        assert probe.provider == "gemini"
+        assert probe.client.headers["Authorization"] == f"Bearer {explicit_key or 'environment-gemini-key'}"
+        assert generation.model == "gemini-2.5-flash-lite"
+        assert generation.require_tool_signatures
+        assert generation.client.max_retries == 0
+    finally:
+        await components.close()
+
+
+def test_gemini_requires_its_own_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("DOCKSIGHT_MODEL_API_KEY", raising=False)
+    monkeypatch.setenv("OPENAI_API_KEY", "unrelated-openai-key")
+    settings = Settings(api_token="test-token-at-least-24-chars", provider="gemini", _env_file=None)
+    runtime = FakeRuntime()
+    with pytest.raises(ValueError, match="GEMINI_API_KEY"):
+        build_components(settings, reader=runtime, writer=runtime)
 
 
 @pytest.mark.parametrize("provider,variable", [("openai", "OPENAI_BASE_URL"), ("anthropic", "ANTHROPIC_BASE_URL")])

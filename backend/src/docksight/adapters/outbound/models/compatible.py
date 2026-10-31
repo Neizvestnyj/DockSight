@@ -17,24 +17,35 @@ from docksight.domain.diagnostics import JsonObject
 from docksight.domain.errors import DockSightError
 
 
-def _messages(messages: Sequence[ModelMessage]) -> list[dict[str, Any]]:
-    """Encode Chat Completions messages with their original tool-call identifiers."""
+def _messages(messages: Sequence[ModelMessage], require_tool_signatures: bool) -> list[dict[str, Any]]:
+    """Replay provider messages intact, including opaque Gemini tool signatures."""
     rows: list[dict[str, Any]] = []
     for message in messages:
-        row: dict[str, Any] = {"role": message.role, "content": message.content}
-        if message.tool_calls:
-            row["tool_calls"] = [
-                {
-                    "id": call.id,
-                    "type": "function",
-                    "function": {"name": call.name, "arguments": json.dumps(call.arguments)},
-                }
-                for call in message.tool_calls
-            ]
-        if message.role == "tool":
-            row["tool_call_id"] = message.tool_call_id
-        rows.append(row)
+        if message.role == "assistant" and message.native:
+            rows.extend(message.native)
+            continue
+        rows.append(_message(message, require_tool_signatures))
     return rows
+
+
+def _message(message: ModelMessage, require_tool_signatures: bool) -> dict[str, Any]:
+    """Encode normalized history and mark server-created tool calls for Gemini replay."""
+    row: dict[str, Any] = {"role": message.role, "content": message.content}
+    if message.tool_calls:
+        calls: list[dict[str, Any]] = [
+            {
+                "id": call.id,
+                "type": "function",
+                "function": {"name": call.name, "arguments": json.dumps(call.arguments)},
+            }
+            for call in message.tool_calls
+        ]
+        if require_tool_signatures:
+            calls[0]["extra_content"] = {"google": {"thought_signature": "skip_thought_signature_validator"}}
+        row["tool_calls"] = calls
+    if message.role == "tool":
+        row["tool_call_id"] = message.tool_call_id
+    return row
 
 
 def _reply(response: ChatCompletion, tool_output: bool) -> ModelReply:
@@ -58,6 +69,7 @@ def _reply(response: ChatCompletion, tool_output: bool) -> ModelReply:
     return ModelReply(
         content,
         calls,
+        native=(parse_object(item.message.model_dump(include={"role", "content", "tool_calls"}, exclude_none=True)),),
         input_tokens=response.usage.prompt_tokens if response.usage else None,
         output_tokens=response.usage.completion_tokens if response.usage else None,
     )
@@ -72,12 +84,15 @@ class CompatibleModel:
         model: str,
         max_tokens: int = 4096,
         structured_output: Literal["native", "tool"] = "native",
+        *,
+        require_tool_signatures: bool = False,
     ) -> None:
         """Bind the compatible endpoint and its structured-output capability."""
         self.client = client
         self.model = model
         self.max_tokens = max_tokens
         self.structured_output = structured_output
+        self.require_tool_signatures = require_tool_signatures
 
     def _output_options(
         self, tools: Sequence[ToolSpec], schema: JsonObject | None
@@ -131,7 +146,7 @@ class CompatibleModel:
         try:
             response = await self.client.chat.completions.create(
                 model=self.model,
-                messages=cast(list[ChatCompletionMessageParam], _messages(messages)),
+                messages=cast(list[ChatCompletionMessageParam], _messages(messages, self.require_tool_signatures)),
                 tools=cast(list[ChatCompletionToolUnionParam], functions),
                 tool_choice=cast(ChatCompletionToolChoiceOptionParam, choice),
                 response_format=cast(ResponseFormatJSONSchema | ResponseFormatText, response_format),

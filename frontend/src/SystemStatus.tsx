@@ -19,7 +19,6 @@ export function SystemStatusTrigger({ status, open }: { status: Availability; op
   const rows = [
     ['API', status.api.state],
     ['Docker', status.data?.docker.state ?? 'not_checked'],
-    ['Model', status.data?.model_check.state ?? 'not_checked'],
   ] as const;
   const worst = rows.some(([, state]) => state === 'unavailable')
     ? 'unavailable'
@@ -79,6 +78,7 @@ export function SystemStatusPanel({
     ollama: 'Ollama',
     openai: 'OpenAI',
     anthropic: 'Anthropic',
+    gemini: 'Gemini',
     compatible: 'OpenAI-compatible',
   } as const;
   const dependency = (check?: DependencyCheck) => ({

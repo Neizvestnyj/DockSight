@@ -30,11 +30,18 @@ the application and implemented by outbound adapters.
 
 Scope discovery supplies observed Compose/Swarm identities to the existing model tool loop. The application validates
 clarification choices against that catalog and ends the turn without diagnosis or session history when a choice is
-required. The client continues the original question with an explicit, freshly revalidated group in a separate session.
+required. Container/group name collisions include the observed container's exact identity in those choices. The client
+continues the same question and session with an explicit group or container ID, revalidated against fresh Docker data.
 
 `SystemStatus` checks a selected Docker host through `RuntimeReadPort.ping` and provider metadata through `ModelStatusPort`.
 It owns independent deadlines, public reason codes, and UTC check times. The metadata adapter owns provider-specific HTTP
 routes and credentials; the status use case never calls `ModelPort.complete` or changes diagnostic or action state.
+
+`ModelChoices` validates optional provider/model selections against server-owned catalogs. `CatalogCache` coalesces
+metadata work and owns freshness, failure cooldown, and cancellation. Provider-specific pagination and HTTP handling
+remain in the catalog adapter. The composition root lazily creates one reusable connection per configured provider;
+transient selected adapters share those clients. Selected `Diagnostics` instances share sessions, redaction, action
+assembly, and the existing concurrency semaphore, without changing another turn's model or trace identity.
 
 - `domain` uses the standard library only. It owns values and business rules.
 - `application` owns use cases, ports, tool orchestration, and output contracts. Pydantic may validate application DTOs
@@ -69,13 +76,15 @@ backend/src/docksight/
     actions.py           # Prepare and execute workflows
     queries.py           # Host/container read workflows
     system_status.py     # Bounded dependency checks and safe public results
+    model_catalog.py     # Public model metadata and bounded in-memory refreshes
+    model_choices.py     # Validated provider/model selection
     events.py            # Transport-neutral turn events
     views/               # Widget proposals, registry, server assembly
   adapters/
     inbound/http/        # Routes, HTTP schemas, auth, error mapping, SSE
     outbound/
       docker/            # SDK connections, mapping, port implementations
-      models/            # Ollama, OpenAI, Anthropic, compatible API adapters
+      models/            # Ollama, OpenAI, Anthropic, Gemini/compatible API adapters
       memory/            # Bounded session and action stores
       audit.py           # Structured action audit output
 ```

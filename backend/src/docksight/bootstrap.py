@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 import httpx
 from anthropic import AsyncAnthropic
 from openai import AsyncOpenAI
-from pydantic import Field, SecretStr, field_validator
+from pydantic import AliasChoices, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from docksight.adapters.outbound.audit import JsonAudit
@@ -23,6 +23,7 @@ from docksight.adapters.outbound.models.openai import OpenAIModel
 from docksight.adapters.outbound.models.status import ModelAvailability
 from docksight.application.actions import Actions
 from docksight.application.diagnostics.use_case import Diagnostics
+from docksight.application.model_choices import ModelChoices
 from docksight.application.ports.models import ModelPort
 from docksight.application.ports.runtime import RuntimeMutationPort, RuntimeReadPort
 from docksight.application.ports.status import ModelStatusPort
@@ -36,14 +37,33 @@ class Settings(BaseSettings):
     """Validate environment-based credentials, provider selection, and resource budgets."""
 
     model_config = SettingsConfigDict(
-        env_prefix="DOCKSIGHT_", env_file=".env", extra="ignore", hide_input_in_errors=True
+        env_prefix="DOCKSIGHT_", env_file=".env", extra="ignore", hide_input_in_errors=True, populate_by_name=True
     )
 
     api_token: SecretStr = SecretStr("")
-    provider: Literal["ollama", "openai", "anthropic", "compatible"] = "ollama"
+    provider: Literal["ollama", "openai", "anthropic", "compatible", "gemini"] = "ollama"
     model: str = Field(default="qwen3.5:9b", min_length=1, max_length=256)
     model_base_url: str | None = None
     model_api_key: SecretStr | None = None
+    openai_api_key: SecretStr | None = Field(
+        default=None, validation_alias=AliasChoices("DOCKSIGHT_OPENAI_API_KEY", "OPENAI_API_KEY")
+    )
+    anthropic_api_key: SecretStr | None = Field(
+        default=None, validation_alias=AliasChoices("DOCKSIGHT_ANTHROPIC_API_KEY", "ANTHROPIC_API_KEY")
+    )
+    gemini_api_key: SecretStr | None = Field(
+        default=None, validation_alias=AliasChoices("DOCKSIGHT_GEMINI_API_KEY", "GEMINI_API_KEY")
+    )
+    compatible_api_key: SecretStr | None = None
+    ollama_api_key: SecretStr | None = None
+    openai_base_url: str | None = None
+    anthropic_base_url: str | None = None
+    gemini_base_url: str | None = None
+    compatible_base_url: str | None = None
+    ollama_base_url: str | None = None
+    compatible_structured_output: Literal["native", "tool"] = "native"
+    gemini_structured_output: Literal["native", "tool"] = "native"
+    provider_fallback_models: dict[str, tuple[str, ...]] = Field(default_factory=dict, max_length=5)
     hosts_file: str | None = None
     cors_origins: tuple[str, ...] = ()
     env_allowlist: tuple[str, ...] = ()
@@ -74,7 +94,25 @@ class Settings(BaseSettings):
 
         return value
 
-    @field_validator("model_base_url")
+    @field_validator("provider_fallback_models")
+    @classmethod
+    def validate_fallbacks(cls, value: dict[str, tuple[str, ...]]) -> dict[str, tuple[str, ...]]:
+        """Bound explicit provider aliases independently of external metadata availability."""
+        for provider, models in value.items():
+            if provider not in {"ollama", "openai", "anthropic", "gemini", "compatible"}:
+                raise ValueError("Unknown fallback provider")
+            if len(models) > 100 or any(not model or len(model) > 256 for model in models):
+                raise ValueError("Provider fallback models require at most 100 bounded model IDs")
+        return value
+
+    @field_validator(
+        "model_base_url",
+        "openai_base_url",
+        "anthropic_base_url",
+        "gemini_base_url",
+        "compatible_base_url",
+        "ollama_base_url",
+    )
     @classmethod
     def validate_model_url(cls, value: str | None) -> str | None:
         """Reject provider URLs with credentials, queries, fragments, or invalid schemes."""
@@ -102,10 +140,13 @@ class Components:
     actions: Actions
     status: SystemStatus
     closers: list[Callable[[], Awaitable[None]]]
+    models: ModelChoices | None = None
 
     async def close(self) -> None:
         """Drain action work before closing adapters in reverse construction order."""
         await self.actions.close()
+        if self.models is not None:
+            await self.models.close()
         for close in reversed(self.closers):
             await close()
 
@@ -123,11 +164,14 @@ def _provider_key(settings: Settings) -> str | None:
     """Resolve explicit credentials before provider-specific environment defaults."""
     if settings.model_api_key and settings.model_api_key.get_secret_value():
         return settings.model_api_key.get_secret_value()
-    if settings.provider == "anthropic":
-        return os.getenv("ANTHROPIC_API_KEY")
-    if settings.provider in {"openai", "compatible"}:
-        return os.getenv("OPENAI_API_KEY")
-    return None
+    configured_secret = getattr(settings, f"{settings.provider}_api_key")
+    if configured_secret:
+        return configured_secret.get_secret_value()
+    provider = "openai" if settings.provider == "compatible" else settings.provider
+    secret = getattr(settings, f"{provider}_api_key")
+    if secret:
+        return secret.get_secret_value()
+    return os.getenv(f"{provider.upper()}_API_KEY") if provider != "ollama" else None
 
 
 def _openai_model(
@@ -139,10 +183,15 @@ def _openai_model(
             raise ValueError("Compatible providers require DOCKSIGHT_MODEL_BASE_URL")
         key = key or "local-no-key"
     if not key:
+        if settings.provider == "gemini":
+            raise ValueError("Configure DOCKSIGHT_MODEL_API_KEY or GEMINI_API_KEY")
         raise ValueError("Configure DOCKSIGHT_MODEL_API_KEY or OPENAI_API_KEY")
+    base_url = settings.model_base_url
+    if settings.provider == "gemini":
+        base_url = base_url or "https://generativelanguage.googleapis.com/v1beta/openai/"
     client = AsyncOpenAI(
         api_key=key,
-        base_url=settings.model_base_url,
+        base_url=base_url,
         timeout=settings.model_timeout,
         max_retries=0,
     )
@@ -150,7 +199,13 @@ def _openai_model(
     probe = _build_probe(settings, str(client.base_url), {**client.auth_headers, **client.default_headers}, closers)
     if settings.provider == "openai":
         return OpenAIModel(client, settings.model, settings.model_max_tokens), probe
-    return CompatibleModel(client, settings.model, settings.model_max_tokens, settings.model_structured_output), probe
+    return CompatibleModel(
+        client,
+        settings.model,
+        settings.model_max_tokens,
+        settings.model_structured_output,
+        require_tool_signatures=settings.provider == "gemini",
+    ), probe
 
 
 def _build_model(
@@ -159,8 +214,8 @@ def _build_model(
     """Validate model capabilities and register the selected client's cleanup."""
     if not settings.model_supports_tools:
         raise ValueError("Docker diagnostics require a model with tool-calling support")
-    if settings.model_structured_output == "tool" and settings.provider != "compatible":
-        raise ValueError("Tool-based structured output requires provider=compatible")
+    if settings.model_structured_output == "tool" and settings.provider not in {"compatible", "gemini"}:
+        raise ValueError("Tool-based structured output requires provider=compatible or provider=gemini")
     if settings.provider == "ollama":
         client = httpx.AsyncClient(
             base_url=settings.model_base_url or "http://127.0.0.1:11434",
@@ -220,6 +275,20 @@ def build_components(
     configure_logging()
     effective_key = _provider_key(settings)
     secrets = (settings.api_token.get_secret_value(),)
+    secrets = (
+        *secrets,
+        *(
+            value.get_secret_value()
+            for value in (
+                settings.openai_api_key,
+                settings.anthropic_api_key,
+                settings.gemini_api_key,
+                settings.compatible_api_key,
+                settings.ollama_api_key,
+            )
+            if value and value.get_secret_value()
+        ),
+    )
     if effective_key:
         secrets = (*secrets, effective_key)
     redactor = Redactor(secrets)
@@ -262,10 +331,14 @@ def build_components(
         model_identity=(settings.provider, settings.model),
     )
 
+    from docksight.bootstrap_models import build_choices
+
+    choices = build_choices(settings, model, model_probe, closers, _build_model)
     return Components(
         RuntimeQueries(reader, settings.log_lines, settings.log_bytes),
         diagnostics,
         actions,
         SystemStatus(reader, model_probe, settings.provider, settings.model),
         closers,
+        choices,
     )

@@ -10,7 +10,7 @@ from docksight.application.diagnostics.logs import fit_logs, log_data
 from docksight.application.diagnostics.scope import group_alternatives
 from docksight.application.ports.models import ToolCall, ToolSpec
 from docksight.application.ports.runtime import RuntimeReadPort
-from docksight.application.views.schemas import Contract, GroupSelection, GroupTarget
+from docksight.application.views.schemas import Contract, GroupSelection, GroupTarget, TargetSelection
 from docksight.domain.diagnostics import JsonObject, JsonValue
 from docksight.domain.errors import DockSightError
 from docksight.domain.runtime import ContainerSnapshot, StackSummary
@@ -79,6 +79,7 @@ class DiagnosticTools:
         inventory: tuple[ContainerSnapshot, ...] | None = None,
         candidates: tuple[GroupTarget, ...] = (),
         query: str = "",
+        container_id: str | None = None,
     ) -> None:
         """Bind one host, evidence context, and bounded log read settings."""
         self.runtime = runtime
@@ -90,6 +91,7 @@ class DiagnosticTools:
         self.inventory = inventory
         self.candidates = candidates
         self.query = query
+        self.context.container_id = container_id
 
     async def execute(self, call: ToolCall) -> JsonObject:
         """Reject unknown tools or arguments before dispatching a bounded runtime read."""
@@ -100,6 +102,7 @@ class DiagnosticTools:
             args = definition[0].model_validate(call.arguments)
         except ValidationError as exc:
             raise DockSightError("invalid_tool_arguments", "Tool arguments do not match its schema", 422) from exc
+        self._require_container_scope(args)
         if isinstance(args, GroupSelection):
             return self._selection(args)
         if isinstance(args, GroupTarget):
@@ -119,13 +122,18 @@ class DiagnosticTools:
         assert isinstance(args, ContainerArgs)
         return await self._container(call.name, args.container_id)
 
+    def _require_container_scope(self, args: Contract) -> None:
+        """Prevent model proposals from replacing an explicitly selected container with a previous group."""
+        if self.context.container_id and isinstance(args, (GroupTarget, GroupSelection, StackArgs)):
+            raise DockSightError("resource_outside_container", "Resource is outside the selected container", 422)
+
     def _selection(self, selection: GroupSelection) -> JsonObject:
         """Resolve model-proposed options back to server-discovered identities without reading container evidence."""
         if self.group or self.context.group:
             raise DockSightError("scope_already_selected", "A group is already selected for this turn", 409)
         if any(row not in self.candidates for row in selection.candidates):
             raise DockSightError("invalid_group_candidate", "Selection requires an observed group on this host", 422)
-        self.context.selection = GroupSelection(
+        self.context.selection = TargetSelection(
             candidates=[row for row in self.candidates if row in selection.candidates]
         )
         return cast(JsonObject, self.context.selection.model_dump(mode="json"))
@@ -152,6 +160,8 @@ class DiagnosticTools:
     async def _inventory(self) -> tuple[ContainerSnapshot, ...]:
         """Reuse this turn's discovery snapshots and keep any group read scoped before applying limits."""
         rows = self.inventory if self.inventory is not None else await self.runtime.containers(self.host)
+        if self.context.container_id:
+            rows = tuple(row for row in rows if row.id == self.context.container_id)
         if self.context.group:
             rows = tuple(row for row in rows if row.id in self.context.group.summary.container_ids)
         return rows
@@ -208,11 +218,17 @@ class DiagnosticTools:
     async def _resource_id(self, value: str) -> str:
         """Accept full Docker IDs or discovered exact names, never arbitrary ID prefixes or evidence aliases."""
         if re.fullmatch(r"[a-f0-9]{64}", value):
-            return value
+            return self._bound_id(value)
         rows = self.inventory if self.inventory is not None else await self.runtime.containers(self.host)
         target = next((row for row in rows if row.name == value), None)
         if target:
-            return target.id
+            return self._bound_id(target.id)
         raise DockSightError(
             "invalid_resource_reference", "Use data.id or the exact container name, not evidence_id", 422
         )
+
+    def _bound_id(self, container_id: str) -> str:
+        """Validate exact container scope before a model-selected runtime read can occur."""
+        if self.context.container_id and container_id != self.context.container_id:
+            raise DockSightError("resource_outside_container", "Resource is outside the selected container", 422)
+        return container_id

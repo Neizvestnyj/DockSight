@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { ModelCatalog, ModelProviders, ModelSelection, ProviderId } from './model-contracts';
 
 export const metricsSchema = z.object({
   cpu_percent: z.number().nullable(),
@@ -42,15 +43,18 @@ export const groupTargetSchema = z.strictObject({
     .max(128)
     .regex(/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/),
 });
-export const groupSelectionSchema = z.strictObject({
+export const containerTargetSchema = z.strictObject({
+  kind: z.literal('container'),
+  id: z.string().regex(/^[a-f0-9]{64}$/),
+  name: z.string().min(1).max(256),
+});
+export const diagnosticTargetSchema = z.union([groupTargetSchema, containerTargetSchema]);
+export const targetSelectionSchema = z.strictObject({
   candidates: z
-    .array(groupTargetSchema)
+    .array(diagnosticTargetSchema)
     .min(1)
     .max(32)
-    .refine(
-      (rows) => new Set(rows.map((row) => `${row.kind}:${row.name}`)).size === rows.length,
-      'Group candidates must be distinct.',
-    ),
+    .refine((rows) => new Set(rows.map(targetKey)).size === rows.length, 'Target candidates must be distinct.'),
 });
 export const stackSchema = z.object({
   name: z.string(),
@@ -148,6 +152,7 @@ export const evidenceSchema = z.object({
   host: z.string(),
   container_id: z.string().nullable(),
   observed_at: z.string(),
+  container_name: z.string().nullish(),
   data: z.record(z.string(), z.unknown()),
 });
 export const answerSchema = z
@@ -218,7 +223,7 @@ export const eventSchema = z.discriminatedUnion('type', [
   z.object({ ...envelope, type: z.literal('tool.started'), tool: z.string() }),
   z.object({ ...envelope, type: z.literal('tool.completed'), tool: z.string(), ok: z.boolean() }),
   z.object({ ...envelope, type: z.literal('answer.ready'), answer: answerSchema }),
-  z.strictObject({ ...envelope, type: z.literal('clarification.required'), selection: groupSelectionSchema }),
+  z.strictObject({ ...envelope, type: z.literal('clarification.required'), selection: targetSelectionSchema }),
   z.object({ ...envelope, type: z.literal('turn.completed') }),
   z.object({
     ...envelope,
@@ -257,7 +262,7 @@ const dependencyCheckSchema = z.strictObject({
 export const systemStatusSchema = z.strictObject({
   schema_version: z.literal(1),
   host: z.string().max(64).nullable(),
-  provider: z.enum(['ollama', 'openai', 'anthropic', 'compatible']),
+  provider: z.enum(['ollama', 'openai', 'anthropic', 'compatible', 'gemini']),
   model: z.string().min(1).max(256),
   docker: dependencyCheckSchema,
   provider_check: dependencyCheckSchema,
@@ -276,7 +281,8 @@ export type Widget = z.infer<typeof widgetSchema>;
 export type Evidence = z.infer<typeof evidenceSchema>;
 export type Answer = z.infer<typeof answerSchema>;
 export type GroupTarget = z.infer<typeof groupTargetSchema>;
-export type GroupSelection = z.infer<typeof groupSelectionSchema>;
+export type DiagnosticTarget = z.infer<typeof diagnosticTargetSchema>;
+export type TargetSelection = z.infer<typeof targetSelectionSchema>;
 export type Stack = z.infer<typeof stackSchema>;
 export type GroupInspection = z.infer<typeof groupInspectionSchema>;
 export type TurnEvent = z.infer<typeof eventSchema>;
@@ -286,9 +292,18 @@ export interface TurnInput {
   query: string;
   session_id?: string;
   group?: GroupTarget;
+  container_id?: string;
+  model_selection?: ModelSelection;
+}
+
+/** Compare containers by exact identity and groups by their observed namespace and name. */
+export function targetKey(target: DiagnosticTarget): string {
+  return `${target.kind}:${target.kind === 'container' ? target.id : target.name}`;
 }
 export interface Transport {
-  systemStatus(host: string | null, signal: AbortSignal): Promise<SystemStatus>;
+  systemStatus(host: string | null, signal: AbortSignal, selection?: ModelSelection): Promise<SystemStatus>;
+  modelProviders(signal: AbortSignal): Promise<ModelProviders>;
+  models(provider: ProviderId, signal: AbortSignal, refresh?: boolean): Promise<ModelCatalog>;
   hosts(signal: AbortSignal): Promise<Host[]>;
   containers(host: string, signal: AbortSignal): Promise<Container[]>;
   stacks(host: string, kind: GroupTarget['kind'], signal: AbortSignal): Promise<Stack[]>;

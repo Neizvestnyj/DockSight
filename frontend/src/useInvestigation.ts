@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { ApiError } from './api';
-import type { Answer, GroupSelection, GroupTarget, TraceStep, Transport, TurnEvent } from './contracts';
+import { targetKey } from './contracts';
+import type { Answer, DiagnosticTarget, TargetSelection, TraceStep, Transport, TurnEvent } from './contracts';
+import type { ModelSelection } from './model-contracts';
 
 export interface TurnTrace {
   provider: string | null;
@@ -16,12 +18,12 @@ export interface ToolProgress {
 export interface Turn {
   id: string;
   query: string;
-  group?: GroupTarget;
+  target?: DiagnosticTarget;
   exampleQuery?: true;
   state: 'running' | 'completed' | 'failed' | 'stopped' | 'awaiting_selection';
   progress: ToolProgress[];
   answer?: Answer;
-  selection?: GroupSelection;
+  selection?: TargetSelection;
   error?: string;
   errorSource?: 'server' | 'client';
   code?: string;
@@ -31,7 +33,7 @@ export interface Turn {
 }
 
 /** Manage ephemeral turns and protect the workspace from late events after cancellation. */
-export function useInvestigation(client: Transport, host: string, initial?: Answer) {
+export function useInvestigation(client: Transport, host: string, initial?: Answer, selection?: ModelSelection) {
   const [turns, setTurns] = useState<Turn[]>(() =>
     initial
       ? [
@@ -134,24 +136,44 @@ export function useInvestigation(client: Transport, host: string, initial?: Answ
       session.current = undefined;
   }
 
-  /** Start exactly one manual request; retries are explicit operator submissions. */
-  async function run(query: string, freshSession = false, group?: GroupTarget) {
-    if (active.current || !query.trim() || !host) return;
-    const nextScope = group ? `${group.kind}:${group.name}` : '';
-    if (freshSession || nextScope !== scope.current) session.current = undefined;
-    scope.current = nextScope;
+  /** Add a new operator question or explicit manual retry to this tab's history. */
+  function run(query: string, freshSession = false, target?: DiagnosticTarget) {
+    return requestTurn({ id: crypto.randomUUID(), query, target }, freshSession);
+  }
+
+  /** Continue an unresolved question with a server-observed identity, preserving this host's conversation. */
+  async function chooseTarget(id: string, target: DiagnosticTarget) {
+    const turn = turns.find((row) => row.id === id && row.state === 'awaiting_selection');
+    const observed = turn?.selection?.candidates.find((row) => targetKey(row) === targetKey(target));
+    if (!turn || !observed) return;
+    await requestTurn({ id, query: turn.query, target: observed }, false, true);
+  }
+
+  /** Run one transport attempt, replacing a pending choice without mixing its old events or trace into the diagnosis. */
+  async function requestTurn(input: Pick<Turn, 'id' | 'query' | 'target'>, freshSession = false, continuing = false) {
+    const { id, target } = input;
+    const query = input.query.trim();
+    if (active.current || !query || !host) return;
+    const nextScope = target ? targetKey(target) : '';
+    if (freshSession || (!continuing && nextScope !== scope.current)) session.current = undefined;
+    if (!continuing) scope.current = nextScope;
     const controller = new AbortController();
     active.current = controller;
     const current = ++generation.current;
-    const id = crypto.randomUUID();
-    setTurns((previous) => [...previous, { id, query: query.trim(), group, state: 'running', progress: [] }]);
+    const next: Turn = { id, query, target, state: 'running', progress: [] };
+    setTurns((previous) =>
+      previous.some((turn) => turn.id === id)
+        ? previous.map((turn) => (turn.id === id ? next : turn))
+        : [...previous, next],
+    );
     try {
       await client.diagnose(
         {
           host,
-          query: query.trim(),
-          ...(group ? { group } : {}),
+          query,
+          ...(target?.kind === 'container' ? { container_id: target.id } : target ? { group: target } : {}),
           ...(session.current ? { session_id: session.current } : {}),
+          ...(selection ? { model_selection: selection } : {}),
         },
         (event) => {
           if (generation.current === current) receive(id, event);
@@ -180,5 +202,5 @@ export function useInvestigation(client: Transport, host: string, initial?: Answ
     }
   }
 
-  return { turns, running, run, stop, clear, example };
+  return { turns, running, run, chooseTarget, stop, clear, example };
 }

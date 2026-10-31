@@ -13,6 +13,7 @@ import {
   type Action,
 } from './contracts';
 import { consumeEvents } from './stream';
+import { modelCatalogSchema, modelProvidersSchema, type ModelSelection, type ProviderId } from './model-contracts';
 
 /** Keep safe server error codes available for session-expiry recovery. */
 export class ApiError extends Error {
@@ -73,11 +74,16 @@ export class ApiClient implements Transport {
   }
 
   /** Read metadata availability only, preserving authentication failures and exact host scope. */
-  async systemStatus(host: string | null, signal: AbortSignal) {
-    const query = host ? `?${new URLSearchParams({ host })}` : '';
+  async systemStatus(host: string | null, signal: AbortSignal, selection?: ModelSelection) {
+    const params = new URLSearchParams({ ...(host ? { host } : {}), ...selection });
+    const query = params.size ? `?${params}` : '';
     const response = await this.send(`/system/status${query}`, { signal }, 8000);
     const result = systemStatusSchema.safeParse(await response.json().catch(() => null));
-    if (!result.success || result.data.host !== host)
+    if (
+      !result.success ||
+      result.data.host !== host ||
+      (selection && (result.data.provider !== selection.provider || result.data.model !== selection.model))
+    )
       throw new ApiError(
         'Unsupported system status response.',
         'status_unsupported',
@@ -86,6 +92,21 @@ export class ApiClient implements Transport {
         response.status,
       );
     return result.data;
+  }
+
+  /** List configured connections without requesting any provider metadata. */
+  async modelProviders(signal: AbortSignal) {
+    return modelProvidersSchema.parse(await (await this.send('/model-providers', { signal }, 8000)).json());
+  }
+
+  /** Read the bounded backend catalog and reject a response for a different provider. */
+  async models(provider: ProviderId, signal: AbortSignal, refresh = false) {
+    const response = await this.send(
+      `/model-providers/${encodeURIComponent(provider)}/models${refresh ? '?refresh=true' : ''}`,
+      { signal },
+      8000,
+    );
+    return modelCatalogSchema.refine((catalog) => catalog.provider === provider).parse(await response.json());
   }
 
   /** Read the selected host's bounded inventory. */

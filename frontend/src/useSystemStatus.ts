@@ -3,6 +3,7 @@ import { ApiError } from './api';
 import type { CheckCode, CheckState, SystemStatus, Transport } from './contracts';
 import type { MessageKey } from './messages';
 import { usePolling, type PollResult } from './usePolling';
+import type { ModelSelection } from './model-contracts';
 
 const pollingOptions = { interval: 60_000, maxInterval: 300_000, staleAfter: 30_000 };
 
@@ -32,6 +33,7 @@ export interface ApiObservation {
 interface Observation {
   client: Transport;
   host: string;
+  modelKey: string;
   data?: SystemStatus;
   api: ApiObservation;
   loading: boolean;
@@ -57,23 +59,46 @@ function failedApi(error: unknown): ApiObservation {
 }
 
 /** Refresh bounded metadata checks while retaining host-scoped results and explicit authorization recovery. */
-export function useSystemStatus(client: Transport, host: string, enabled = true, automatic = false) {
-  const initial: Observation = { client, host, loading: true, api: { state: 'not_checked', reason: 'Not checked' } };
+export function useSystemStatus(
+  client: Transport,
+  host: string,
+  enabled = true,
+  automatic = false,
+  selection?: ModelSelection,
+) {
+  const provider = selection?.provider;
+  const model = selection?.model;
+  const modelKey = `${provider ?? ''}:${model ?? ''}`;
+  const initial: Observation = {
+    client,
+    host,
+    modelKey,
+    loading: true,
+    api: { state: 'not_checked', reason: 'Not checked' },
+  };
   const [observation, setObservation] = useState<Observation>(initial);
-  const current = observation.client === client && observation.host === host ? observation : initial;
+  const current =
+    observation.client === client && observation.host === host && observation.modelKey === modelKey
+      ? observation
+      : initial;
   const read = useCallback(
     async (signal: AbortSignal): Promise<PollResult> => {
       setObservation((previous) =>
-        previous.client === client && previous.host === host
+        previous.client === client && previous.host === host && previous.modelKey === modelKey
           ? { ...previous, loading: true }
-          : { client, host, loading: true, api: { state: 'not_checked', reason: 'Not checked' } },
+          : { client, host, modelKey, loading: true, api: { state: 'not_checked', reason: 'Not checked' } },
       );
       try {
-        const data = await client.systemStatus(host || null, signal);
+        const data = await client.systemStatus(
+          host || null,
+          signal,
+          provider && model ? { provider, model } : undefined,
+        );
         if (!signal.aborted)
           setObservation({
             client,
             host,
+            modelKey,
             data,
             loading: false,
             api: { state: 'available', reason: 'API and authorization verified.', checkedAt: new Date().toISOString() },
@@ -86,14 +111,18 @@ export function useSystemStatus(client: Transport, host: string, enabled = true,
           setObservation((previous) => ({
             client,
             host,
+            modelKey,
             loading: false,
             api: failedApi(error),
-            data: previous.client === client && previous.host === host ? previous.data : undefined,
+            data:
+              previous.client === client && previous.host === host && previous.modelKey === modelKey
+                ? previous.data
+                : undefined,
           }));
         return error instanceof ApiError && (error.httpStatus === 401 || error.httpStatus === 403) ? 'stop' : 'retry';
       }
     },
-    [client, host],
+    [client, host, provider, model, modelKey],
   );
   const { refresh, refreshIfStale, stopped, interactive } = usePolling(read, automatic, enabled, pollingOptions);
 

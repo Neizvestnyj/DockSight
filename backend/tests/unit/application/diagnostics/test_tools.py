@@ -11,6 +11,26 @@ from docksight.domain.runtime import LogBatch, LogEntry
 from tests.fakes import DiscoveryRuntime, FakeRuntime
 
 
+async def test_bound_container_inventory_and_reads_cannot_return_to_the_previous_group() -> None:
+    runtime = DiscoveryRuntime()
+    context = EvidenceContext()
+    tools = DiagnosticTools(runtime, context, "local", container_id="3" * 64)
+    await tools.execute(ToolCall("inventory", "list_containers", {}))
+    assert {row.container_id for row in context.evidence.values()} == {"3" * 64}
+    for tool, arguments in [
+        ("get_container_logs", {"container_id": "1" * 64}),
+        ("inspect_container", {"container_id": "backend-1"}),
+        ("inspect_group", {"kind": "compose", "name": "vintoria-infra"}),
+        ("list_stacks", {"kind": "compose"}),
+    ]:
+        with pytest.raises(DockSightError) as failure:
+            await tools.execute(ToolCall(tool, tool, arguments))
+        assert failure.value.code == "resource_outside_container"
+    assert not runtime.reads
+    await tools.execute(ToolCall("logs", "get_container_logs", {"container_id": "unrelated-1"}))
+    assert runtime.reads == ["3" * 64]
+
+
 async def test_group_selection_rejects_invented_candidates_without_recording_evidence() -> None:
     context = EvidenceContext()
     target = GroupTarget(kind="compose", name="vintoria-infra")
@@ -90,7 +110,7 @@ async def test_logs_fit_remaining_serialized_evidence_budget(message: str, consu
     assert batch.truncated is True
     assert batch.entries
     assert batch.entries[0].message
-    assert message.startswith(batch.entries[0].message)
+    assert message.endswith(batch.entries[-1].message)
     assert context.used_bytes <= 65536
     assert context.used_bytes == sum(
         len(json.dumps(item.data, ensure_ascii=False).encode()) for item in context.evidence.values()

@@ -9,6 +9,8 @@ and `/openapi.json` are public.
 |--------|------------------------------------------------|--------------------------------------------------------|
 | GET    | `/hosts`                                       | Configured host IDs and display names                  |
 | GET    | `/system/status?host=local`                    | Safe configuration and independent availability checks |
+| GET    | `/model-providers`                            | Configured providers and the default model             |
+| GET    | `/model-providers/{provider}/models`          | Lazy, bounded model catalog and freshness              |
 | GET    | `/hosts/{host}/containers`                     | Up to 200 inspected containers                         |
 | GET    | `/hosts/{host}/containers/{id}`                | Sanitized snapshot                                     |
 | GET    | `/hosts/{host}/containers/{id}/logs?lines=200` | Bounded timestamped logs                               |
@@ -22,7 +24,10 @@ and `/openapi.json` are public.
 
 Errors contain `code`, `message`, and a request ID where available. Validation errors omit submitted values. Request
 bodies are limited to 16 KiB. Host IDs resolve through server configuration; callers cannot submit connection URLs. At
-the byte limit, logs omit the incomplete trailing line before redaction.
+the byte limit, logs retain the newest complete lines after redaction, discarding an incomplete leading fragment.
+They remain in Docker output order. A finite tail scan is limited to 8 MiB and the Docker timeout; exceeding the scan
+limit returns `log_read_limit` instead of a middle excerpt presented as the latest output.
+Diagnostic JSON-budget clipping can shorten the beginning of the oldest retained message and sets `truncated=true`.
 
 Container and stack GET requests pass through HTTP routes, `RuntimeQueries`, and the Docker adapter. The Docker adapter
 applies field allowlists and redaction before returning owned values; the HTTP adapter serializes them as JSON.
@@ -50,6 +55,8 @@ until a manual retry verifies authorization or the connection changes. Status ch
 `GET /system/status` is authenticated and returns `Cache-Control: no-store`. Its optional `host` query selects a configured
 host ID; an unknown ID is rejected before any external work. Without a host, Docker is `not_checked`. The response exposes
 only the configured provider type and model name, never credentials, provider URLs, Docker URLs, or raw upstream errors.
+Optional `provider` and `model` query parameters select another configured model; supply both or neither.
+The response identity and metadata checks belong to that selection. Omission retains the server default.
 
 ```json
 {
@@ -80,8 +87,10 @@ has a two-second timeout, at most four connections, no redirects or retries, and
 `ping`, a short SDK timeout, and the existing bounded worker pool; cancelled workers retain their slots until they finish.
 The probe reuses the generation client's resolved base URL and authentication headers, including SDK environment defaults.
 
+The `provider` field is `ollama`, `openai`, `anthropic`, `gemini`, or `compatible`.
 Native metadata probes use [Ollama show](https://docs.ollama.com/api/show),
-[OpenAI model retrieval](https://developers.openai.com/api/reference/resources/models/methods/retrieve), and
+[OpenAI model retrieval](https://developers.openai.com/api/reference/resources/models/methods/retrieve),
+[Gemini model retrieval](https://ai.google.dev/gemini-api/docs/openai#retrieve_a_model), and
 [Anthropic model retrieval](https://platform.claude.com/docs/en/api/http/models/retrieve).
 Compatible providers use their model catalog. An unlisted compatible alias, denied metadata access, unsupported endpoint,
 or malformed metadata leaves the model `not_checked`. A native model lookup returning 404 reports `model_not_found`.
@@ -91,11 +100,41 @@ These probes do not generate text, load or pull models, run tools, validate stru
 They do not establish generation health or tool compatibility. Full diagnostic validation requires an explicit diagnostic
 request. `/health/live` still reports process liveness; `/health/ready` still reports successful configuration and wiring.
 
+## Model selection
+
+`GET /model-providers` returns `schema_version: 1`, `default: {provider, model}`, and up to five `providers`.
+Each provider has `id`, `name`, `configured`, and nullable `default_model`. This read makes no provider request.
+Credentials and endpoints remain server settings; unconfigured providers cannot be selected.
+
+`GET /model-providers/{provider}/models` returns `schema_version: 1`, `provider`, `models: [{id}]`,
+`state` (`ready`, `stale`, or `unavailable`), a safe `code`, nullable UTC `checked_at`, and `refreshing`.
+Both endpoints require authentication and return `Cache-Control: no-store`.
+Model IDs are 1–256 characters. Results contain at most 2,000 IDs, including explicit defaults and fallback aliases.
+
+Catalogs load on demand and remain fresh for 300 seconds in process memory. Concurrent requests share one fetch;
+stale reads return prior rows immediately and start a background refresh. Initial reads wait at most five seconds.
+`refresh=true` requests a manual refresh, sharing in-flight work and respecting the 30-second failure cooldown.
+Failures preserve prior/default rows and expose safe codes, including `unsupported`, `timeout`, `metadata_forbidden`,
+`credentials_rejected`, `invalid_response`, and `partial_catalog`. `checked_at` records the last attempt, including failure.
+Metadata pages have a 256 KiB bound, at most 20 pages and 1,900 external IDs; partial catalogs are rejected explicitly.
+Catalog listing does not establish generation access or diagnostic capability.
+
+Turns accept optional `model_selection: {"provider":"ollama","model":"your-installed-model"}`.
+The server validates the configured connection and catalog membership before streaming. Explicit default/fallback models
+work without a catalog request. Unknown/unconfigured providers and unlisted models fail with HTTP 422.
+Omitting selection keeps the legacy default path. Selection never changes the process-wide default or other callers.
+Turns share existing session history, action state, redaction, and the global diagnostic concurrency budget.
+The trace records the actual selected identity. The client retains selection only in tab memory and resets it on reconnect.
+
 ## Diagnostic stream
 
 POST a JSON body containing `host`, `query` (1-4000 characters), and optionally `session_id`. Sessions are bound to the
 authenticated operator and selected host. Use streaming `fetch`, an HTTP client, or `curl -N`; browser EventSource
 cannot POST this request or attach its bearer header.
+
+Follow-up questions send the same `session_id` to retain bounded earlier questions and validated answer summaries.
+Each turn collects fresh observations; existing cards keep their original values. Starting a new investigation clears
+the client session and draft. Explicit group-scope changes start a separate session.
 
 For a query such as "Why did this container exit?", the successful path is:
 
@@ -114,10 +153,19 @@ Each requested tool emits its own progress events. Model and tool budgets bound 
 schema or evidence repair attempt. Container status cards prepare allowed actions through an internal `Actions.prepare`
 call. Executing those actions requires the separate confirmation flow below.
 
+Final and repair JSON schemas constrain every `evidence_ids` array to IDs collected in the current turn. A compact
+current-turn catalog identifies their observation kind and exact container; quoted log messages are not reference IDs.
+Server validation still rejects unknown references or references that cannot support the requested card.
+This validates reference integrity and card data, not the semantic correctness of a model's causal explanation.
+
 Container status, log, and environment cards each reference exactly one container. A question about several containers
 uses separate cards, with at most eight cards per response. Repair feedback includes the validation failure, valid
 evidence IDs grouped by exact container, and available log/stack references. Schema errors omit submitted values and
 replace unknown field names with a fixed marker.
+
+Container-scoped evidence includes `container_name`, captured with the snapshot used for that observation. This name
+remains available in log-only answers without a status card. It is historical metadata, not a lookup in current inventory;
+non-container observations use `null`. Clients may accept older responses without the field and retain an ID fallback.
 
 </details>
 
@@ -125,7 +173,7 @@ Events carry `schema_version: 1`, `request_id`, and `turn_id`:
 
 1. `turn.started` includes the session ID.
 2. `tool.started` and `tool.completed` report progress without exposing arguments.
-3. `answer.ready` includes the validated summary, evidence, and typed widgets, or `clarification.required` asks for a group.
+3. `answer.ready` includes the validated summary, evidence, and typed widgets, or `clarification.required` asks for a target.
 4. Exactly one terminal event is `turn.completed` or `turn.failed`.
 
 The stream also carries a diagnostic trace. `trace.started` follows `turn.started` with the public `provider`, `model`,
@@ -161,6 +209,11 @@ authentication and host scope, add no provider requests, are not persisted, and 
 SSE comments provide heartbeats. Failures after streaming starts remain HTTP 200 and are represented by `turn.failed`.
 Disconnecting cancels diagnostic work. Streams do not support replay or automatic reconnection.
 
+Generation HTTP 404 errors use `model_unavailable`: the configured model is missing or inaccessible to the API key.
+HTTP 400/422 rejections use `model_not_supported` for request or capability mismatches. Both map to HTTP 422 before
+streaming starts. Provider response bodies are never included. The client localizes these two diagnostic codes in
+English/Russian and retains unknown server messages verbatim. Metadata checks do not verify generation access.
+
 ## Group targets and cause assessment
 
 Before model exploration, exact project/stack names in the question are resolved against Docker metadata. A matching
@@ -168,7 +221,21 @@ Compose project is inspected automatically; otherwise stack names are discovered
 IDs/names preserve container scope. A whole query token with one substitution, insertion, deletion, or adjacent
 transposition can match a known group name of at least six characters, only when no exact resource matches.
 The complete canonical group name may also be written with spaces in place of hyphens; a prefix alone is not an exact match.
+Explicit `container NAME` or Russian container references take precedence over an identically named group. Explicit
+Compose/Swarm references select that group namespace. An unqualified container/group collision produces typed choices
+for the observed container and group, without calling the model or reading their logs.
+A single explicit container name or full ID binds the turn's tool reads to that observed container, including inventory
+results. Earlier group summaries remain conversational context and cannot expand the new target's scope.
+The server collects its fresh snapshot and bounded logs before model exploration. A log-read failure retains any collected
+snapshot so missing logs do not erase available container facts.
+Collected status and log facts retain their cards even when the model omits them, using the same assembly policy as
+collected problem members in a group report.
 Ambiguous names produce `clarification.required` rather than a diagnosis. The report identifies the canonical group.
+Bare English/Russian incident questions such as "What happened?" or "Что случилось?" also require a scope choice when
+discovery finds several groups. Discovery returns the observed Compose/Swarm options before model or individual log reads.
+An explicitly selected group continues the original question with bounded evidence from that group only.
+The client's history keeps clarification and its selected-target request as one question, while the HTTP requests retain
+distinct request/turn IDs. The displayed trace belongs to the active diagnosis attempt.
 Malformed or redacted labels outside the target contract are excluded from automatic matching.
 `resolve_target` progress and trace
 events describe this read; it does not spend a model call. Model tools accept full Docker IDs or exact observed names,
@@ -184,17 +251,24 @@ The server also requires a choice when an inferred `inspect_group` target has a 
 and its canonical name was not stated in the question. This prevents a model tool call from bypassing that ambiguity.
 
 `clarification.required` carries `selection: {"candidates":[{"kind":"compose","name":"infra"}]}` with 1–32 distinct
-observed targets and no extra fields. It is followed by `turn.completed`, without `answer.ready`. The frontend presents
-localized choices and continues the original question in a separate session with the selected `group`; the server
-revalidates that target against fresh Docker data. Pending choices are local to the tab, not durable conversation state.
+observed targets and no extra fields. Container choices have `kind: "container"`, a full 64-character Docker `id`, and
+the observed `name`; group choices use `kind: "compose" | "swarm"` and `name`. The event is followed by `turn.completed`,
+without `answer.ready`. The frontend presents localized choices and continues the original question with its existing
+`session_id`, preserving earlier conversation summaries. It sends the selected `group` or `container_id`; the server
+revalidates the target against fresh Docker data. Pending choices are local to the tab, not durable conversation state.
 
 `POST /chat/turns` also accepts an optional `group`: `{"kind":"compose","name":"infra"}` or
 `{"kind":"swarm","name":"infra"}`. The name identifies an observed group on the configured host. Group objects
 reject extra fields, including host overrides. Explicit targets are inspected before model exploration; a failed group
-read produces `turn.failed` without falling back to an individual container. Start a separate session when changing scope.
+read produces `turn.failed` without falling back to an individual container.
+An optional `container_id` instead binds reads to one full Docker ID observed on the configured host. ID prefixes and
+requests containing both `group` and `container_id` are rejected. A removed or foreign container produces
+`container_not_found` before model calls or individual reads; its previous name never selects a replacement container.
+Clarifying a pending question retains its session; independently changing the selected scope starts a separate session.
 
 The read-only `inspect_group` tool provides the same workflow for model-discovered targets. It collects a group summary
-and logs for at most four local problem containers, at most 200 configured lines and 4 KiB per read. Collected payloads
+and logs for at most four local problem containers, at most 200 configured lines and 4 KiB of returned log text per
+container. Collected payloads
 and evidence references reach the model together. Failed and omitted reads remain distinct. Tool calls keep their normal
 progress and trace events. Group collection never prepares or executes a group-wide mutation.
 

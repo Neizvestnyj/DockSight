@@ -186,9 +186,7 @@ export function WidgetCard({
             <footer className="widget-foot">
               <span>{t('Docker logs · sanitized text')}</span>
               {observed && <time dateTime={observed.observed_at}>{utc(observed.observed_at)}</time>}
-              {widget.logs.truncated && (
-                <span className="warning-text">{t('Earlier or later output may be missing')}</span>
-              )}
+              {widget.logs.truncated && <span className="warning-text">{t('Earlier output was omitted')}</span>}
             </footer>
           </div>
         </div>

@@ -48,6 +48,30 @@ class GroupSelection(Contract):
         return self
 
 
+class ContainerTarget(Contract):
+    """Identify one observed container independently of an identically named group."""
+
+    kind: Literal["container"] = "container"
+    id: str = Field(pattern=r"^[a-f0-9]{64}$")
+    name: str = Field(min_length=1, max_length=256)
+
+
+class TargetSelection(Contract):
+    """Offer distinct observed containers and groups without guessing across resource namespaces."""
+
+    candidates: list[Annotated[GroupTarget | ContainerTarget, Field(discriminator="kind")]] = Field(
+        min_length=1, max_length=32
+    )
+
+    @model_validator(mode="after")
+    def unique_candidates(self) -> Self:
+        """Deduplicate containers by exact ID and groups by namespace and canonical name."""
+        keys = {(row.kind, row.id if isinstance(row, ContainerTarget) else row.name) for row in self.candidates}
+        if len(keys) != len(self.candidates):
+            raise ValueError("Target candidates must be distinct")
+        return self
+
+
 class GroupLogResult(Contract):
     """Report what was actually collected for a local problem container."""
 

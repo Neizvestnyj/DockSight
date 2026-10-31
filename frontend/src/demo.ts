@@ -2,6 +2,13 @@ import fixtures from '../../backend/tests/fixtures/diagnostics.json' with { type
 import { demoTrace } from './demoTrace';
 import { demoGroupAnswer } from './demoGroup';
 import {
+  providerNames,
+  type ModelCatalog,
+  type ModelProviders,
+  type ModelSelection,
+  type ProviderId,
+} from './model-contracts';
+import {
   answerSchema,
   type Action,
   type Answer,
@@ -247,12 +254,42 @@ export class DemoClient implements Transport {
   private readonly keys = new Map<string, string>();
 
   /** Return explicitly simulated dependency checks without contacting any real service. */
-  async systemStatus(host: string | null, signal: AbortSignal): Promise<SystemStatus> {
+  async systemStatus(host: string | null, signal: AbortSignal, selection?: ModelSelection): Promise<SystemStatus> {
     signal.throwIfAborted();
     const result = demoSystemStatus(host);
+    if (selection) Object.assign(result, selection);
     if (host && this.fault === 'offline')
       result.docker = { ...result.docker, state: 'unavailable', code: 'runtime_unavailable' };
     return result;
+  }
+
+  /** Expose fixture connections only; configured demo providers never require credentials. */
+  async modelProviders(signal: AbortSignal): Promise<ModelProviders> {
+    signal.throwIfAborted();
+    return {
+      schema_version: 1,
+      default: { provider: 'ollama', model: 'qwen3.5:9b' },
+      providers: (Object.keys(providerNames) as ProviderId[]).map((id) => ({
+        id,
+        name: providerNames[id],
+        configured: id === 'ollama' || id === 'gemini',
+        default_model: id === 'ollama' ? 'qwen3.5:9b' : id === 'gemini' ? 'gemini-demo' : null,
+      })),
+    };
+  }
+
+  /** Return visibly simulated model identities without contacting real catalogs. */
+  async models(provider: ProviderId, signal: AbortSignal): Promise<ModelCatalog> {
+    signal.throwIfAborted();
+    return {
+      schema_version: 1,
+      provider,
+      models: (provider === 'ollama' ? ['qwen3.5:9b', 'local-demo'] : ['gemini-demo']).map((id) => ({ id })),
+      state: 'ready',
+      code: 'ok',
+      checked_at: new Date().toISOString(),
+      refreshing: false,
+    };
   }
 
   /** Configure the next fixture without mutating React-owned data. */
@@ -362,7 +399,7 @@ export class DemoClient implements Transport {
       : input.group
         ? ['inspect_group']
         : ['inspect_container', 'get_container_logs', 'list_stacks', 'get_container_env'];
-    const trace = demoTrace(envelope, receive);
+    const trace = demoTrace(envelope, receive, input.model_selection);
     const collected = trace('model', 'collect_evidence');
     await delay(signal);
     collected({

@@ -60,7 +60,7 @@ def test_live_browser(
                 {
                     "project": lab.project,
                     "explicit": case.explicit,
-                    "clarify": case.spelling == "ambiguous",
+                    "clarify": case.needs_selection,
                     "peer_project": lab.peer_project,
                     "language": language,
                     "query": case.query(lab.project, "", language),
@@ -73,7 +73,7 @@ def test_live_browser(
             recorded = json.loads(target.read_text(encoding="utf-8"))
             payload, events = recorded["input"], recorded["events"]
             clarification_events = recorded.get("clarification_events", [])
-            if case.spelling == "ambiguous":
+            if case.needs_selection:
                 check_selection(clarification_events, lab)
             check_answer(events, lab, case, language)
         finally:

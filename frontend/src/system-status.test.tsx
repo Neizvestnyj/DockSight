@@ -28,6 +28,18 @@ afterEach(() => {
 });
 
 describe('system availability', () => {
+  it('accepts Gemini status from the API and displays its provider and model', async () => {
+    const gemini = { ...healthy, provider: 'gemini' as const, model: 'gemini-2.5-flash-lite' };
+    const api = new ApiClient('/api/v1', 'test-token', vi.fn().mockResolvedValue(Response.json(gemini)));
+    const parsed = await api.systemStatus('demo-eu', new AbortController().signal);
+    vi.spyOn(DemoClient.prototype, 'systemStatus').mockResolvedValue(parsed);
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: /^System status/ }));
+    const panel = screen.getByRole('dialog', { name: 'System status' });
+    await waitFor(() => expect(panel).toHaveTextContent('Gemini'));
+    expect(panel).toHaveTextContent('gemini-2.5-flash-lite');
+  });
+
   it('authenticates status requests and preserves the HTTP status of rejected credentials', async () => {
     const fetcher = vi.fn().mockResolvedValue(Response.json(healthy));
     const api = new ApiClient('/api/v1', 'test-token', fetcher);

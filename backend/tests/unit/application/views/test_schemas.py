@@ -1,8 +1,28 @@
 import pytest
 from pydantic import ValidationError
 
-from docksight.application.views.schemas import ActionView, ContainerStatusCard, DiagnosisProposal, WidgetProposal
+from docksight.application.views.schemas import (
+    ActionView,
+    ContainerStatusCard,
+    DiagnosisProposal,
+    TargetSelection,
+    WidgetProposal,
+)
 from tests.fakes import snapshot
+
+
+@pytest.mark.parametrize(
+    "candidates",
+    [
+        [{"kind": "container", "id": "a" * 64, "name": "db"}] * 2,
+        [{"kind": "compose", "name": "db"}] * 2,
+        [{"kind": "container", "id": "a" * 12, "name": "db"}],
+        [{"kind": "container", "id": "a" * 64, "name": "db", "host": "other"}],
+    ],
+)
+def test_target_selection_rejects_duplicate_short_or_foreign_container_choices(candidates: list[dict]) -> None:
+    with pytest.raises(ValidationError):
+        TargetSelection.model_validate({"candidates": candidates})
 
 
 def test_model_cannot_supply_endpoints_or_runtime_metrics() -> None:

@@ -12,11 +12,52 @@ from docksight.application.views.schemas import (
     DiagnosisProposal,
     GroupInspection,
     GroupLogResult,
+    LogAnomalyCard,
 )
 from docksight.domain.actions import Operation
 from docksight.domain.errors import DockSightError
-from docksight.domain.runtime import StackSummary
+from docksight.domain.runtime import LogBatch, LogEntry, StackSummary
 from tests.fakes import snapshot
+
+
+async def test_log_only_answer_keeps_the_observed_name_without_a_public_status_snapshot() -> None:
+    context = EvidenceContext()
+    item = snapshot()
+    logs = LogBatch((LogEntry("Connection refused"),))
+    context.record("logs", "local", {"entries": []}, item, logs)
+    proposal = DiagnosisProposal.model_validate(
+        {
+            "summary": "The dependency is unavailable",
+            "uncertain": True,
+            "evidence_ids": ["e1"],
+            "widgets": [{"widget_type": "log_anomalies", "evidence_ids": ["e1"]}],
+        }
+    )
+    answer = await ViewAssembler().build(proposal, context, "alice")
+    assert len(answer.widgets) == 1
+    assert isinstance(answer.widgets[0], LogAnomalyCard)
+    assert answer.evidence[0].container_name == "worker"
+    assert answer.evidence[0].container_id == item.id
+    assert "name" not in answer.evidence[0].data
+
+
+async def test_selected_container_keeps_collected_facts_when_the_model_omits_all_cards() -> None:
+    item = snapshot()
+    context = EvidenceContext(container_id=item.id)
+    context.record("container", "local", {}, item)
+    logs = LogBatch((LogEntry("Connection refused"),))
+    context.record("logs", "local", {}, item, logs)
+    answer = await ViewAssembler().build(
+        DiagnosisProposal(summary="The dependency is unavailable", uncertain=True, evidence_ids=[], widgets=[]),
+        context,
+        "alice",
+    )
+    assert len(answer.widgets) == 2
+    assert isinstance(answer.widgets[0], ContainerStatusCard)
+    assert answer.widgets[0].snapshot == item
+    assert isinstance(answer.widgets[1], LogAnomalyCard)
+    assert answer.widgets[1].logs == logs
+    assert all(row.container_id == item.id for row in answer.evidence)
 
 
 async def test_identical_proposals_do_not_duplicate_cards_or_action_preparation() -> None:

@@ -16,3 +16,4 @@ class EvidenceRef:
     container_id: str | None
     observed_at: datetime
     data: JsonObject
+    container_name: str | None = None

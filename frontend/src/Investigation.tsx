@@ -1,4 +1,4 @@
-import { diagnosticOperations, isMessageKey, stateLabel } from './messages';
+import { diagnosticErrors, diagnosticOperations, isMessageKey, stateLabel, targetKindLabel } from './messages';
 import { useLocale } from './locale';
 import { useState } from 'react';
 import {
@@ -12,7 +12,8 @@ import {
   MessageSquare,
   TriangleAlert,
 } from 'lucide-react';
-import type { Action, Answer, Container, GroupTarget, Transport } from './contracts';
+import { targetKey } from './contracts';
+import type { Action, Answer, Container, DiagnosticTarget, GroupTarget, Transport } from './contracts';
 import { ActionReview } from './ActionReview';
 import { EvidenceInspector, WidgetCard } from './Widgets';
 import type { useInvestigation } from './useInvestigation';
@@ -48,7 +49,7 @@ export function Investigation({
   group,
 }: Props) {
   const { t, locale } = useLocale();
-  const { turns, running, run, stop } = investigation;
+  const { turns, running, run, chooseTarget, stop } = investigation;
   const [view, setView] = useState<{ id: string; latest: string } | null>(null);
   const latest = turns.at(-1);
   const turn = (view?.latest === latest?.id && turns.find((row) => row.id === view?.id)) || latest;
@@ -59,11 +60,15 @@ export function Investigation({
   const answer = turn?.answer;
   const displayedQuery = turn?.exampleQuery && isMessageKey(turn.query) ? t(turn.query) : turn?.query;
   const localError = turn?.errorSource === 'client' && turn.error;
+  const diagnosticError =
+    turn?.code && Object.hasOwn(diagnosticErrors, turn.code) ? diagnosticErrors[turn.code] : undefined;
   const errorMessage = localError
     ? t(isMessageKey(localError) ? localError : 'Connection failed. Retry manually.')
-    : demo && turn?.error && isMessageKey(turn.error)
-      ? t(turn.error)
-      : turn?.error;
+    : diagnosticError
+      ? t(diagnosticError)
+      : demo && turn?.error && isMessageKey(turn.error)
+        ? t(turn.error)
+        : turn?.error;
   const selected = answer?.evidence.find((row) => row.id === reference) ?? answer?.evidence[0];
   const narrative = (text: string) => (demo && isMessageKey(text) ? t(text) : text);
 
@@ -80,7 +85,7 @@ export function Investigation({
   }
 
   /** Submit one host-bound query and keep its text available for a manual retry. */
-  function submit(query: string, target?: GroupTarget) {
+  function submit(query: string, target?: DiagnosticTarget) {
     if (blocked) return;
     setView(null);
     void run(query, false, target);
@@ -100,7 +105,15 @@ export function Investigation({
                   key={row.id}
                   onClick={() => setView({ id: row.id, latest: latest!.id })}
                 >
-                  <span>{row.exampleQuery && isMessageKey(row.query) ? t(row.query) : row.query}</span>
+                  <span>
+                    {row.exampleQuery && isMessageKey(row.query) ? t(row.query) : row.query}
+                    {row.target && (
+                      <span className="muted">
+                        {' '}
+                        · {targetKindLabel(row.target.kind, t)} / {row.target.name}
+                      </span>
+                    )}
+                  </span>
                   <span className="muted">{stateLabel(row.state, t, true)}</span>
                 </button>
               ))}
@@ -116,6 +129,11 @@ export function Investigation({
               <h2>{displayedQuery}</h2>
               <span className="muted query-author">{t('Operator')}</span>
             </div>
+            {turn.target && (
+              <p className="section-note query-scope">
+                {t('Scope')}: {targetKindLabel(turn.target.kind, t)} / {turn.target.name}
+              </p>
+            )}
             {turn.progress.length > 0 && (
               <div className="progress" role="status" aria-label={t('Diagnostic progress')}>
                 {turn.progress.map((row, index) => (
@@ -250,7 +268,7 @@ export function Investigation({
                   <button
                     className="secondary"
                     disabled={running || blocked}
-                    onClick={() => submit(turn.query, turn.group)}
+                    onClick={() => submit(turn.query, turn.target)}
                   >
                     {t('Retry diagnosis')}
                     <ArrowRight size={14} />
@@ -264,12 +282,17 @@ export function Investigation({
                 host={host}
                 disabled={running || blocked}
                 choose={(target) => {
-                  setView(null);
-                  void run(turn.query, false, target);
+                  setView({ id: turn.id, latest: latest!.id });
+                  void chooseTarget(turn.id, target);
                 }}
               />
             )}
-            <DiagnosticTrace key={turn.id} turn={turn} host={host} demo={demo} />
+            <DiagnosticTrace
+              key={`${turn.id}:${turn.target ? targetKey(turn.target) : ''}`}
+              turn={turn}
+              host={host}
+              demo={demo}
+            />
             {answer?.group && <GroupReport report={answer.group} evidence={answer.evidence} inspect={inspect} />}
             {answer && (
               <AnswerGrid

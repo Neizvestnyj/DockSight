@@ -61,6 +61,9 @@ Docker and live-model tests remain separate opt-in commands described below.
   do not create a version per task or commit. Use the intended numeric version immediately, not `Unreleased`.
   Choose PATCH for compatible fixes, MINOR for compatible additions, and MAJOR for breaking changes; keep the backend
   package metadata and lockfile aligned. Documentation alone needs no bump.
+  Follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/): group notable outcomes under applicable categories and
+  omit empty ones. Use linked `[version] - YYYY-MM-DD` headings for merged versions, dated by the merge into `master`
+  in Europe/Moscow unless a separate release date is recorded. Several commits can contribute to one entry.
 
 Keep Python and Markdown prose within 120 characters per line. Use UTF-8 without BOM and LF line endings.
 Write documentation, comments, docstrings, and runtime messages in English; product copy belongs in the English/Russian
@@ -194,6 +197,14 @@ it does not grade translation quality or model reasoning.
 Group cases also create an independently failing peer Compose project. Spaced and Cyrillic questions must resolve to the
 target without including that peer. The ambiguous case gives both projects the same human-readable prefix: the first
 turn must ask for the two observed choices without individual evidence reads, and a second request selects the target.
+
+`--e2e-case compose-follow-up` selects an independent two-turn HTTP scenario: diagnose the primary project, then ask about
+an explicitly named dependency container whose name equals its Compose project. The second request reuses the session,
+checks fresh dependency cards and actual log content, and retains the first turn in the ignored report. It reuses the
+existing failure workload; it does not simulate a database engine or execute product actions.
+
+`--e2e-case compose-unscoped` asks "What happened?" in English/Russian with two observed projects. It requires clarification
+before model calls or individual log reads, then selects one project and checks all its failure cards and observed names.
 
 To include real browser flows, install frontend dependencies and Chrome, build the client, and add `--e2e-browser`:
 

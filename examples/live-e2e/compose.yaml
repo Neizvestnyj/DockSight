@@ -53,6 +53,12 @@ services:
   logs:
     <<: *worker
     command: [logs]
+  database:
+    <<: *worker
+    command: [database-logs]
+  database-stopped:
+    <<: *worker
+    command: [database-shutdown]
   unknown:
     <<: *worker
     command: [unknown]

@@ -32,6 +32,24 @@ function ObservedAnswer({ answer }: { answer: Answer }) {
 }
 
 describe('group selection', () => {
+  it('accepts a same-name container/project choice and validates exact container identity', () => {
+    const container = { kind: 'container', id: 'a'.repeat(64), name: 'vintoria-db' };
+    const event = {
+      schema_version: 1,
+      request_id: 'r',
+      turn_id: 't',
+      type: 'clarification.required',
+      selection: { candidates: [container, { kind: 'compose', name: 'vintoria-db' }] },
+    };
+    expect(eventSchema.safeParse(event).success).toBe(true);
+    for (const candidates of [
+      [container, container],
+      [{ ...container, id: 'a'.repeat(12) }],
+      [{ ...container, host: 'foreign' }],
+    ])
+      expect(eventSchema.safeParse({ ...event, selection: { candidates } }).success).toBe(false);
+  });
+
   it('retains a typed group clarification after completion without manufacturing an answer', async () => {
     const client = new DemoClient();
     vi.spyOn(client, 'diagnose').mockImplementation(async (_input, receive) => {
@@ -123,6 +141,24 @@ describe('group selection', () => {
     const panel = screen.getByRole('region', { name: 'Container evidence: checkout-api' });
     expect(within(panel).getByText('State was not included in this answer.')).toBeVisible();
     expect(within(panel).queryByRole('group', { name: 'Container status' })).toBeNull();
+  });
+
+  it('names log-only evidence from captured metadata when the answer omits the status observation', () => {
+    const original = demoAnswer('dependency');
+    const answer = answerSchema.parse({
+      ...original,
+      widgets: original.widgets.filter((row) => row.widget_type === 'log_anomalies'),
+      evidence: original.evidence
+        .filter((row) => row.kind === 'logs')
+        .map((row) => ({ ...row, container_name: 'monitoring-grafana-1' })),
+    });
+    render(<ObservedAnswer answer={answer} />);
+    const panel = screen.getByRole('region', { name: 'Container evidence: monitoring-grafana-1' });
+    expect(within(panel).getByRole('heading', { name: 'monitoring-grafana-1' })).toBeVisible();
+    expect(within(panel).queryByRole('group', { name: 'Container status' })).toBeNull();
+    const source = screen.getByRole('group', { name: 'monitoring-grafana-1' });
+    fireEvent.click(within(source).getByRole('button', { name: /^Logs/ }));
+    expect(screen.getByRole('region', { name: 'Evidence observation' })).toHaveTextContent('monitoring-grafana-1');
   });
 
   it('retains repeated state observations and their distinct timestamps in one container panel', () => {

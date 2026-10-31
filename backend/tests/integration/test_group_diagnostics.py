@@ -1,11 +1,122 @@
 import json
+from dataclasses import replace
 
+import pytest
 from fastapi.testclient import TestClient
+from httpx import Response
 
 from docksight.application.ports.models import ModelReply, ToolCall
 from docksight.bootstrap import Settings, build_components
 from docksight.main import create_app
 from tests.fakes import DiscoveryRuntime, FakeRuntime, ScriptedModel
+
+
+def test_unscoped_question_collects_no_logs_until_the_operator_selects_a_project() -> None:
+    runtime = DiscoveryRuntime()
+    model = ScriptedModel(
+        [
+            ModelReply("Ready"),
+            ModelReply(
+                json.dumps({"summary": "Two members failed", "uncertain": True, "evidence_ids": [], "widgets": []})
+            ),
+        ]
+    )
+    settings = Settings(api_token="unscoped-integration-token-24", _env_file=None)
+    components = build_components(settings, reader=runtime, writer=runtime, model=model)
+    headers = {"Authorization": "Bearer unscoped-integration-token-24"}
+    body = {"host": "local", "query": "Что случилось?"}
+    with TestClient(create_app(settings, components)) as api:
+        first = api.post("/api/v1/chat/turns", headers=headers, json=body)
+        events = [json.loads(line[6:]) for line in first.text.splitlines() if line.startswith("data: ")]
+        assert events[-1]["type"] == "turn.completed"
+        selection = next(event["selection"] for event in events if event["type"] == "clarification.required")
+        assert {row["name"] for row in selection["candidates"]} == {"other-project", "vintoria-infra"}
+        assert not any(event["type"] == "answer.ready" for event in events)
+        assert not runtime.reads
+        assert not model.requests
+        second = api.post(
+            "/api/v1/chat/turns", headers=headers, json={**body, "group": {"kind": "compose", "name": "vintoria-infra"}}
+        )
+    completed = [json.loads(line[6:]) for line in second.text.splitlines() if line.startswith("data: ")]
+    assert completed[-1]["type"] == "turn.completed"
+    answer = next(event["answer"] for event in completed if event["type"] == "answer.ready")
+    assert answer["group"]["summary"]["name"] == "vintoria-infra"
+    assert len(answer["widgets"]) == 4
+    assert set(runtime.reads) == {"1" * 64, "2" * 64}
+
+
+@pytest.mark.parametrize("clarify", [False, True])
+def test_group_follow_up_keeps_history_and_reads_a_container_with_a_colliding_project_name(clarify: bool) -> None:
+    runtime = DiscoveryRuntime()
+    runtime.rows = (*runtime.rows[:2], replace(runtime.rows[2], name="other-project"))
+    first_query = "What happened to vintoria-infra?"
+    summary = "Two members exited while connecting to their dependency."
+    model = ScriptedModel(
+        [
+            ModelReply("Ready"),
+            ModelReply(json.dumps({"summary": summary, "uncertain": True, "evidence_ids": ["e1"], "widgets": []})),
+            ModelReply("Ready"),
+            ModelReply(
+                json.dumps(
+                    {
+                        "summary": "The dependency container exited.",
+                        "uncertain": True,
+                        "evidence_ids": ["e1", "e2"],
+                        "widgets": [
+                            {"widget_type": "container_status", "evidence_ids": ["e1"]},
+                            {"widget_type": "log_anomalies", "evidence_ids": ["e2"]},
+                        ],
+                    }
+                )
+            ),
+        ]
+    )
+    settings = Settings(api_token="followup-integration-token-24", _env_file=None)
+    components = build_components(settings, reader=runtime, writer=runtime, model=model)
+    headers = {"Authorization": "Bearer followup-integration-token-24"}
+    with TestClient(create_app(settings, components)) as api:
+        first = api.post("/api/v1/chat/turns", headers=headers, json={"host": "local", "query": first_query})
+        events = [json.loads(line[6:]) for line in first.text.splitlines() if line.startswith("data: ")]
+        original = next(event["answer"] for event in events if event["type"] == "answer.ready")
+        session_id = events[0]["session_id"]
+        body = {
+            "host": "local",
+            "session_id": session_id,
+            "query": "Could other-project simply be stopped?"
+            if clarify
+            else "Maybe the dependency is stopped? Check container other-project.",
+        }
+        second = api.post("/api/v1/chat/turns", headers=headers, json=body)
+        if clarify:
+            _check_mixed_clarification(second)
+            assert len(model.requests) == 2
+            assert runtime.reads == ["1" * 64, "2" * 64]
+            second = api.post("/api/v1/chat/turns", headers=headers, json={**body, "container_id": "3" * 64})
+    followup = [json.loads(line[6:]) for line in second.text.splitlines() if line.startswith("data: ")]
+    assert followup[0]["session_id"] == session_id
+    assert followup[-1]["type"] == "turn.completed"
+    answer = next(event["answer"] for event in followup if event["type"] == "answer.ready")
+    assert answer["group"] is None
+    assert answer["widgets"][0]["snapshot"]["id"] == "3" * 64
+    assert answer["widgets"][1]["container_id"] == "3" * 64
+    assert [(row.role, row.content) for row in model.requests[2][0] if row.role != "system"][:2] == [
+        ("user", first_query),
+        ("assistant", summary),
+    ]
+    assert len(original["widgets"]) == 4
+    assert original["group"]["summary"]["name"] == "vintoria-infra"
+    assert runtime.reads == ["1" * 64, "2" * 64, "3" * 64]
+
+
+def _check_mixed_clarification(response: Response) -> None:
+    """Require distinct exact container and project choices before any follow-up diagnosis."""
+    pending = [json.loads(line[6:]) for line in response.text.splitlines() if line.startswith("data: ")]
+    assert pending[-1]["type"] == "turn.completed"
+    selection = next(event["selection"] for event in pending if event["type"] == "clarification.required")
+    assert selection["candidates"] == [
+        {"kind": "container", "id": "3" * 64, "name": "other-project"},
+        {"kind": "compose", "name": "other-project"},
+    ]
 
 
 def test_authorized_clarification_completes_without_answer_and_continues_with_exact_group() -> None:

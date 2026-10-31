@@ -1,9 +1,10 @@
 import asyncio
 import json
 from collections.abc import AsyncGenerator, Awaitable, Callable
+from copy import copy
 from datetime import UTC, datetime
 from functools import partial
-from typing import cast
+from typing import Self, cast
 from uuid import uuid4
 
 from pydantic import ValidationError
@@ -78,20 +79,33 @@ class Diagnostics:
         self._slots = asyncio.Semaphore(concurrency)
         self.model_identity = model_identity
 
+    def with_model(self, model: ModelPort, identity: tuple[str, str]) -> Self:
+        """Share sessions, actions, redaction, and global capacity with an immutable turn selection."""
+        selected = copy(self)
+        selected.model = model
+        selected.model_identity = identity
+        return selected
+
     async def stream(
-        self, actor: str, host: str, query: str, session_id: str | None = None, group: GroupTarget | None = None
+        self,
+        actor: str,
+        host: str,
+        query: str,
+        session_id: str | None = None,
+        group: GroupTarget | None = None,
+        container_id: str | None = None,
     ) -> AsyncGenerator[TurnEvent]:
         """Lease a scoped session and emit one terminal event for a bounded turn."""
         turn_id = str(uuid4())
         trace = DiagnosticTrace(turn_id, self.redactor)
         deadline = asyncio.get_running_loop().time() + self.timeout
         try:
-            self._validate_turn(host, query)
+            self._validate_turn(host, query, group, container_id)
             async with (
                 self._slots,
                 self.sessions.lease(session_id, actor, host) as session,
             ):
-                async for event in self._run_turn(session, query, deadline, trace, group):
+                async for event in self._run_turn(session, query, deadline, trace, group, container_id):
                     yield event
         except (TimeoutError, DockSightError) as exc:
             code, message = (
@@ -110,7 +124,7 @@ class Diagnostics:
                 "message": message,
             }
 
-    def _validate_turn(self, host: str, query: str) -> None:
+    def _validate_turn(self, host: str, query: str, group: GroupTarget | None, container_id: str | None) -> None:
         """Reject invalid scope, query size, or exhausted capacity before leasing a session."""
         if host not in {item.id for item in self.runtime.hosts()}:
             raise DockSightError("host_not_found", "Configured host not found", 404)
@@ -118,9 +132,17 @@ class Diagnostics:
             raise DockSightError("invalid_query", "Query must contain 1-4000 characters", 422)
         if self._slots.locked():
             raise DockSightError("turn_capacity", "Diagnostic capacity reached; retry later", 503)
+        if group is not None and container_id is not None:
+            raise DockSightError("invalid_target", "Choose either a group or an exact container", 422)
 
     async def _run_turn(
-        self, session: Session, query: str, deadline: float, trace: DiagnosticTrace, group: GroupTarget | None
+        self,
+        session: Session,
+        query: str,
+        deadline: float,
+        trace: DiagnosticTrace,
+        group: GroupTarget | None,
+        container_id: str | None,
     ) -> AsyncGenerator[TurnEvent]:
         """Collect fresh evidence and retain only the validated summary in session history."""
         yield {"type": "turn.started", "turn_id": trace.turn_id, "session_id": session.id}
@@ -139,15 +161,16 @@ class Diagnostics:
         context = EvidenceContext()
         tools = DiagnosticTools(self.runtime, context, session.host, self.log_lines, self.log_bytes, group, query=query)
         if group is None:
-            async for event in self._discover(query, tools, messages, deadline, trace):
+            async for event in self._discover(query, tools, messages, deadline, trace, container_id):
                 yield event
-        group = tools.group
-        if group:
-            call = ToolCall("selected-group", "inspect_group", group.model_dump())
+        call = self._selected_read(tools)
+        if call:
             messages.append(ModelMessage("assistant", "", (call,)))
-            async for event in self._record_tool(call, tools, messages, deadline, 0, trace, strict=True):
+            async for event in self._record_tool(
+                call, tools, messages, deadline, 0, trace, strict=tools.group is not None
+            ):
                 yield event
-        async for event in self._explore(messages, tools, deadline, trace, int(group is not None)):
+        async for event in self._explore(messages, tools, deadline, trace, int(call is not None)):
             yield event
         if context.selection:
             yield {
@@ -161,6 +184,14 @@ class Diagnostics:
             yield event
         yield {"type": "turn.completed", "turn_id": trace.turn_id}
 
+    def _selected_read(self, tools: DiagnosticTools) -> ToolCall | None:
+        """Collect bounded facts for an exact selected target before model explanations or follow-up decisions."""
+        if tools.group:
+            return ToolCall("selected-group", "inspect_group", tools.group.model_dump())
+        if tools.context.container_id:
+            return ToolCall("selected-container", "get_container_logs", {"container_id": tools.context.container_id})
+        return None
+
     async def _answer_turn(
         self,
         query: str,
@@ -171,7 +202,7 @@ class Diagnostics:
         trace: DiagnosticTrace,
     ) -> AsyncGenerator[TurnEvent]:
         """Retain validated answers in history without recording unresolved clarification turns."""
-        messages.append(ModelMessage("user", final_prompt(query)))
+        messages.append(ModelMessage("user", final_prompt(query, context)))
         async for event in self._finalize(messages, context, session.actor, deadline, trace):
             if event["type"] == "answer.ready":
                 session.history.extend(
@@ -183,13 +214,22 @@ class Diagnostics:
             yield event
 
     async def _discover(
-        self, query: str, tools: DiagnosticTools, messages: list[ModelMessage], deadline: float, trace: DiagnosticTrace
+        self,
+        query: str,
+        tools: DiagnosticTools,
+        messages: list[ModelMessage],
+        deadline: float,
+        trace: DiagnosticTrace,
+        container_id: str | None = None,
     ) -> AsyncGenerator[TurnEvent]:
         """Retain discovered identities and expose group choices before model-selected evidence reads."""
         yield {"type": "tool.started", "turn_id": trace.turn_id, "tool": "resolve_target"}
         yield trace.begin("tool", "resolve_target")
-        resolved = await _before_deadline(deadline, lambda: resolve_target(self.runtime, tools.host, query))
+        resolved = await _before_deadline(
+            deadline, lambda: resolve_target(self.runtime, tools.host, query, container_id)
+        )
         tools.inventory, tools.group, tools.candidates = resolved.containers, resolved.group, resolved.candidates
+        tools.context.container_id = resolved.container_id
         tools.context.selection = resolved.selection
         yield trace.finish(code=resolved.discovery_code)
         yield {
@@ -206,7 +246,21 @@ class Diagnostics:
                     "do not infer absence. Container observations remain usable.",
                 )
             )
-        if tools.group is None and tools.candidates:
+        if tools.context.container_id:
+            messages.append(
+                ModelMessage(
+                    "system",
+                    json.dumps(
+                        {
+                            "selected_container_id": tools.context.container_id,
+                            "instruction": "This turn explicitly targets this observed container. "
+                            "Earlier group conclusions are conversation context only. "
+                            "Collect its fresh state and logs; do not return to the previous group.",
+                        }
+                    ),
+                )
+            )
+        elif tools.group is None and tools.candidates:
             messages.append(ModelMessage("system", group_catalog(tools.candidates)))
 
     async def _explore(
@@ -315,7 +369,9 @@ class Diagnostics:
         instruction = messages[-1].content
         for attempt in range(2):
             yield trace.begin("model", "repair_response" if attempt else "final_response")
-            reply = await _before_deadline(deadline, lambda: self.model.complete(messages, schema=proposal_schema()))
+            reply = await _before_deadline(
+                deadline, lambda: self.model.complete(messages, schema=proposal_schema(tuple(context.evidence)))
+            )
             yield trace.finish(reply=reply, preview=True)
             yield trace.begin("validation", "validate_diagnosis")
             try:
