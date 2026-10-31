@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Final, Literal
 
-from docksight.application.views.schemas import GroupInspection, TargetSelection
+from docksight.application.views.schemas import GroupInspection, HostInspection, TargetSelection
 from docksight.domain.diagnostics import EvidenceRef, JsonObject
 from docksight.domain.errors import DockSightError
 from docksight.domain.runtime import ContainerSnapshot, LogBatch, StackSummary
@@ -23,6 +23,7 @@ class EvidenceContext:
     group: GroupInspection | None = None
     selection: TargetSelection | None = None
     container_id: str | None = None
+    host_overview: HostInspection | None = None
 
     @property
     def remaining_bytes(self) -> int:
@@ -31,7 +32,7 @@ class EvidenceContext:
 
     def record(
         self,
-        kind: Literal["container", "logs", "stats", "stack", "env"],
+        kind: Literal["container", "logs", "stats", "stack", "env", "host"],
         host: str,
         data: JsonObject,
         snapshot: ContainerSnapshot | None = None,

@@ -170,6 +170,11 @@ export function WidgetCard({
               )}
             </div>
           )}
+          {widget.actions_code && (
+            <p className="section-note warning-text">
+              {t('Actions unavailable')} · <code>{widget.actions_code}</code>
+            </p>
+          )}
           <footer className="widget-foot">
             <time dateTime={widget.snapshot.observed_at}>{utc(widget.snapshot.observed_at)}</time>
             <CardActions
@@ -247,6 +252,7 @@ export function EvidenceInspector({ evidence, resourceName }: { evidence?: Evide
     logs: 'Docker logs',
     stats: 'Docker stats',
     stack: 'Docker stack inventory',
+    host: 'Docker host inventory',
     env: 'Allowlisted environment',
   } as const;
   return (

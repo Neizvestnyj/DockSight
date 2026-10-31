@@ -1,4 +1,4 @@
-import { Box, Layers } from 'lucide-react';
+import { Box, Layers, Server } from 'lucide-react';
 import type { Answer, Evidence } from './contracts';
 import { evidenceNames, evidenceResource } from './evidence';
 import { utc } from './format';
@@ -27,7 +27,13 @@ export function EvidenceTrail({
       {[...groups].map(([key, group]) => (
         <fieldset key={key} className="evidence-resource">
           <legend>
-            {group.rows[0]?.container_id ? <Box size={14} /> : <Layers size={14} />}
+            {group.rows[0]?.container_id ? (
+              <Box size={14} />
+            ) : group.rows[0]?.kind === 'host' ? (
+              <Server size={14} />
+            ) : (
+              <Layers size={14} />
+            )}
             <span>{group.name}</span>
           </legend>
           {group.rows.map((row) => (

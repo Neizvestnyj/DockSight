@@ -61,10 +61,19 @@ def _messages(messages: Sequence[ModelMessage]) -> list[dict[str, Any]]:
     return rows
 
 
-def _reply(data: object) -> ModelReply:
+def _reply(data: object, max_tokens: int, context_length: int) -> ModelReply:
     """Parse a native reply and generate IDs when Ollama omits them."""
     validated = _Response.model_validate(data)
     if validated.done_reason == "length":
+        if (
+            validated.prompt_eval_count is not None
+            and validated.eval_count is not None
+            and validated.eval_count < max_tokens
+            and validated.prompt_eval_count + validated.eval_count >= context_length
+        ):
+            raise DockSightError(
+                "model_context_limit", "Model context window is full; reduce input or increase its size", 502
+            )
         raise DockSightError("model_truncated", "Model output exceeded its token limit", 502)
     calls = tuple(
         ToolCall(raw.id or f"call_{uuid4().hex}", raw.function.name, parse_object(raw.function.arguments))
@@ -129,7 +138,7 @@ class OllamaModel:
             response = await self.client.post("/api/chat", json=body)
             if response.is_error:
                 raise provider_error(response.status_code)
-            return _reply(response.json())
+            return _reply(response.json(), self.max_tokens, self.context_length)
         except httpx.TimeoutException as exc:
             raise DockSightError("provider_timeout", "Model provider timed out", 504) from exc
         except httpx.HTTPError as exc:

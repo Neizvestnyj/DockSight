@@ -30,13 +30,16 @@ class ViewAssembler:
     async def build(self, proposal: DiagnosisProposal, context: EvidenceContext, actor: str) -> DiagnosisResponse:
         """Validate references and assemble cards without trusting model-supplied runtime values."""
         cards = _target_cards(proposal.widgets, context)
-        extra = [row.evidence_id for row in context.group.logs if row.evidence_id] if context.group else []
+        report = context.host_overview or context.group
+        extra = [row.evidence_id for row in report.logs if row.evidence_id] if report else []
+        if context.host_overview:
+            extra.extend(context.evidence)
         references: list[str] = list(
             dict.fromkeys(
                 [
                     *proposal.evidence_ids,
                     *(proposal.cause.evidence_ids if proposal.cause else []),
-                    *([context.group.evidence_id] if context.group else []),
+                    *([report.evidence_id] if report else []),
                     *extra,
                     *(ref for card in cards for ref in card.evidence_ids),
                 ]
@@ -51,6 +54,7 @@ class ViewAssembler:
             uncertain=proposal.uncertain,
             cause=proposal.cause,
             group=context.group,
+            host_overview=context.host_overview,
             evidence=[context.evidence[ref] for ref in references],
             widgets=widgets,
         )
@@ -61,12 +65,13 @@ class ViewAssembler:
             return _stack_card(card.evidence_ids, context)
         snapshot = _container_snapshot(card.evidence_ids, context)
         if card.widget_type == "container_status":
-            actions = await self._actions(actor, snapshot)
+            actions, actions_code = await self._actions(actor, snapshot)
             suggested = next((action for action in actions if action.operation == card.action), None)
             return ContainerStatusCard(
                 snapshot=snapshot,
                 evidence_ids=card.evidence_ids,
                 actions=actions,
+                actions_code=actions_code,
                 recommendation=ActionRecommendation(action_id=suggested.id, reason=card.action_reason)
                 if suggested
                 else None,
@@ -88,18 +93,22 @@ class ViewAssembler:
             evidence_ids=card.evidence_ids,
         )
 
-    async def _actions(self, actor: str, snapshot: ContainerSnapshot) -> list[ActionView]:
-        """Prepare only operations allowed for the observed container state."""
+    async def _actions(self, actor: str, snapshot: ContainerSnapshot) -> tuple[list[ActionView], str | None]:
+        """Keep observed facts usable when optional action preparation returns a typed failure."""
         if self.prepare is None:
-            return []
-        return [
-            await self.prepare(actor, snapshot.host, snapshot.id, operation)
-            for operation in allowed_operations(snapshot.state)
-        ]
+            return [], None
+        try:
+            actions = [
+                await self.prepare(actor, snapshot.host, snapshot.id, operation)
+                for operation in allowed_operations(snapshot.state)
+            ]
+        except DockSightError as exc:
+            return [], exc.code
+        return actions, None
 
 
 def _target_cards(proposed: list[WidgetProposal], context: EvidenceContext) -> list[WidgetProposal]:
-    """Keep collected exact-target facts and up to four group failures visible when model detail cards are missing."""
+    """Fill missing factual cards within response capacity while retaining model recommendations."""
     cards: list[WidgetProposal] = []
     for card in proposed:
         if card not in cards:
@@ -109,11 +118,26 @@ def _target_cards(proposed: list[WidgetProposal], context: EvidenceContext) -> l
             (ref for ref in context.logs if context.evidence[ref].container_id == context.container_id), None
         )
         _member_cards(cards, context, context.container_id, log_ref)
-    if context.group is None:
+    if context.host_overview:
+        _host_cards(cards, context)
         return cards
-    for member in context.group.logs[:4]:
+    report = context.group
+    if report is None:
+        return cards
+    for member in report.logs[:4]:
         _member_cards(cards, context, member.container_id, member.evidence_id)
     return cards
+
+
+def _host_cards(cards: list[WidgetProposal], context: EvidenceContext) -> None:
+    """Include later host-scoped reads independently of the four automatic log candidates."""
+    members: dict[str, str | None] = {}
+    for ref, snapshot in context.snapshots.items():
+        members.setdefault(snapshot.id, None)
+        if ref in context.logs:
+            members[snapshot.id] = ref
+    for container_id, log_ref in members.items():
+        _member_cards(cards, context, container_id, log_ref)
 
 
 def _member_cards(
@@ -131,7 +155,9 @@ def _member_cards(
 
 def _include_card(cards: list[WidgetProposal], kind: str, ref: str, resource_refs: list[str]) -> None:
     """Retain model recommendations while filling missing factual cards without duplicates."""
-    if not any(card.widget_type == kind and set(card.evidence_ids).intersection(resource_refs) for card in cards):
+    if len(cards) < 16 and not any(
+        card.widget_type == kind and set(card.evidence_ids).intersection(resource_refs) for card in cards
+    ):
         cards.append(WidgetProposal.model_validate({"widget_type": kind, "evidence_ids": [ref]}))
 
 

@@ -20,6 +20,7 @@ FAILURES: Final = {
     "grafana": (1, False, "could not find Chat Id"),
     "oom": (137, True, "Starting a 256 MiB allocation"),
     "unknown": (137, False, "Worker ended without recording"),
+    "database-stopped": (0, False, "database system is shut down"),
 }
 
 
@@ -83,16 +84,50 @@ class ComposeLab:
         self.client = connect(HostConfig(id="e2e"), timeout=10)
         self.containers: dict[str, Container] = {}
         self.peers: dict[str, Container] = {}
+        self.standalone: dict[str, Container] = {}
 
     def start(self) -> None:
         """Start only the selected services and wait for their specified observable failure states."""
         self._compose(self.project, self.case.services)
-        self.containers = {row.labels["com.docker.compose.service"]: row for row in self._owned_containers()}
-        if set(self.containers) != set(self.case.services):
+        rows = self._owned_containers()
+        self.containers = {
+            row.name
+            if self.case.spelling == "unscoped" and row.labels["com.docker.compose.service"] == "nginx"
+            else row.labels["com.docker.compose.service"]: row
+            for row in rows
+        }
+        services = {row.labels["com.docker.compose.service"] for row in rows}
+        scaled = self.case.spelling == "unscoped" and "nginx" in self.case.services
+        expected_count = len(self.case.services) + (15 if scaled else 0)
+        if services != set(self.case.services) or len(self.containers) != expected_count:
             raise RuntimeError("Compose did not create the exact requested service set")
         self._wait_ready()
         if self.case.group:
             self._start_peer()
+        if self.case.spelling == "unscoped":
+            self._start_standalone()
+
+    def _start_standalone(self) -> None:
+        """Create one owned failure without Compose labels to exercise independent host membership."""
+        source = self.containers["backend"]
+        mount = next(row for row in source.attrs["Mounts"] if row["Destination"] == "/e2e/workload.py")
+        row = self.client.containers.run(
+            source.image.id,
+            ["-u", "/e2e/workload.py", "standalone"],
+            entrypoint="python",
+            volumes={mount["Source"]: {"bind": "/e2e/workload.py", "mode": "ro"}},
+            environment={"DOCKSIGHT_E2E_DENSE_LOGS": "1"},
+            detach=True,
+            name=f"standalone-e2e-{self.owner[:12]}",
+            labels={OWNER_LABEL: self.owner},
+            network_mode="none",
+            mem_limit="64m",
+            nano_cpus=500_000_000,
+        )
+        self.standalone[row.id] = row
+        if row.wait(timeout=15)["StatusCode"] != 1:
+            raise RuntimeError("The standalone fixture did not reproduce its required failure")
+        row.reload()
 
     def _start_peer(self) -> None:
         """Create a separate dependency namespace, optionally with a colliding container name and noisy logs."""
@@ -115,9 +150,11 @@ class ComposeLab:
         if self.client.containers.list(all=True, filters={"label": f"com.docker.compose.project={project}"}):
             raise RuntimeError("Refusing to reuse an existing Compose project")
         environment = {**os.environ, "DOCKSIGHT_E2E_OWNER": self.owner}
+        environment["DOCKSIGHT_E2E_DENSE_LOGS"] = "1" if self.case.spelling == "unscoped" else "0"
         environment.pop("DOCKER_CONTEXT", None)
         default_host = DEFAULT_NPIPE if os.name == "nt" else DEFAULT_UNIX_SOCKET.replace("http+unix:", "unix:")
         docker_host = environment.get("DOCKER_HOST") or default_host
+        scaled = self.case.spelling == "unscoped" and "nginx" in services and project == self.project
         run_command(
             [
                 "docker",
@@ -134,6 +171,7 @@ class ComposeLab:
                 "-d",
                 "--pull",
                 "missing",
+                *(["--scale", "nginx=16"] if scaled else []),
                 *services,
             ],
             environment,
@@ -181,6 +219,11 @@ class ComposeLab:
 
     def facts(self) -> dict[str, Any]:
         """Record only selected runtime facts, never raw inspect documents or environment secrets."""
+        selected = {
+            **self.containers,
+            **{f"peer/{key}": row for key, row in self.peers.items()},
+            **{f"standalone/{key}": row for key, row in self.standalone.items()},
+        }
         return {
             name: {
                 "id": row.id,
@@ -191,7 +234,7 @@ class ComposeLab:
                 "oom_killed": row.attrs["State"]["OOMKilled"],
                 "restart_count": row.attrs["RestartCount"],
             }
-            for name, row in self.containers.items()
+            for name, row in selected.items()
         }
 
     def close(self) -> None:

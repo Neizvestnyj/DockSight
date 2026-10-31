@@ -61,6 +61,7 @@ def test_live_browser(
                     "project": lab.project,
                     "explicit": case.explicit,
                     "clarify": case.needs_selection,
+                    "host_overview": case.spelling == "unscoped",
                     "peer_project": lab.peer_project,
                     "language": language,
                     "query": case.query(lab.project, "", language),

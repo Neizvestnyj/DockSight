@@ -61,7 +61,7 @@ test('keeps reported health separate from lifecycle state across inventory and r
   }
   await page.getByRole('combobox', { name: 'Language' }).selectOption('ru');
   await expect(
-    page.getByText('Работоспособность: нет данных', { exact: true }).filter({ visible: true }),
+    page.getByRole('region', { name: 'Факты о контейнере', exact: true }).getByText('Нет данных', { exact: true }),
   ).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);

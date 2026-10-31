@@ -47,7 +47,9 @@ class FixtureRuntime(DockerRuntime):
     def __init__(self, lab: ComposeLab) -> None:
         """Keep user workloads outside model-visible inventory and prohibit product mutations."""
         super().__init__((HostConfig(id="e2e", name="Live E2E"),), Redactor(), ("APP_ENV",), timeout=10)
-        self.ids = frozenset(row.id for row in (*lab.containers.values(), *lab.peers.values()))
+        self.ids = frozenset(
+            row.id for row in (*lab.containers.values(), *lab.peers.values(), *lab.standalone.values())
+        )
         self.project = lab.project
 
     def _require_fixture(self, container_id: str) -> None:
@@ -119,8 +121,8 @@ def live_api(lab: ComposeLab, model: str, model_url: str, origins: tuple[str, ..
         env_allowlist=("APP_ENV",),
         model_timeout=90,
         turn_timeout=240,
-        log_lines=30,
-        log_bytes=2048,
+        log_lines=200 if lab.case.spelling == "unscoped" else 30,
+        log_bytes=65536 if lab.case.spelling == "unscoped" else 2048,
         cors_origins=origins,
     )
     components = build_components(settings, reader=runtime, writer=runtime)

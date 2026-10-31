@@ -3,6 +3,7 @@
 Container process state and healthcheck results remain separate in inventory, current facts, diagnostic cards, and
 Compose member rows. Missing or null health is displayed as not reported, including responses from older servers.
 Running counts continue to describe processes; they do not imply successful healthchecks.
+Russian health badges use compact labels; their tooltip identifies the Docker healthcheck.
 
 See the [quick start](../README.md#quick-start) to run the client,
 [usage examples](examples.md) for an investigation, and [deployment](configuration.md#frontend-deployment)
@@ -23,6 +24,15 @@ tests exercise longer log scrolling through mocked API responses. See [contribut
 The workspace keeps model explanations separate from Docker observations. Explanation links select a widget and its
 source observation. Evidence references apply to the response; the client must not invent per-sentence citations.
 The evidence inspector shows the original source kind, host, container, UTC time, and sanitized data.
+
+Broad incident questions show a server-owned **Host overview** before individual cards. It includes local inventory
+counts, process and health state, observed groups, log coverage, and explicit clipping or discovery warnings. Counts
+exclude remote Swarm replicas, and **Needs review** does not prove a failure. The overview's **Source** opens its `host`
+observation; log links open exact-container observations.
+
+**Investigate container** and group choices start a separate session with an explicit target and fresh reads. They
+preserve earlier answers and the next-question draft. Ambiguous named resources retain the clarification flow in the
+existing session. See [host overview contracts](api.md#host-overview).
 
 IBM Plex Sans is used for interface text and IBM Plex Mono for code and identifiers. The logo and favicon live in
 `frontend/public/brand/`. Status colors describe runtime state, uncertainty, and action outcomes.
@@ -68,6 +78,9 @@ Server-prepared `actions` define the permitted operations. Optional `recommendat
 suggestion to an existing action ID. Its review button includes the model reason and links to supporting observations.
 The client never infers a recommendation from narrative text, container state, or action order. Older responses without
 that metadata list every operation under **Actions**.
+
+An `actions_code` labels unavailable action preparation while keeping the observed container facts visible. Such cards
+expose no executable action or recommendation; refreshing or diagnosing again collects current observations.
 
 The action disclosure closes on selection, Escape, or an outside click. Cancelling confirmation restores focus to the
 stable trigger. Reviewing an action never executes it. Execution requires separate confirmation of the exact host,

@@ -2274,6 +2274,142 @@ textarea {
 .group-member-state {
   font-size: 12px;
 }
+.host-overview {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  margin: 20px 0;
+  overflow: hidden;
+}
+.host-overview-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: var(--raised);
+}
+.host-overview-heading > div {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.host-overview h2 {
+  font-size: 16px;
+}
+.host-overview-totals {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding: 16px 16px 8px;
+  gap: 16px;
+}
+.host-overview-totals dt {
+  font-size: 12px;
+  color: var(--muted);
+}
+.host-overview-totals dd {
+  font-size: 24px;
+  font-weight: 400;
+}
+.host-overview-note {
+  padding: 8px 16px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.host-members {
+  max-height: 520px;
+  overflow: auto;
+}
+.host-member {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(140px, 0.7fr);
+  gap: 16px;
+  padding: 14px 16px;
+  border-top: 1px solid var(--rule);
+}
+.host-member > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.host-member-name,
+.host-member-state,
+.host-member-coverage {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+.host-member h3 {
+  font-size: 13px;
+  font-weight: 500;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.host-member-state .container-status {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+.host-member small {
+  display: block;
+  font-size: 11px;
+}
+.host-member-coverage .text-button {
+  margin-top: 4px;
+  font-size: 12px;
+  text-align: left;
+}
+.host-overview-targets {
+  padding: 16px;
+  border-top: 1px solid var(--rule);
+}
+.host-overview-targets h3 {
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+.host-overview-targets > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.host-overview-targets button {
+  min-width: 0;
+  max-width: 100%;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.host-overview-targets small {
+  color: var(--muted);
+}
+.host-overview footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  justify-content: space-between;
+  border-top: 1px solid var(--rule);
+  color: var(--muted);
+}
+@media (max-width: 560px) {
+  .host-member {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 12px;
+    padding: 12px;
+  }
+  .host-member-coverage {
+    grid-column: 1 / -1;
+  }
+  .host-overview-targets {
+    padding: 12px;
+  }
+  .host-overview-targets button {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .host-member-coverage .text-button {
+    min-height: 36px;
+  }
+}
 .group-report footer {
   display: flex;
   flex-wrap: wrap;

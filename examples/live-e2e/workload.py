@@ -1,3 +1,4 @@
+import os
 import socket
 import sys
 import time
@@ -6,6 +7,7 @@ from pathlib import Path
 
 def dependency() -> None:
     """Fail startup on an actual refused connection inside this isolated container."""
+    startup_history()
     try:
         with socket.create_connection(("127.0.0.1", 5432), timeout=2):
             pass
@@ -15,6 +17,26 @@ def dependency() -> None:
         )
         raise SystemExit(1) from None
     raise RuntimeError("The fixture unexpectedly reached a database")
+
+
+def startup_history() -> None:
+    """Opt into finite synthetic startup history that fills a production four-KiB automatic log read."""
+    if os.environ.get("DOCKSIGHT_E2E_DENSE_LOGS") != "1":
+        return
+    for index in range(32):
+        print(
+            f"2026-10-31T10:12:{index:02d}.125Z level=INFO service=fixture-worker "
+            f"trace_id={index * 7919:032x} span_id={index * 104729:016x} "
+            f"phase=startup component=migration step={index:02d} elapsed_ms={index * 137} "
+            "operation=validate_schema database=fixture_app attempt=1 result=pending"
+        )
+
+
+def standalone() -> None:
+    """Emit bounded startup context before an independently observable non-Compose failure."""
+    startup_history()
+    print("StandaloneStartupError: startup failed")
+    raise SystemExit(1)
 
 
 def oom() -> None:
@@ -65,6 +87,8 @@ def main() -> None:
     mode = sys.argv[1]
     if mode == "dependency":
         dependency()
+    elif mode == "standalone":
+        standalone()
     elif mode == "oom":
         oom()
     elif mode == "logs":

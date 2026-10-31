@@ -6,6 +6,7 @@ interface Input {
   project: string;
   explicit: boolean;
   clarify: boolean;
+  host_overview: boolean;
   peer_project: string;
   language: 'en' | 'ru';
   query: string;
@@ -49,6 +50,7 @@ const copy = {
     diagnose: 'Diagnose group',
     investigate: 'Investigate',
     report: 'Group observations',
+    hostOverview: 'Host overview',
     sources: 'Observation sources',
     clarification: 'Group clarification',
   },
@@ -62,6 +64,7 @@ const copy = {
     diagnose: 'Диагностировать группу',
     investigate: 'Исследовать',
     report: 'Наблюдения группы',
+    hostOverview: 'Обзор хоста',
     sources: 'Источники наблюдений по ресурсам',
     clarification: 'Уточнение группы',
   },
@@ -118,20 +121,19 @@ async function checkCards(page: Page, answer: Answer, locale: 'en' | 'ru') {
     const view = panel.locator('.widget-container_status');
     await expect(view.locator('.image-name code')).toHaveText(card.snapshot.image);
     await expect(view.locator('.fact-strip dd').first()).toHaveText(String(card.snapshot.exit_code));
-    if (card.snapshot.state === 'exited') {
-      await expect(view.locator('.fact-strip dd')).toHaveText([
-        '1',
-        locale === 'ru' ? 'Нет' : 'No',
-        '0',
-        locale === 'ru' ? 'Недоступно' : 'Unavailable',
-      ]);
-    }
+    await expect(view.locator('.fact-strip dd').nth(1)).toHaveText(
+      card.snapshot.oom_killed ? (locale === 'ru' ? 'Да' : 'Yes') : locale === 'ru' ? 'Нет' : 'No',
+    );
+    await expect(view.locator('.fact-strip dd').nth(2)).toHaveText(String(card.snapshot.restart_count));
   }
   for (const card of logs) {
-    const member = answer.group!.summary.members!.find((row) => row.id === card.container_id)!;
+    const member =
+      answer.host_overview?.members.find((row) => row.container_id === card.container_id) ??
+      answer.group?.summary.members?.find((row) => row.id === card.container_id);
+    expect(member).toBeDefined();
     const panel = page
       .locator('.container-evidence')
-      .filter({ has: page.getByRole('heading', { name: member.name, exact: true }) });
+      .filter({ has: page.getByRole('heading', { name: member!.name, exact: true }) });
     const view = panel.locator('.widget-log_anomalies');
     expect(await view.locator('.log-line code').allTextContents()).toEqual(card.logs.entries.map((row) => row.message));
     await view.locator('.source-link').click();
@@ -150,11 +152,11 @@ async function checkCards(page: Page, answer: Answer, locale: 'en' | 'ru') {
     await expect(observation.locator('.raw-evidence pre')).toBeVisible();
     expect(JSON.parse((await observation.locator('.raw-evidence pre').textContent())!)).toEqual(source.data);
     await expect(observation.locator('time')).toHaveAttribute('datetime', source.observed_at);
-    await expect(observation).toContainText(member.name);
+    await expect(observation).toContainText(member!.name);
   }
 }
 
-test('shows all failed group members from free chat or explicit selection using the real backend', async ({ page }) => {
+test('shows scoped host or group observations from the real backend', async ({ page }) => {
   const scenario = input!;
   // Free chat deliberately uses a different interface locale from the question's language.
   const locale = scenario.explicit ? scenario.language : scenario.language === 'ru' ? 'en' : 'ru';
@@ -205,16 +207,32 @@ test('shows all failed group members from free chat or explicit selection using 
     expect(ready).toHaveLength(1);
     const answer = answerSchema.parse(ready[0]!.answer);
     await expect(page.locator('.conclusion > p').first()).toHaveText(answer.summary);
-    const report = page.getByRole('region', { name: labels.report, exact: true });
-    await expect(report.locator('.group-member')).toHaveCount(3);
-    await expect(report).toContainText(scenario.project);
+    const report = page.getByRole('region', {
+      name: scenario.host_overview ? labels.hostOverview : labels.report,
+      exact: true,
+    });
+    const memberSelector = scenario.host_overview ? '.host-member' : '.group-member';
+    const memberCount = scenario.host_overview ? answer.host_overview!.members.length : 3;
+    if (scenario.host_overview) {
+      expect(answer.host_overview).toBeTruthy();
+      expect(answer.group).toBeNull();
+      expect(events.some((event) => event.type === 'clarification.required')).toBe(false);
+      await expect(page.getByRole('region', { name: labels.report, exact: true })).toHaveCount(0);
+      await expect(report).toContainText('e2e');
+      await report.getByRole('button', { name: locale === 'ru' ? 'Источник' : 'Source', exact: true }).click();
+      await expect(page.locator('#evidence-observation')).toBeFocused();
+      await expect(page.locator('#evidence-observation')).toContainText(
+        locale === 'ru' ? 'Список контейнеров хоста Docker' : 'Docker host inventory',
+      );
+    } else await expect(report).toContainText(scenario.project);
+    await expect(report.locator(memberSelector)).toHaveCount(memberCount);
     await checkCards(page, answer, locale);
     const sources = page.getByRole('region', { name: labels.sources, exact: true });
-    for (const member of answer.group!.summary.members!.filter((row) => row.state === 'exited')) {
-      await expect(sources.getByRole('group', { name: member.name, exact: true })).toBeVisible();
+    for (const card of answer.widgets.filter((row) => row.widget_type === 'container_status')) {
+      await expect(sources.getByRole('group', { name: card.snapshot.name, exact: true })).toBeVisible();
     }
     await scope.selectOption('all');
-    await expect(report.locator('.group-member')).toHaveCount(3);
+    await expect(report.locator(memberSelector)).toHaveCount(memberCount);
     await expect(page.locator('.widget-container_status')).toHaveCount(
       answer.widgets.filter((row) => row.widget_type === 'container_status').length,
     );

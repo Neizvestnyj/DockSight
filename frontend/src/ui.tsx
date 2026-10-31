@@ -44,7 +44,7 @@ export function ContainerStatus({ state, health }: { state: string; health: Cont
   return (
     <span className="container-status">
       <Status state={state} />
-      <span className={`status health-status ${tone}`}>
+      <span className={`status health-status ${tone}`} title={t('Docker healthcheck')}>
         <span aria-hidden="true" className="status-dot" />
         {t(label)}
       </span>

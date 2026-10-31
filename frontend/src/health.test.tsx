@@ -95,13 +95,14 @@ describe('container health observations', () => {
   });
 
   it.each([
-    ['healthy', 'Работоспособность: в норме'],
-    ['unhealthy', 'Работоспособность: сбой'],
-    ['starting', 'Работоспособность: проверяется'],
-    [null, 'Работоспособность: нет данных'],
+    ['healthy', 'В норме'],
+    ['unhealthy', 'Сбой'],
+    ['starting', 'Проверяется'],
+    [null, 'Нет данных'],
   ] as const)('localizes health %s without translating external observations', (health, label) => {
     renderCard(health, true, 'ru');
     expect(screen.getByText(label)).toBeVisible();
+    expect(screen.getByText(label)).toHaveAttribute('title', 'Проверка здоровья Docker');
     expect(screen.getByText('ghcr.io/northstar/checkout:3.2.4')).toBeVisible();
   });
 

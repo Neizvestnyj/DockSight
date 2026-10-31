@@ -6,6 +6,7 @@ export const evidenceNames = {
   env: 'Env',
   stats: 'Metrics',
   stack: 'Stack',
+  host: 'Host overview',
 } as const;
 
 /** Resolve resource identity from the retained answer rather than a changing live inventory. */
@@ -30,7 +31,8 @@ export function evidenceResource(row: Evidence, answer: Answer): { key: string; 
         ? card.snapshot.name
         : typeof snapshot?.data.name === 'string'
           ? snapshot.data.name
-          : answer.group?.logs.find((item) => item.container_id === row.container_id)?.name);
+          : (answer.group?.logs.find((item) => item.container_id === row.container_id)?.name ??
+            answer.host_overview?.members.find((item) => item.container_id === row.container_id)?.name));
     return { key: `${row.host}/${row.container_id}`, name: name ?? `${row.container_id.slice(0, 12)}…` };
   }
   const stacks = row.kind === 'stack' && Array.isArray(row.data.stacks) ? row.data.stacks : [];

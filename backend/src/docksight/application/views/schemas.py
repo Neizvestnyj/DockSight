@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from docksight.domain.actions import ActionState, Operation
 from docksight.domain.diagnostics import EvidenceRef
-from docksight.domain.runtime import ContainerSnapshot, LogBatch, StackSummary
+from docksight.domain.runtime import ContainerHealth, ContainerSnapshot, ContainerState, LogBatch, StackSummary
 
 
 def _readable_explanation(value: str) -> None:
@@ -89,6 +89,36 @@ class GroupInspection(Contract):
     evidence_id: str
     logs: list[GroupLogResult] = Field(max_length=200)
     inventory_code: str | None = None
+
+
+class HostMember(Contract):
+    """Project a local container's observations without copying environment values into the overview."""
+
+    container_id: str = Field(pattern=r"^[a-f0-9]{64}$")
+    name: str = Field(min_length=1, max_length=4096)
+    state: ContainerState
+    health: ContainerHealth | None
+    exit_code: int
+    oom_killed: bool
+    restart_count: int = Field(ge=0)
+    observed_at: datetime
+    group: GroupTarget | None
+    attention: bool
+
+
+class HostInspection(Contract):
+    """Keep observed local totals, bounded previews, and log coverage independent of model prose."""
+
+    host: str = Field(min_length=1, max_length=64)
+    evidence_id: str
+    total: int = Field(ge=0, le=200)
+    running: int = Field(ge=0, le=200)
+    attention: int = Field(ge=0, le=200)
+    truncated: bool
+    discovery_code: str | None
+    members: list[HostMember] = Field(max_length=32)
+    targets: list[GroupTarget] = Field(max_length=32)
+    logs: list[GroupLogResult] = Field(max_length=32)
 
 
 class CauseAssessment(Contract):
@@ -202,11 +232,14 @@ class ContainerStatusCard(Contract):
     snapshot: ContainerSnapshot
     evidence_ids: list[str]
     actions: list[ActionView] = Field(default_factory=list[ActionView])
+    actions_code: str | None = Field(default=None, min_length=1, max_length=64, pattern=r"^[a-z][a-z0-9_]*$")
     recommendation: ActionRecommendation | None = None
 
     @model_validator(mode="after")
     def check_recommendation(self) -> Self:
         """Require the recommended ID to belong to this card's exact server-prepared target."""
+        if self.actions_code and self.actions:
+            raise ValueError("Unavailable actions must not expose executable IDs")
         if self.recommendation and not any(
             action.id == self.recommendation.action_id
             and action.host == self.snapshot.host
@@ -261,5 +294,6 @@ class DiagnosisResponse(Contract):
     uncertain: bool
     cause: CauseAssessment | None = None
     group: GroupInspection | None = None
+    host_overview: HostInspection | None = None
     evidence: list[EvidenceRef]
     widgets: list[Widget] = Field(max_length=16)

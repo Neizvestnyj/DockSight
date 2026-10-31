@@ -22,6 +22,10 @@ For your own Docker environment, choose **Connect API**, enter the backend token
 Select a container to read its state, metrics, and logs without using the model. Choose **Diagnose** or ask a question
 to start model-assisted investigation. Follow-ups stay scoped to the same host.
 
+Ask "What happened?" without selecting a resource to get a bounded host overview across projects and containers without
+an observed group. Review collection limits and missing logs, then choose **Investigate container** or an observed group
+for a separate, focused investigation. A question naming an ambiguous resource still asks which target you mean.
+
 Restart and stop require separate confirmation of a server-prepared action. After execution, refresh the container
 overview for current observations; earlier diagnostic cards retain their original evidence.
 

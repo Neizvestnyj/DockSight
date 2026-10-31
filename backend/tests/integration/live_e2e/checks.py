@@ -10,6 +10,7 @@ from docksight.application.views.schemas import (
 )
 from docksight.domain.runtime import ContainerSnapshot
 from tests.integration.live_e2e.cases import Case
+from tests.integration.live_e2e.host_checks import check_host
 from tests.integration.live_e2e.lab import ComposeLab
 
 
@@ -84,19 +85,31 @@ def check_answer(events: list[dict[str, Any]], lab: ComposeLab, case: Case, lang
     ready = [row for row in events if row["type"] == "answer.ready"]
     assert len(ready) == 1
     answer = DiagnosisResponse.model_validate(ready[0]["answer"])
-    ids = {row.id for row in lab.containers.values()}
+    containers = {row.id: row for row in lab.containers.values()}
+    if case.spelling == "unscoped":
+        containers.update(lab.peers | lab.standalone)
+    assert not any(row["type"] == "clarification.required" for row in events)
+    ids = set(containers)
     _check_references(answer, ids)
-    names = {row.id: row.name for row in lab.containers.values()}
+    names = {row.id: row.name for row in containers.values()}
     assert all(row.container_name == names.get(row.container_id or "") for row in answer.evidence)
     identifiers = (lab.project, *ids, *(row.name for row in lab.containers.values()))
     check_narrative(answer, language, identifiers)
+    _check_diagnostic_scope(answer, lab, case, ids)
+    _check_logs(answer, lab)
+    return answer
+
+
+def _check_diagnostic_scope(answer: DiagnosisResponse, lab: ComposeLab, case: Case, ids: set[str]) -> None:
+    """Apply the selected host, group or exact-container contract to the same typed response."""
+    if case.spelling == "unscoped":
+        check_host(answer, lab)
+        return
     check_resource_scope(answer, ids, lab.project)
     if case.group:
         _check_group(answer, lab)
     else:
         _check_container(answer, lab, case)
-    _check_logs(answer, lab)
-    return answer
 
 
 def _check_references(answer: DiagnosisResponse, ids: set[str]) -> None:
@@ -197,18 +210,21 @@ def _check_uncertainty(answer: DiagnosisResponse, case: Case) -> None:
 def _check_logs(answer: DiagnosisResponse, lab: ComposeLab) -> None:
     """Check actual per-container log content and provenance rather than model-authored wording."""
     containers = {row.id: row for row in lab.containers.values()}
+    if lab.case.spelling == "unscoped":
+        containers.update(lab.peers)
+        containers.update(lab.standalone)
     cards = [row for row in answer.widgets if isinstance(row, LogAnomalyCard)]
     assert cards, "The diagnosis omitted supported requested logs"
     for card in cards:
         assert card.host == "e2e" and card.container_id in containers
-        _check_log_source(card, answer)
+        _check_log_source(card, answer, 200 if lab.case.spelling == "unscoped" else 30)
         raw = containers[card.container_id].logs(tail=100).decode("utf-8", errors="replace")
         assert all(entry.message in raw for entry in card.logs.entries), "Log card contains unobserved content"
 
 
-def _check_log_source(card: LogAnomalyCard, answer: DiagnosisResponse) -> None:
+def _check_log_source(card: LogAnomalyCard, answer: DiagnosisResponse, max_lines: int) -> None:
     """Require bounded lines and exact-resource references for each log card."""
     sources = {row.id: row for row in answer.evidence}
-    assert 0 < len(card.logs.entries) <= 30
+    assert 0 < len(card.logs.entries) <= max_lines
     assert any(sources[ref].kind == "logs" for ref in card.evidence_ids)
     assert all(sources[ref].container_id in {None, card.container_id} for ref in card.evidence_ids)

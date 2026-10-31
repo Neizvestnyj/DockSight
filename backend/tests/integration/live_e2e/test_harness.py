@@ -10,10 +10,41 @@ from docker.errors import DockerException
 from pydantic import SecretStr
 
 from docksight.application.views.schemas import DiagnosisResponse
+from docksight.bootstrap import Settings
+from tests.integration.live_e2e.cases import CASES, Case
 from tests.integration.live_e2e.checks import check_language, check_narrative, check_selection
 from tests.integration.live_e2e.lab import OWNER_LABEL, ROOT, ComposeLab, require_owner, run_command
-from tests.integration.live_e2e.server import local_model_url, require_local_models
+from tests.integration.live_e2e.server import live_api, local_model_url, require_local_models
 from tests.integration.live_e2e.test_browser import _run_browser
+
+
+def test_bare_host_case_does_not_request_the_choice_required_for_named_ambiguity() -> None:
+    cases = {row.spelling: row for row in CASES if row.spelling in {"unscoped", "ambiguous"}}
+    assert not cases["unscoped"].needs_selection
+    assert cases["ambiguous"].needs_selection
+    assert cases["unscoped"].query("infra", "", "en") == "What happened?"
+    assert cases["unscoped"].query("infra", "", "ru") == "Что случилось?"
+
+
+@pytest.mark.parametrize(("name", "limits"), [("compose-unscoped", (200, 65536)), ("compose-chat", (30, 2048))])
+def test_dense_host_case_uses_production_log_limits_without_changing_other_cases(
+    name: str, limits: tuple[int, int], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    lab = object.__new__(ComposeLab)
+    lab.owner = "settings-test"
+    lab.case = next(row for row in CASES if row.name == name)
+    captured: list[Settings] = []
+
+    def capture(settings: Settings, **ports: object) -> None:
+        """Stop before starting HTTP or model clients while retaining the actual configured budgets."""
+        captured.append(settings)
+        raise RuntimeError("Captured settings")
+
+    monkeypatch.setattr("tests.integration.live_e2e.server.FixtureRuntime", lambda lab: Mock())
+    monkeypatch.setattr("tests.integration.live_e2e.server.build_components", capture)
+    with pytest.raises(RuntimeError, match="Captured settings"), live_api(lab, "fixture-model", "http://127.0.0.1"):
+        pytest.fail("The settings probe must stop before serving an API")
+    assert (captured[0].log_lines, captured[0].log_bytes) == limits
 
 
 @pytest.mark.parametrize("violation", ["invented", "missing", "answer", "read", "failure"])
@@ -168,6 +199,40 @@ def test_peer_compose_setup_rejects_an_existing_namespace_before_calling_the_cli
     )
 
 
+def test_small_unscoped_fixture_keeps_the_exact_requested_primary_service_count(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    lab = object.__new__(ComposeLab)
+    lab.project = "small-host"
+    lab.case = Case("small-host", ("backend",), group=True, spelling="unscoped")
+    row = Mock(labels={"com.docker.compose.service": "backend"})
+    for name in ("_compose", "_wait_ready", "_start_peer", "_start_standalone"):
+        monkeypatch.setattr(lab, name, Mock())
+    monkeypatch.setattr(lab, "_owned_containers", lambda: [row])
+    lab.start()
+    assert lab.containers == {"backend": row}
+
+
+@pytest.mark.parametrize("services", [("backend",), ("backend", "nginx")])
+def test_unscoped_fixture_scales_nginx_only_when_it_is_selected(
+    services: tuple[str, ...], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    lab = object.__new__(ComposeLab)
+    lab.owner, lab.project = "own-run", "host-project"
+    lab.case = Case("host-fixture", services, group=True, spelling="unscoped")
+    lab.client = Mock()
+    lab.client.containers.list.return_value = []
+    calls: list[list[str]] = []
+
+    def capture(arguments: list[str], environment: dict[str, str]) -> None:
+        """Retain the actual CLI boundary without starting Docker workloads."""
+        calls.append(arguments)
+
+    monkeypatch.setattr("tests.integration.live_e2e.lab.run_command", capture)
+    lab._compose(lab.project, services)
+    assert ("--scale" in calls[0]) is ("nginx" in services)
+
+
 @pytest.mark.parametrize("field", ["remote_model", "remote_host"])
 def test_local_aliases_cannot_enable_cloud_generation(field: str) -> None:
     with pytest.raises(ValueError, match="Remote/cloud"):
@@ -213,6 +278,15 @@ def test_grafana_fixture_rejects_a_different_failure_cause(exit_code: int, oom: 
     row = Mock(attrs={"State": {"Status": "exited", "ExitCode": exit_code, "OOMKilled": oom}})
     row.logs.return_value = output
     lab.containers = {"grafana": row}
+    with pytest.raises(RuntimeError, match="failure"):
+        lab._wait_ready()
+
+
+def test_clean_shutdown_fixture_rejects_an_abnormal_exit_even_with_a_shutdown_log() -> None:
+    lab = object.__new__(ComposeLab)
+    row = Mock(attrs={"State": {"Status": "exited", "ExitCode": 1, "OOMKilled": False}})
+    row.logs.return_value = b"LOG: database system is shut down\n"
+    lab.containers = {"database-stopped": row}
     with pytest.raises(RuntimeError, match="failure"):
         lab._wait_ready()
 

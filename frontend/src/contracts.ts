@@ -103,6 +103,53 @@ export const groupInspectionSchema = z.strictObject({
     )
     .max(200),
 });
+const hostMemberSchema = z.strictObject({
+  container_id: z.string().regex(/^[a-f0-9]{64}$/),
+  name: z.string().min(1).max(4096),
+  state: containerSchema.shape.state,
+  health: containerHealthSchema.nonoptional(),
+  exit_code: z.number().int(),
+  oom_killed: z.boolean(),
+  restart_count: z.number().int().nonnegative(),
+  observed_at: z.iso.datetime({ offset: true }),
+  group: groupTargetSchema.nullable(),
+  attention: z.boolean(),
+});
+export const hostOverviewSchema = z
+  .strictObject({
+    host: z.string().min(1).max(64),
+    evidence_id: z.string().min(1).max(128),
+    total: z.number().int().min(0).max(200),
+    running: z.number().int().min(0).max(200),
+    attention: z.number().int().min(0).max(200),
+    truncated: z.boolean(),
+    discovery_code: z.string().min(1).max(64).nullable(),
+    members: z.array(hostMemberSchema).max(32),
+    targets: z.array(groupTargetSchema).max(32),
+    logs: z.array(groupInspectionSchema.shape.logs.element).max(32),
+  })
+  .superRefine((overview, context) => {
+    const members = new Set(overview.members.map((row) => row.container_id));
+    const targets = new Set(overview.targets.map(targetKey));
+    const logs = new Set(overview.logs.map((row) => row.container_id));
+    if (
+      members.size !== overview.members.length ||
+      targets.size !== overview.targets.length ||
+      logs.size !== overview.logs.length
+    )
+      context.addIssue({ code: 'custom', message: 'Host overview resources must be distinct.' });
+    if (overview.running > overview.total || overview.attention > overview.total || members.size > overview.total)
+      context.addIssue({ code: 'custom', message: 'Host overview counts exceed observed containers.' });
+    if (
+      overview.members.filter((row) => row.state === 'running').length > overview.running ||
+      overview.members.filter((row) => row.attention).length > overview.attention
+    )
+      context.addIssue({ code: 'custom', message: 'Displayed members exceed host overview counts.' });
+    if (overview.members.some((row) => row.group && !targets.has(targetKey(row.group))))
+      context.addIssue({ code: 'custom', path: ['targets'], message: 'Member group is outside discovered targets.' });
+    if (overview.logs.some((row) => !members.has(row.container_id)))
+      context.addIssue({ code: 'custom', path: ['logs'], message: 'Log coverage is outside displayed members.' });
+  });
 const references = { evidence_ids: z.array(z.string()) };
 export const widgetSchema = z.discriminatedUnion('widget_type', [
   z
@@ -110,6 +157,12 @@ export const widgetSchema = z.discriminatedUnion('widget_type', [
       widget_type: z.literal('container_status'),
       snapshot: containerSchema,
       actions: z.array(actionSchema),
+      actions_code: z
+        .string()
+        .min(1)
+        .max(64)
+        .regex(/^[a-z][a-z0-9_]*$/)
+        .nullish(),
       recommendation: z
         .object({ action_id: z.string().min(1).max(128), reason: z.string().min(1).max(240).nullable() })
         .strict()
@@ -117,6 +170,8 @@ export const widgetSchema = z.discriminatedUnion('widget_type', [
       ...references,
     })
     .superRefine((card, context) => {
+      if (card.actions_code && card.actions.length)
+        context.addIssue({ code: 'custom', path: ['actions'], message: 'Unavailable actions expose executable IDs.' });
       if (
         card.recommendation &&
         !card.actions.some(
@@ -151,7 +206,7 @@ export const widgetSchema = z.discriminatedUnion('widget_type', [
 ]);
 export const evidenceSchema = z.object({
   id: z.string(),
-  kind: z.enum(['container', 'logs', 'stats', 'stack', 'env']),
+  kind: z.enum(['container', 'logs', 'stats', 'stack', 'env', 'host']),
   host: z.string(),
   container_id: z.string().nullable(),
   observed_at: z.string(),
@@ -165,6 +220,7 @@ export const answerSchema = z
     uncertain: z.boolean(),
     cause: causeSchema.nullish(),
     group: groupInspectionSchema.nullish(),
+    host_overview: hostOverviewSchema.nullish(),
     evidence: z.array(evidenceSchema),
     widgets: z.array(widgetSchema).max(16),
   })
@@ -172,6 +228,26 @@ export const answerSchema = z
     const byId = new Map(answer.evidence.map((row) => [row.id, row]));
     if (answer.cause?.evidence_ids.some((id) => !byId.has(id)))
       context.addIssue({ code: 'custom', path: ['cause'], message: 'Cause references unavailable evidence.' });
+    if (answer.host_overview) {
+      const overview = answer.host_overview;
+      const source = byId.get(overview.evidence_id);
+      if (source?.kind !== 'host' || source.host !== overview.host || source.container_id !== null)
+        context.addIssue({
+          code: 'custom',
+          path: ['host_overview'],
+          message: 'Host overview requires scoped host evidence.',
+        });
+      for (const row of overview.logs) {
+        if (row.state !== 'collected') continue;
+        const log = row.evidence_id ? byId.get(row.evidence_id) : undefined;
+        if (log?.kind !== 'logs' || log.container_id !== row.container_id || log.host !== overview.host)
+          context.addIssue({
+            code: 'custom',
+            path: ['host_overview', 'logs'],
+            message: 'Log coverage is outside its host scope.',
+          });
+      }
+    }
     if (!answer.group) return;
     const source = byId.get(answer.group.evidence_id);
     if (source?.kind !== 'stack')
@@ -288,6 +364,7 @@ export type DiagnosticTarget = z.infer<typeof diagnosticTargetSchema>;
 export type TargetSelection = z.infer<typeof targetSelectionSchema>;
 export type Stack = z.infer<typeof stackSchema>;
 export type GroupInspection = z.infer<typeof groupInspectionSchema>;
+export type HostOverview = z.infer<typeof hostOverviewSchema>;
 export type TurnEvent = z.infer<typeof eventSchema>;
 export type TraceStep = z.infer<typeof traceStepSchema>;
 export interface TurnInput {

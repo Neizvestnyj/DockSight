@@ -6,6 +6,7 @@ from pydantic import Field, TypeAdapter, ValidationError
 
 from docksight.application.diagnostics.context import EvidenceContext
 from docksight.application.diagnostics.groups import group_result, inspect_group
+from docksight.application.diagnostics.host import host_result, inspect_host, update_host_log
 from docksight.application.diagnostics.logs import fit_logs, log_data
 from docksight.application.diagnostics.scope import group_alternatives
 from docksight.application.ports.models import ToolCall, ToolSpec
@@ -38,6 +39,7 @@ class StackArgs(Contract):
 
 
 _TOOLS: Final[dict[str, tuple[type[Contract], str]]] = {
+    "inspect_host": (NoArgs, "Inspect this host across projects and ungrouped containers with bounded problem logs"),
     "list_containers": (NoArgs, "List up to 32 container snapshots on the selected host"),
     "inspect_container": (ContainerArgs, "Inspect process state, healthcheck status, and exit/OOM evidence"),
     "get_container_logs": (ContainerArgs, "Read bounded sanitized logs"),
@@ -92,6 +94,8 @@ class DiagnosticTools:
         self.candidates = candidates
         self.query = query
         self.context.container_id = container_id
+        self.host_wide = False
+        self.discovery_code: str | None = None
 
     async def execute(self, call: ToolCall) -> JsonObject:
         """Reject unknown tools or arguments before dispatching a bounded runtime read."""
@@ -108,7 +112,7 @@ class DiagnosticTools:
         if isinstance(args, GroupTarget):
             return await self._group(args)
         if isinstance(args, NoArgs):
-            return await self._containers()
+            return await self._host() if call.name == "inspect_host" else await self._containers()
         if isinstance(args, StackArgs):
             stacks = await self.runtime.stacks(self.host, args.kind)
             item = self.context.record(
@@ -129,8 +133,8 @@ class DiagnosticTools:
 
     def _selection(self, selection: GroupSelection) -> JsonObject:
         """Resolve model-proposed options back to server-discovered identities without reading container evidence."""
-        if self.group or self.context.group:
-            raise DockSightError("scope_already_selected", "A group is already selected for this turn", 409)
+        if self.group or self.context.group or self.host_wide or self.context.host_overview:
+            raise DockSightError("scope_already_selected", "A diagnostic scope is already selected for this turn", 409)
         if any(row not in self.candidates for row in selection.candidates):
             raise DockSightError("invalid_group_candidate", "Selection requires an observed group on this host", 422)
         self.context.selection = TargetSelection(
@@ -166,8 +170,29 @@ class DiagnosticTools:
             rows = tuple(row for row in rows if row.id in self.context.group.summary.container_ids)
         return rows
 
+    async def _host(self) -> JsonObject:
+        """Keep a host-wide report independent of group and container target selection."""
+        if self.context.container_id:
+            raise DockSightError("resource_outside_container", "Host overview is outside the selected container", 422)
+        if self.group or self.context.group:
+            raise DockSightError("resource_outside_group", "Host overview is outside the selected group", 422)
+        if self.context.host_overview:
+            return host_result(self.context)
+        return await inspect_host(
+            self.runtime,
+            self.context,
+            self.host,
+            await self._inventory(),
+            self.candidates,
+            self.discovery_code,
+            self.log_lines,
+            self.log_bytes,
+        )
+
     async def _group(self, target: GroupTarget) -> JsonObject:
         """Bind model-discovered groups and reuse an already collected report within this turn."""
+        if self.context.host_overview or self.host_wide:
+            raise DockSightError("scope_already_selected", "Narrow this host overview in a separate turn", 409)
         if self.group and target != self.group:
             raise DockSightError("resource_outside_group", "Resource is outside the selected group", 422)
         if self.context.group:
@@ -194,7 +219,16 @@ class DiagnosticTools:
         elif tool == "get_container_env":
             item = self.context.record("env", self.host, {"variables": dict(snapshot.environment)}, snapshot)
         elif tool == "get_container_logs":
-            container = self.context.record("container", self.host, data, snapshot)
+            return await self._logs(snapshot, data)
+        else:
+            item = self.context.record("container", self.host, data, snapshot)
+
+        return {"evidence_id": item.id, "data": item.data}
+
+    async def _logs(self, snapshot: ContainerSnapshot, data: JsonObject) -> JsonObject:
+        """Retain exact-container observations and update host coverage after later log attempts."""
+        container = self.context.record("container", self.host, data, snapshot)
+        try:
             logs = await self.runtime.logs(self.host, snapshot.id, self.log_lines, self.log_bytes)
             logs = fit_logs(logs, self.context.remaining_bytes)
             item = self.context.record(
@@ -204,16 +238,11 @@ class DiagnosticTools:
                 snapshot,
                 logs,
             )
-
-            return {
-                "evidence_id": item.id,
-                "container_evidence_id": container.id,
-                "data": item.data,
-            }
-        else:
-            item = self.context.record("container", self.host, data, snapshot)
-
-        return {"evidence_id": item.id, "data": item.data}
+        except DockSightError as exc:
+            update_host_log(self.context, snapshot, code=exc.code)
+            raise
+        update_host_log(self.context, snapshot, evidence_id=item.id)
+        return {"evidence_id": item.id, "container_evidence_id": container.id, "data": item.data}
 
     async def _resource_id(self, value: str) -> str:
         """Accept full Docker IDs or discovered exact names, never arbitrary ID prefixes or evidence aliases."""

@@ -21,6 +21,7 @@ class TargetResolution:
     candidates: tuple[GroupTarget, ...] = ()
     selection: TargetSelection | None = None
     container_id: str | None = None
+    host_wide: bool = False
 
 
 def _mentioned(query: str, name: str) -> bool:
@@ -53,7 +54,10 @@ async def resolve_target(
     if container:
         return container
     named_container = any(_mentioned(query, row.name) for row in rows)
-    groups, code = await _group_candidates(runtime, host, rows, query, named_container)
+    host_wide = _unscoped_incident(query)
+    groups, code = await _group_candidates(runtime, host, rows, query, named_container and not host_wide)
+    if host_wide:
+        return TargetResolution(None, rows, code, tuple(groups), host_wide=True)
     targets, exact = _question_targets(groups, query, named_container)
     selection = _target_selection(targets, rows, query, exact)
     group = targets[0] if len(targets) == 1 and selection is None else None
@@ -61,23 +65,23 @@ async def resolve_target(
 
 
 def _question_targets(groups: list[GroupTarget], query: str, named_container: bool) -> tuple[list[GroupTarget], bool]:
-    """Distinguish explicit group references from typo matches and unscoped incident alternatives."""
+    """Distinguish explicit group references from unresolved spelling without narrowing a whole host."""
     exact = [row for row in groups if _mentioned(query, row.name) or _mentioned(query, row.name.replace("-", " "))]
     if exact:
         return exact, True
     targets = [] if named_container else _near_groups(groups, query)
-    if not targets and not named_container and _unscoped_incident(query):
-        targets = groups if len(groups) > 1 else []
     return targets, False
 
 
 def _unscoped_incident(query: str) -> bool:
-    """Recognize bare incident questions without treating named or descriptive resource requests as host-wide."""
+    """Recognize broad incident questions and the UI host shortcut without consuming named-resource questions."""
     text = " ".join(re.findall(r"[\w']+", query.casefold().replace("\u2019", "'")))
     return (
         re.fullmatch(
-            r"(?:(?:\u0430 )?что (?:случилось|произошло|упало|сломалось|не так)(?: \u0443 нас)?|"
-            r"what (?:happened|failed|broke|is down|is wrong|went wrong)|what's (?:wrong|down|broken))",
+            r"(?:(?:\u0430 )?что (?:случилось|произошло|упало|сломалось|не так)(?: \u0443 нас| на (?:этом )?хосте)?|"
+            r"what (?:happened|failed|broke|is down|is wrong|went wrong)(?: on (?:this|the) host)?|"
+            r"what's (?:wrong|down|broken)|which containers need attention(?: and why)?|"
+            r"check (?:this|the) host|проверь хост|какие контейнеры требуют внимания(?: и почему)?)",
             text,
         )
         is not None

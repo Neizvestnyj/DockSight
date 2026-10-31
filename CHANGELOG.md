@@ -13,9 +13,20 @@ Dates below record each version's merge into `master` in Europe/Moscow. Version 
 - Docker healthcheck status appears separately from process state in container facts, diagnostic cards, inventory,
   and Compose members. Running unhealthy containers receive bounded diagnostic log collection even without restarts;
   missing health observations remain unknown, and probe commands and output are not exposed.
+  Russian health badges use compact labels with a healthcheck hint.
+
+### Changed
+
+- General incident questions return a bounded host overview across projects and ungrouped containers, with observed
+  state, log coverage, collection limits, and optional focused investigations. Named ambiguity still requires a target
+  choice. Additional log reads retain their evidence, and unavailable actions preserve collected observations.
+  Diagnostic documentation and sequence diagrams describe this flow; live regressions use mixed hosts and production
+  log limits.
 
 ### Fixed
 
+- Host model projections limit repeated member detail and omit unvalidated drafts before final generation.
+  Ollama context-window exhaustion is distinguished from the response token limit, with localized guidance.
 - Docker log tails retain transport timeouts and abort at a fixed deadline. Stalled or slowly delivered responses release
   worker capacity and cannot return partial logs as a successful read or prevent backend shutdown.
 

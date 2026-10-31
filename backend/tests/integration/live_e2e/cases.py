@@ -18,8 +18,8 @@ class Case:
 
     @property
     def needs_selection(self) -> bool:
-        """Require an observed scope choice for ambiguous names or bare incident questions."""
-        return self.spelling in {"ambiguous", "unscoped"}
+        """Require an observed scope choice only for an explicitly ambiguous resource name."""
+        return self.spelling == "ambiguous"
 
     def query(self, project: str, container_id: str, language: Language = "en") -> str:
         """Ask about the observed namespace or exact ID without suggesting a failure explanation."""
@@ -67,7 +67,7 @@ CASES: Final = (
     Case("compose-spaced", ("backend", "grafana", "nginx"), group=True, spelling="spaced"),
     Case("compose-cyrillic", ("backend", "grafana", "nginx"), group=True, spelling="cyrillic"),
     Case("compose-ambiguous", ("backend", "grafana", "nginx"), group=True, spelling="ambiguous"),
-    Case("compose-unscoped", ("backend", "grafana", "nginx"), group=True, spelling="unscoped"),
+    Case("compose-unscoped", ("backend", "grafana", "nginx", "database-stopped"), group=True, spelling="unscoped"),
     Case("oom", ("oom",)),
     Case("crash-loop", ("crash",)),
     Case("truncated-logs", ("logs",)),

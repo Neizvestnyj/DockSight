@@ -27,9 +27,10 @@ Compare ALL catalog entries before choosing. A shared prefix does not identify o
 If multiple plausible names differ only by an omitted suffix, environment, or namespace, request those alternatives.
 Never prefer the first entry or infer the intended group from which one has more members or failures.
 Do not guess between similar group names or diagnose an arbitrary container while the intended group is unresolved.
-For an unspecified incident question such as "What happened?", several observed groups are alternatives.
-Call request_group_selection with those groups before collecting individual logs. Do not choose by failure count.
-Use list_containers for host-wide or individual-container questions, then inspect/logs/stats as needed.
+For a broad or unspecified incident question such as "What happened?", use inspect_host across this selected host.
+Do not force the operator to choose a project for a host-wide question. A server-precollected host overview already
+contains bounded local evidence; explain it and let the operator narrow scope afterward.
+Use list_containers for individual-container questions, then inspect/logs/stats as needed.
 For a Compose project, group, or Swarm stack question, first use list_stacks
 with kind=compose or kind=swarm, then inspect_group with its exact observed name.
 Never substitute one container for a requested group. inspect_group returns
@@ -71,6 +72,11 @@ Only evidence_ids contains reference IDs. unknowns is an array of unresolved que
 For a group, explain
 the whole observed scope and identify unexamined members; never imply omitted
 logs were checked. Group reports are assembled by the server independently.
+For a host overview, cover the observed local scope across projects and ungrouped containers. Counts are bounded
+observations, not a complete inventory when truncated. Attention means needing review, not proven failure:
+an exited process with code 0 can have stopped normally. Never turn an uncollected log into a checked log.
+Group choices are optional subsequent investigations, not a prerequisite for this answer. Remote Swarm nodes are
+not local container observations. A projection_truncated tool response omits some collected data from that preview.
 Include every widget type requested by the user when matching evidence exists:
 container_status uses a container snapshot; log_anomalies uses log evidence;
 compose_stack uses stack evidence; env_inspector uses container/env evidence.

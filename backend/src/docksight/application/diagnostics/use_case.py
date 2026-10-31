@@ -167,7 +167,7 @@ class Diagnostics:
         if call:
             messages.append(ModelMessage("assistant", "", (call,)))
             async for event in self._record_tool(
-                call, tools, messages, deadline, 0, trace, strict=tools.group is not None
+                call, tools, messages, deadline, 0, trace, strict=tools.group is not None or tools.host_wide
             ):
                 yield event
         async for event in self._explore(messages, tools, deadline, trace, int(call is not None)):
@@ -190,6 +190,8 @@ class Diagnostics:
             return ToolCall("selected-group", "inspect_group", tools.group.model_dump())
         if tools.context.container_id:
             return ToolCall("selected-container", "get_container_logs", {"container_id": tools.context.container_id})
+        if tools.host_wide:
+            return ToolCall("selected-host", "inspect_host", {})
         return None
 
     async def _answer_turn(
@@ -202,6 +204,8 @@ class Diagnostics:
         trace: DiagnosticTrace,
     ) -> AsyncGenerator[TurnEvent]:
         """Retain validated answers in history without recording unresolved clarification turns."""
+        if context.host_overview and messages[-1].role == "assistant" and not messages[-1].tool_calls:
+            messages = messages[:-1]
         messages.append(ModelMessage("user", final_prompt(query, context)))
         async for event in self._finalize(messages, context, session.actor, deadline, trace):
             if event["type"] == "answer.ready":
@@ -231,6 +235,7 @@ class Diagnostics:
         tools.inventory, tools.group, tools.candidates = resolved.containers, resolved.group, resolved.candidates
         tools.context.container_id = resolved.container_id
         tools.context.selection = resolved.selection
+        tools.host_wide, tools.discovery_code = resolved.host_wide, resolved.discovery_code
         yield trace.finish(code=resolved.discovery_code)
         yield {
             "type": "tool.completed",
@@ -258,6 +263,15 @@ class Diagnostics:
                             "Collect its fresh state and logs; do not return to the previous group.",
                         }
                     ),
+                )
+            )
+        elif tools.host_wide:
+            messages.append(
+                ModelMessage(
+                    "system",
+                    "This turn covers the selected host, across observed projects and "
+                    "ungrouped containers. Explain the host overview before the operator narrows "
+                    "scope in a new turn; do not replace it with a group choice.",
                 )
             )
         elif tools.group is None and tools.candidates:
@@ -343,10 +357,12 @@ class Diagnostics:
         if traced:
             error = result.get("error")
             yield trace.finish(code=error if isinstance(error, str) else None)
-        messages.append(ModelMessage("tool", json.dumps(result), tool_call_id=call.id, tool_name=call.name))
+        messages.append(
+            ModelMessage("tool", json.dumps(result, ensure_ascii=False), tool_call_id=call.id, tool_name=call.name)
+        )
         yield {"type": "tool.completed", "turn_id": trace.turn_id, "tool": name, "ok": "error" not in result}
         if strict and isinstance(result.get("error"), str):
-            raise DockSightError(str(result["error"]), "Selected group could not be inspected", 502)
+            raise DockSightError(str(result["error"]), "Selected scope could not be inspected", 502)
 
     async def _tool_result(self, call: ToolCall, tools: DiagnosticTools, deadline: float, used: int) -> JsonObject:
         """Return a safe tool result while preserving the absolute turn deadline."""
