@@ -35,7 +35,16 @@ def compose_stacks(containers: tuple[ContainerSnapshot, ...]) -> tuple[StackSumm
             sum(row.state == "running" for row in rows),
             tuple(row.id for row in rows),
             tuple(
-                StackMember(row.id, row.name, "container", row.state, 1, int(row.state == "running"), row.exit_code)
+                StackMember(
+                    row.id,
+                    row.name,
+                    "container",
+                    row.state,
+                    1,
+                    int(row.state == "running"),
+                    row.exit_code,
+                    health=row.health,
+                )
                 for row in rows
             ),
             len(containers) >= 200,

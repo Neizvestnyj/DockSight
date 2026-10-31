@@ -43,10 +43,22 @@ class GroupRuntime(FakeRuntime):
             StackSummary(
                 "infra",
                 "compose",
-                6,
-                0,
+                len(self.rows),
+                sum(row.state == "running" for row in self.rows),
                 tuple(row.id for row in self.rows),
-                tuple(StackMember(row.id, row.name, "container", row.state, 1, 0, 1) for row in self.rows),
+                tuple(
+                    StackMember(
+                        row.id,
+                        row.name,
+                        "container",
+                        row.state,
+                        1,
+                        int(row.state == "running"),
+                        row.exit_code,
+                        health=row.health,
+                    )
+                    for row in self.rows
+                ),
             ),
         )
 
@@ -56,6 +68,66 @@ class GroupRuntime(FakeRuntime):
         if container_id == "2" * 64:
             raise DockSightError("runtime_unavailable", "Docker operation failed", 503)
         return self.log_batch
+
+
+async def test_running_unhealthy_member_is_collected_without_restarts_or_oom() -> None:
+    runtime = GroupRuntime()
+    runtime.rows = tuple(
+        replace(row, state="running", exit_code=0, restart_count=0, health="unhealthy" if index == 0 else "starting")
+        for index, row in enumerate(runtime.rows)
+    )
+    context = EvidenceContext()
+    result = await DiagnosticTools(runtime, context, "local").execute(
+        ToolCall("group", "inspect_group", {"kind": "compose", "name": "infra"})
+    )
+    assert runtime.reads == ["1" * 64]
+    assert result["group"]["summary"]["running"] == 6
+    assert result["group"]["logs"][0]["state"] == "collected"
+    assert result["group"]["summary"]["members"][0]["health"] == "unhealthy"
+    assert any(row["kind"] == "container" and row["data"]["health"] == "unhealthy" for row in result["observations"])
+    answer = await ViewAssembler().build(
+        DiagnosisProposal(summary="Healthcheck failed; cause is unknown", uncertain=True, evidence_ids=[], widgets=[]),
+        context,
+        "alice",
+    )
+    assert {widget.widget_type for widget in answer.widgets} == {"container_status", "log_anomalies"}
+    assert not runtime.mutations
+
+
+async def test_unavailable_inventory_preserves_unhealthy_member_log_coverage() -> None:
+    class UnavailableInventory(GroupRuntime):
+        """Retain a group observation while a later local inventory read fails."""
+
+        async def containers(self, host: str) -> tuple[ContainerSnapshot, ...]:
+            """Report the failed local read without erasing observed group members."""
+            raise DockSightError("runtime_unavailable", "Docker operation failed", 503)
+
+    runtime = UnavailableInventory()
+    runtime.rows = (replace(runtime.rows[0], state="running", exit_code=0, health="unhealthy"),)
+    result = await DiagnosticTools(runtime, EvidenceContext(), "local").execute(
+        ToolCall("group", "inspect_group", {"kind": "compose", "name": "infra"})
+    )
+    assert result["group"]["summary"]["running"] == 1
+    assert result["group"]["logs"] == [
+        {
+            "container_id": "1" * 64,
+            "name": "worker-1",
+            "state": "not_collected",
+            "evidence_id": None,
+            "code": "runtime_unavailable",
+        }
+    ]
+
+
+@pytest.mark.parametrize("health", ["starting", "healthy", None])
+async def test_running_members_without_failure_signals_do_not_spend_the_group_log_budget(health: str | None) -> None:
+    runtime = GroupRuntime()
+    runtime.rows = (replace(runtime.rows[0], state="running", exit_code=0, restart_count=0, health=health),)
+    result = await DiagnosticTools(runtime, EvidenceContext(), "local").execute(
+        ToolCall("group", "inspect_group", {"kind": "compose", "name": "infra"})
+    )
+    assert not runtime.reads
+    assert result["group"]["logs"] == []
 
 
 async def test_group_inspection_keeps_all_member_states_and_reports_failed_and_omitted_logs() -> None:

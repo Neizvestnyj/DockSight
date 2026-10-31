@@ -39,7 +39,7 @@ class StackArgs(Contract):
 
 _TOOLS: Final[dict[str, tuple[type[Contract], str]]] = {
     "list_containers": (NoArgs, "List up to 32 container snapshots on the selected host"),
-    "inspect_container": (ContainerArgs, "Inspect container state and exit/OOM evidence"),
+    "inspect_container": (ContainerArgs, "Inspect process state, healthcheck status, and exit/OOM evidence"),
     "get_container_logs": (ContainerArgs, "Read bounded sanitized logs"),
     "get_container_stats": (ContainerArgs, "Read current CPU and memory metrics"),
     "get_container_env": (

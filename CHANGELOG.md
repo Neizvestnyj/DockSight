@@ -8,6 +8,12 @@ Dates below record each version's merge into `master` in Europe/Moscow. Version 
 
 ## [0.6.0]
 
+### Added
+
+- Docker healthcheck status appears separately from process state in container facts, diagnostic cards, inventory,
+  and Compose members. Running unhealthy containers receive bounded diagnostic log collection even without restarts;
+  missing health observations remain unknown, and probe commands and output are not exposed.
+
 ### Fixed
 
 - Docker log tails retain transport timeouts and abort at a fixed deadline. Stalled or slowly delivered responses release

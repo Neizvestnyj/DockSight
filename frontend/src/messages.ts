@@ -7,6 +7,10 @@ export type MessageValues = Record<string, string | number>;
 
 /** Keep product copy separate from verbatim Docker, model, and server content. */
 const russian = {
+  'Health: healthy': 'Работоспособность: в норме',
+  'Health: unhealthy': 'Работоспособность: сбой',
+  'Health: starting': 'Работоспособность: проверяется',
+  'Health: not reported': 'Работоспособность: нет данных',
   Retry: 'Повторить',
   'Choose model': 'Выбрать модель',
   'Model selection is available after this answer finishes.': 'Модель можно сменить после завершения ответа.',

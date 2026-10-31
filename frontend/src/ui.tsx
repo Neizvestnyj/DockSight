@@ -2,6 +2,7 @@ import { stateLabel } from './messages';
 import { useLocale } from './locale';
 import { useEffect, useId, useRef, type MouseEvent, type ReactNode } from 'react';
 import { X } from 'lucide-react';
+import type { Container } from './contracts';
 
 /** Pair a semantic status color with readable text rather than relying on color alone. */
 export function Status({ state, action = false }: { state: string; action?: boolean }) {
@@ -17,6 +18,36 @@ export function Status({ state, action = false }: { state: string; action?: bool
     <span className={`status ${tone}`}>
       <span aria-hidden="true" className="status-dot" />
       {stateLabel(state, t, action)}
+    </span>
+  );
+}
+
+/** Distinguish Docker health observations from lifecycle state without inferring missing checks. */
+export function ContainerStatus({ state, health }: { state: string; health: Container['health'] }) {
+  const { t } = useLocale();
+  const tone =
+    health === 'unhealthy'
+      ? 'negative'
+      : health === 'starting'
+        ? 'warning'
+        : health === 'healthy'
+          ? 'positive'
+          : 'neutral';
+  const label =
+    health === 'unhealthy'
+      ? 'Health: unhealthy'
+      : health === 'starting'
+        ? 'Health: starting'
+        : health === 'healthy'
+          ? 'Health: healthy'
+          : 'Health: not reported';
+  return (
+    <span className="container-status">
+      <Status state={state} />
+      <span className={`status health-status ${tone}`}>
+        <span aria-hidden="true" className="status-dot" />
+        {t(label)}
+      </span>
     </span>
   );
 }

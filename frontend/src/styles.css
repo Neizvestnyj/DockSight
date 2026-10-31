@@ -687,8 +687,10 @@ textarea {
 .container-name svg {
   color: var(--muted);
 }
-.container-row .status {
+.container-row .container-status {
   margin: 4px 0 0 22px;
+}
+.container-row .status {
   font-size: 11px;
 }
 .sidebar-bottom {
@@ -1685,6 +1687,25 @@ textarea {
   border-radius: 50%;
   background: currentColor;
   flex: none;
+}
+.container-status {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  min-width: 0;
+}
+.container-status > .status.positive:not(.health-status) {
+  color: var(--muted);
+}
+.container-status > .health-status {
+  white-space: normal;
+}
+.group-member-state .container-status,
+.container-row .container-status {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
 }
 .positive {
   color: var(--positive);

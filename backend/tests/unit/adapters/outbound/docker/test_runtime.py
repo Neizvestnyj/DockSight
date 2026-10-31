@@ -97,15 +97,21 @@ async def test_compose_groups_retain_each_member_state() -> None:
 
         async def containers(self, host: str) -> tuple[ContainerSnapshot, ...]:
             """Return two failed members and an unrelated container."""
-            item = replace(snapshot(), compose_project="infra")
-            return item, replace(item, id="b" * 64, name="api"), replace(item, id="c" * 64, compose_project=None)
+            item = replace(snapshot(), compose_project="infra", state="running", health="unhealthy", exit_code=0)
+            return (
+                item,
+                replace(item, id="b" * 64, name="api", state="exited", health=None, exit_code=1),
+                replace(item, id="c" * 64, compose_project=None),
+            )
 
     runtime = InventoryRuntime((HostConfig(id="local"),), Redactor(()))
     groups = await runtime.stacks("local", "compose")
     assert len(groups) == 1
     assert groups[0].name == "infra"
     assert groups[0].total == 2
-    assert [row.state for row in groups[0].members] == ["exited", "exited"]
+    assert groups[0].running == 1
+    assert [row.state for row in groups[0].members] == ["running", "exited"]
+    assert [row.health for row in groups[0].members] == ["unhealthy", None]
     assert groups[0].members[1].exit_code == 1
 
 

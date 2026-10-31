@@ -13,7 +13,7 @@ import {
   Server,
 } from 'lucide-react';
 import type { Container, Host } from './contracts';
-import { Logo, Status } from './ui';
+import { Logo, ContainerStatus } from './ui';
 import { utc } from './format';
 
 interface Props {
@@ -185,7 +185,7 @@ export function Sidebar({
                   <Box size={14} />
                   <span>{container.name}</span>
                 </span>
-                <Status state={container.state} />
+                <ContainerStatus state={container.state} health={container.health} />
                 {container.compose_project && <span className="container-group">{container.compose_project}</span>}
               </button>
             ))}

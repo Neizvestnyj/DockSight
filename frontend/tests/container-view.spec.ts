@@ -23,6 +23,51 @@ async function connectApi(page: Page) {
   await expect(page.locator('.composer-foot')).toContainText('test-host');
 }
 
+test('keeps reported health separate from lifecycle state across inventory and refreshed facts', async ({
+  page,
+}, info) => {
+  const snapshot = { ...demoContainer(2, 'test-host', '2026-10-27T12:00:00Z'), state: 'running' as const };
+  let health: 'healthy' | 'unhealthy' | 'starting' | null = 'unhealthy';
+  await page.route('**/api/v1/**', (route) => {
+    const request = route.request();
+    expect(request.method()).toBe('GET');
+    const url = new URL(request.url());
+    if (url.pathname.endsWith('/system/status'))
+      return route.fulfill({ json: demoSystemStatus(url.searchParams.get('host')) });
+    if (url.pathname.endsWith('/hosts')) return route.fulfill({ json: [{ id: snapshot.host, name: 'Test host' }] });
+    if (url.pathname.endsWith('/containers')) return route.fulfill({ json: [{ ...snapshot, health }] });
+    if (url.pathname.endsWith('/stats')) return route.fulfill({ json: snapshot.metrics });
+    if (url.pathname.endsWith('/logs')) return route.fulfill({ json: { entries: [], truncated: false } });
+    return route.fulfill({ json: { ...snapshot, health } });
+  });
+  await page.goto('/');
+  await connectApi(page);
+  if ((page.viewportSize()?.width ?? 1440) <= 1100)
+    await page.getByRole('button', { name: 'Open host and containers' }).click();
+  const row = page.getByTitle(snapshot.name, { exact: true }).filter({ visible: true });
+  await expect(row.getByText('Health: unhealthy')).toBeVisible();
+  expect(await row.getByText('running', { exact: true }).evaluate((node) => getComputedStyle(node).color)).not.toBe(
+    await row.getByText('Health: unhealthy').evaluate((node) => getComputedStyle(node).color),
+  );
+  await row.click();
+  const facts = page.getByRole('region', { name: 'Container facts', exact: true });
+  await expect(facts.getByText('Health: unhealthy')).toBeVisible();
+  await expect(facts.getByText('running', { exact: true })).toBeVisible();
+  await page.screenshot({ path: `test-results/${info.project.name}-container-health.png`, fullPage: true });
+  for (const next of ['healthy', 'starting', null] as const) {
+    health = next;
+    await facts.getByRole('button', { name: 'Refresh data' }).click();
+    await expect(facts.getByText(`Health: ${next ?? 'not reported'}`)).toBeVisible();
+  }
+  await page.getByRole('combobox', { name: 'Language' }).selectOption('ru');
+  await expect(
+    page.getByText('Работоспособность: нет данных', { exact: true }).filter({ visible: true }),
+  ).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  await page.screenshot({ path: `test-results/${info.project.name}-container-health-ru.png`, fullPage: true });
+});
+
 test('reads and refreshes facts without LLM calls, then diagnoses in a separate session', async ({ page }) => {
   const snapshot = demoContainer(0, 'test-host', '2026-10-20T09:00:00Z');
   const answer = demoAnswer('crash_loop', snapshot.host);

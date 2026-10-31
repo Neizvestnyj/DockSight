@@ -86,6 +86,16 @@ test('sends an authenticated exact group target and retries its original scope a
   const groups = await new DemoClient().stacks('demo-eu', 'compose', new AbortController().signal);
   const answer = demoGroupAnswer(demoAnswer('dependency', 'test-host'), rows, groups[0]!);
   const second = rows[3]!;
+  second.state = 'running';
+  second.health = 'unhealthy';
+  const secondMember = answer.group?.summary.members?.find((row) => row.id === second.id);
+  if (secondMember) {
+    secondMember.state = 'running';
+    secondMember.running = 1;
+    secondMember.health = 'unhealthy';
+    answer.group!.summary.running = answer.group!.summary.members!.reduce((total, row) => total + row.running, 0);
+    answer.evidence.find((row) => row.kind === 'stack')!.data = { stacks: [answer.group!.summary] };
+  }
   const state = answer.evidence.find((row) => row.kind === 'container')!;
   const log = answer.evidence.find((row) => row.kind === 'logs')!;
   const status = answer.widgets.find((row) => row.widget_type === 'container_status')!;
@@ -147,6 +157,7 @@ test('sends an authenticated exact group target and retries its original scope a
   await (await openScope(page)).selectOption('all');
   await page.getByRole('button', { name: 'Retry diagnosis' }).click();
   await expect(page.getByRole('region', { name: 'Group observations' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Group observations' }).getByText('Health: unhealthy')).toBeVisible();
   expect(inputs).toHaveLength(2);
   expect(inputs[1]?.group).toEqual(inputs[0]?.group);
   await expect(page.getByRole('group', { name: 'Container status', exact: true })).toHaveCount(2);
@@ -155,6 +166,9 @@ test('sends an authenticated exact group target and retries its original scope a
   await expect(panels).toHaveCount(2);
   const secondPanel = page.getByRole('region', { name: `Container evidence: ${second.name}`, exact: true });
   await expect(secondPanel.getByRole('group', { name: 'Container status', exact: true })).toContainText(second.image);
+  await expect(secondPanel.getByRole('group', { name: 'Container status', exact: true })).toContainText(
+    'Health: unhealthy',
+  );
   await expect(secondPanel.getByRole('group', { name: 'Container logs', exact: true })).toContainText(
     entries[0]!.message,
   );

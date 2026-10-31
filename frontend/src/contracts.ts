@@ -6,6 +6,7 @@ export const metricsSchema = z.object({
   memory_usage_bytes: z.number().nullable(),
   memory_limit_bytes: z.number().nullable(),
 });
+const containerHealthSchema = z.enum(['starting', 'healthy', 'unhealthy']).nullish();
 export const containerSchema = z.object({
   host: z.string(),
   id: z.string(),
@@ -20,6 +21,7 @@ export const containerSchema = z.object({
   metrics: metricsSchema,
   environment: z.array(z.tuple([z.string(), z.string()])),
   compose_project: z.string().nullable(),
+  health: containerHealthSchema,
 });
 export const actionSchema = z.object({
   id: z.string(),
@@ -72,6 +74,7 @@ export const stackSchema = z.object({
         total: z.number().int().nonnegative(),
         running: z.number().int().nonnegative(),
         exit_code: z.number().int().nullable(),
+        health: containerHealthSchema,
       }),
     )
     .max(200)

@@ -96,7 +96,7 @@ async def _collect_local(
         report.logs = _missing_logs(report.summary, (), exc.code)
         return
     local = [row for row in rows if row.id in report.summary.container_ids]
-    problems = [row for row in local if row.state != "running" or row.oom_killed or row.restart_count > 0]
+    problems = [row for row in local if _needs_logs(row)]
     for index, snapshot in enumerate(problems):
         result = GroupLogResult(
             container_id=snapshot.id, name=snapshot.name, state="not_collected", code="group_log_limit"
@@ -107,12 +107,22 @@ async def _collect_local(
     report.logs.extend(_missing_logs(report.summary, tuple(row.id for row in local), "not_in_local_inventory"))
 
 
+def _needs_logs(snapshot: ContainerSnapshot) -> bool:
+    """Collect unhealthy running members without treating startup checks as failures."""
+    return (
+        snapshot.state != "running"
+        or snapshot.oom_killed
+        or snapshot.restart_count > 0
+        or snapshot.health == "unhealthy"
+    )
+
+
 def _missing_logs(summary: StackSummary, local_ids: tuple[str, ...], code: str) -> list[GroupLogResult]:
     """Describe unexamined Compose containers without inferring their deletion from bounded inventory."""
     return [
         GroupLogResult(container_id=row.id, name=row.name, state="not_collected", code=code)
         for row in summary.members
-        if row.kind == "container" and row.state != "running" and row.id not in local_ids
+        if row.kind == "container" and (row.state != "running" or row.health == "unhealthy") and row.id not in local_ids
     ]
 
 

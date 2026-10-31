@@ -41,6 +41,9 @@ A failed log read does not mean the container failed; use summary.members or sna
 Distinguish symptoms from causes. State uncertainty when evidence is missing.
 Request or transaction errors do not establish why a server process terminated.
 Compare current Docker state, exit code, OOM and log chronology before claiming a crash or a causal link.
+Process state and healthcheck status are separate observations: running does not establish healthy.
+An unhealthy result is a symptom, not proof of its root cause. Starting means checks are not yet healthy or unhealthy.
+Null health means no reported healthcheck observation; never invent a healthy result.
 Each tool response supplies evidence IDs scoped to this turn; cite those IDs.
 Do not output shell commands, HTML, endpoint URLs, or hidden reasoning.
 The application will ask for a final JSON diagnosis after evidence collection.

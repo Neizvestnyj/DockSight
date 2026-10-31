@@ -2,7 +2,7 @@ import { ArrowUpRight, Layers } from 'lucide-react';
 import type { Evidence, GroupInspection } from './contracts';
 import { useLocale } from './locale';
 import { utc } from './format';
-import { stateLabel } from './messages';
+import { ContainerStatus } from './ui';
 
 /** Present server-owned group coverage independently of which detail cards the model selected. */
 export function GroupReport({
@@ -59,10 +59,14 @@ export function GroupReport({
                   {row.kind === 'container' ? row.id.slice(0, 12) : t('Service')}
                 </span>
               </div>
-              <span className={`group-member-state ${row.state === 'running' ? 'healthy-text' : 'warning-text'}`}>
-                {row.kind === 'service'
-                  ? `${row.running} / ${row.total} ${t('task replicas')}`
-                  : stateLabel(row.state, t)}
+              <span className="group-member-state">
+                {row.kind === 'service' ? (
+                  <span
+                    className={row.state === 'running' ? 'healthy-text' : 'warning-text'}
+                  >{`${row.running} / ${row.total} ${t('task replicas')}`}</span>
+                ) : (
+                  <ContainerStatus state={row.state} health={row.health} />
+                )}
                 {row.exit_code !== null && row.state === 'exited' && (
                   <small>
                     {t('Exit code')} {row.exit_code}

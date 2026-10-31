@@ -1,5 +1,9 @@
 # Frontend
 
+Container process state and healthcheck results remain separate in inventory, current facts, diagnostic cards, and
+Compose member rows. Missing or null health is displayed as not reported, including responses from older servers.
+Running counts continue to describe processes; they do not imply successful healthchecks.
+
 See the [quick start](../README.md#quick-start) to run the client,
 [usage examples](examples.md) for an investigation, and [deployment](configuration.md#frontend-deployment)
 for static hosting and reverse proxy setup.

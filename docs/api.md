@@ -34,6 +34,12 @@ Diagnostic JSON-budget clipping can shorten the beginning of the oldest retained
 Container and stack GET requests pass through HTTP routes, `RuntimeQueries`, and the Docker adapter. The Docker adapter
 applies field allowlists and redaction before returning owned values; the HTTP adapter serializes them as JSON.
 
+Container snapshots and Compose container members include `health`: `starting`, `healthy`, `unhealthy`, or `null`.
+This is separate from process `state`; a running process can be unhealthy. Missing observations and Docker's `none`
+status map to `null`, which does not establish health. Probe commands, output, and healthcheck history are excluded.
+Swarm service summaries do not infer container health from running replica counts and retain `health=null`.
+See Docker's [healthcheck semantics](https://docs.docker.com/reference/dockerfile/#healthcheck).
+
 `GET /hosts` reads configured host metadata without contacting Docker. Diagnostic requests use the model loop below.
 
 ## Browser client
@@ -273,6 +279,10 @@ and logs for at most four local problem containers, at most 200 configured lines
 container. Collected payloads
 and evidence references reach the model together. Failed and omitted reads remain distinct. Tool calls keep their normal
 progress and trace events. Group collection never prepares or executes a group-wide mutation.
+
+Running members with `health=unhealthy` are included in that problem-log budget even without OOM or restarts.
+`starting` alone is not a failure signal. Healthcheck failures establish a symptom, not its underlying cause.
+Missing local inventory keeps unhealthy members visible with explicit uncollected log coverage.
 
 Stack summaries add `members` and `truncated`. Compose members are containers with state and exit code. Swarm members
 are services, grouped by `com.docker.stack.namespace`; totals count desired/running task replicas. Standalone services

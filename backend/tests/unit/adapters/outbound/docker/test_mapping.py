@@ -1,5 +1,52 @@
+from dataclasses import asdict
+
+import pytest
+
 from docksight.adapters.outbound.docker.mapping import map_container, map_metrics, parse_logs
 from docksight.application.redaction import Redactor
+from docksight.domain.errors import DockSightError
+
+
+@pytest.mark.parametrize("health", ["starting", "healthy", "unhealthy"])
+def test_inspect_keeps_health_separate_from_process_state_and_discards_probe_output(health: str) -> None:
+    result = map_container(
+        {
+            "Id": "a" * 64,
+            "Name": "/api",
+            "State": {
+                "Status": "running",
+                "Health": {"Status": health, "FailingStreak": 3, "Log": [{"Output": "probe-secret-sentinel"}]},
+            },
+        },
+        "local",
+        (),
+        Redactor(),
+    )
+    assert result.state == "running"
+    assert result.health == health
+    assert "probe-secret-sentinel" not in str(asdict(result))
+    assert "FailingStreak" not in asdict(result)
+
+
+@pytest.mark.parametrize(
+    "state",
+    [{"Status": "running"}, {"Status": "running", "Health": None}, {"Status": "running", "Health": {"Status": "none"}}],
+)
+def test_missing_health_is_not_reported_as_healthy(state: dict[str, object]) -> None:
+    result = map_container({"Id": "a" * 64, "Name": "/api", "State": state}, "local", (), Redactor())
+    assert result.health is None
+
+
+@pytest.mark.parametrize("health", [{"Status": "degraded"}, {"Status": 1}, {}, "unhealthy", []])
+def test_invalid_health_fails_with_a_typed_runtime_error(health: object) -> None:
+    with pytest.raises(DockSightError) as caught:
+        map_container(
+            {"Id": "a" * 64, "Name": "/api", "State": {"Status": "running", "Health": health}},
+            "local",
+            (),
+            Redactor(),
+        )
+    assert caught.value.code == "invalid_runtime_data"
 
 
 def test_log_byte_and_line_limits_keep_the_latest_complete_rows_in_order() -> None:

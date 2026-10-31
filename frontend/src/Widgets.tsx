@@ -3,7 +3,7 @@ import { useLocale } from './locale';
 import { useId, useState } from 'react';
 import { ArrowUpRight, ChevronDown, FileText, Layers, LockKeyhole, Terminal, Box } from 'lucide-react';
 import type { Action, Evidence, Widget } from './contracts';
-import { Status } from './ui';
+import { ContainerStatus } from './ui';
 import { bytes, utc } from './format';
 import { EnvironmentContent, LogContent } from './RuntimeContent';
 import { CardActions } from './CardActions';
@@ -67,7 +67,9 @@ export function WidgetCard({
         <Heading>
           <Icon size={16} />
           {name}
-          {embedded && widget.widget_type === 'container_status' && <Status state={widget.snapshot.state} />}
+          {embedded && widget.widget_type === 'container_status' && (
+            <ContainerStatus state={widget.snapshot.state} health={widget.snapshot.health} />
+          )}
         </Heading>
         {embedded && widget.widget_type === 'log_anomalies' && (
           <button
@@ -113,7 +115,7 @@ export function WidgetCard({
           {!embedded && (
             <div className="container-heading">
               <strong>{widget.snapshot.name}</strong>
-              <Status state={widget.snapshot.state} />
+              <ContainerStatus state={widget.snapshot.state} health={widget.snapshot.health} />
             </div>
           )}
           <p className="image-name">
