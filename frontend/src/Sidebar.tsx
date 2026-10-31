@@ -186,6 +186,11 @@ export function Sidebar({
                   <span>{container.name}</span>
                 </span>
                 <ContainerStatus state={container.state} health={container.health} />
+                {container.state === 'exited' && container.exit_code !== 0 && (
+                  <span className="container-exit negative">
+                    {t('Exit code')} {container.exit_code}
+                  </span>
+                )}
                 {container.compose_project && <span className="container-group">{container.compose_project}</span>}
               </button>
             ))}

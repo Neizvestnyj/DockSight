@@ -17,6 +17,8 @@ Dates below record each version's merge into `master` in Europe/Moscow. Version 
 
 ### Changed
 
+- Container card headers show process state only, with healthchecks in separate facts. Stopped containers identify the
+  last reported check; exited states are neutral and nonzero exit codes are highlighted.
 - General incident questions return a bounded host overview across projects and ungrouped containers, with observed
   state, log coverage, collection limits, and optional focused investigations. Named ambiguity still requires a target
   choice. Additional log reads retain their evidence, and unavailable actions preserve collected observations.

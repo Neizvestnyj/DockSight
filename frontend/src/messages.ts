@@ -34,6 +34,8 @@ const russian = {
   'Health: starting': 'Проверяется',
   'Health: not reported': 'Нет данных',
   'Docker healthcheck': 'Проверка здоровья Docker',
+  Healthcheck: 'Проверка здоровья',
+  'Last healthcheck': 'Последняя проверка',
   'The model context window is full. Narrow the question or increase the configured context size.':
     'Контекстное окно модели заполнено. Уточните вопрос или увеличьте размер контекста в настройках.',
   'The model response reached its output limit. Ask for a shorter answer or increase the output limit.':
@@ -589,6 +591,10 @@ export const diagnosticOperations: Record<string, MessageKey> = {
 export type Translator = (key: MessageKey, values?: MessageValues) => string;
 
 const englishOverrides: Partial<Record<MessageKey, string | Plurals>> = {
+  'Health: healthy': 'Healthy',
+  'Health: unhealthy': 'Unhealthy',
+  'Health: starting': 'Starting',
+  'Health: not reported': 'Not reported',
   awaiting_selection: 'Awaiting resource selection',
   actionRunning: 'running',
   '{count} lines returned': { one: '{count} line returned', other: '{count} lines returned' },

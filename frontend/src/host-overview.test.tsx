@@ -139,7 +139,7 @@ describe('host overview presentation and narrowing', () => {
     const overview = screen.getByRole('region', { name: 'Host overview' });
     expect(within(overview).getByText('Observed containers').nextElementSibling).toHaveTextContent('7');
     expect(within(overview).getByText('Needs review', { selector: 'dt' }).nextElementSibling).toHaveTextContent('4');
-    expect(within(overview).getByText('Health: unhealthy')).toBeVisible();
+    expect(within(overview).getByText('Unhealthy')).toBeVisible();
     expect(within(overview).getAllByText('No observed group')).toHaveLength(2);
     expect(within(overview).getByText('Log read failed')).toBeVisible();
     expect(within(overview).getAllByText('Collection limit reached')).toHaveLength(2);

@@ -157,7 +157,7 @@ test('sends an authenticated exact group target and retries its original scope a
   await (await openScope(page)).selectOption('all');
   await page.getByRole('button', { name: 'Retry diagnosis' }).click();
   await expect(page.getByRole('region', { name: 'Group observations' })).toBeVisible();
-  await expect(page.getByRole('region', { name: 'Group observations' }).getByText('Health: unhealthy')).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Group observations' }).getByText('Unhealthy')).toBeVisible();
   expect(inputs).toHaveLength(2);
   expect(inputs[1]?.group).toEqual(inputs[0]?.group);
   await expect(page.getByRole('group', { name: 'Container status', exact: true })).toHaveCount(2);
@@ -166,9 +166,10 @@ test('sends an authenticated exact group target and retries its original scope a
   await expect(panels).toHaveCount(2);
   const secondPanel = page.getByRole('region', { name: `Container evidence: ${second.name}`, exact: true });
   await expect(secondPanel.getByRole('group', { name: 'Container status', exact: true })).toContainText(second.image);
-  await expect(secondPanel.getByRole('group', { name: 'Container status', exact: true })).toContainText(
-    'Health: unhealthy',
-  );
+  const statusCard = secondPanel.getByRole('group', { name: 'Container status', exact: true });
+  await expect(statusCard.locator('.widget-head')).not.toContainText('Unhealthy');
+  await expect(statusCard.locator('.health-fact')).toContainText('Healthcheck');
+  await expect(statusCard.locator('.health-fact')).toContainText('Unhealthy');
   await expect(secondPanel.getByRole('group', { name: 'Container logs', exact: true })).toContainText(
     entries[0]!.message,
   );

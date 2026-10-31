@@ -3,7 +3,7 @@ import { useLocale } from './locale';
 import { useId, useState } from 'react';
 import { ArrowUpRight, ChevronDown, FileText, Layers, LockKeyhole, Terminal, Box } from 'lucide-react';
 import type { Action, Evidence, Widget } from './contracts';
-import { ContainerStatus } from './ui';
+import { HealthFact, Status } from './ui';
 import { bytes, utc } from './format';
 import { EnvironmentContent, LogContent } from './RuntimeContent';
 import { CardActions } from './CardActions';
@@ -67,9 +67,7 @@ export function WidgetCard({
         <Heading>
           <Icon size={16} />
           {name}
-          {embedded && widget.widget_type === 'container_status' && (
-            <ContainerStatus state={widget.snapshot.state} health={widget.snapshot.health} />
-          )}
+          {embedded && widget.widget_type === 'container_status' && <Status state={widget.snapshot.state} />}
         </Heading>
         {embedded && widget.widget_type === 'log_anomalies' && (
           <button
@@ -115,16 +113,23 @@ export function WidgetCard({
           {!embedded && (
             <div className="container-heading">
               <strong>{widget.snapshot.name}</strong>
-              <ContainerStatus state={widget.snapshot.state} health={widget.snapshot.health} />
+              <Status state={widget.snapshot.state} />
             </div>
           )}
           <p className="image-name">
             <code>{widget.snapshot.image}</code>
           </p>
+          <HealthFact state={widget.snapshot.state} health={widget.snapshot.health} />
           <dl className="fact-strip">
             <div>
               <dt>{t('Exit code')}</dt>
-              <dd>{widget.snapshot.exit_code}</dd>
+              <dd
+                className={
+                  widget.snapshot.state === 'exited' && widget.snapshot.exit_code !== 0 ? 'negative' : undefined
+                }
+              >
+                {widget.snapshot.exit_code}
+              </dd>
             </div>
             <div>
               <dt>{t('OOM killed')}</dt>

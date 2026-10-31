@@ -2,7 +2,7 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
-import { containerSchema, stackSchema } from './contracts';
+import { containerSchema, stackSchema, type Container } from './contracts';
 import { DemoClient, demoAnswer, demoContainer } from './demo';
 import { GroupReport } from './GroupReport';
 import { LocaleContext } from './locale';
@@ -19,10 +19,15 @@ function renderCard(
   health: 'healthy' | 'unhealthy' | 'starting' | null | undefined,
   embedded = false,
   locale: Locale = 'en',
+  lifecycle?: Pick<Container, 'state' | 'exit_code'>,
 ) {
   const answer = demoAnswer('dependency');
   const original = answer.widgets.find((row) => row.widget_type === 'container_status')!;
-  const widget = { ...original, actions: [], snapshot: { ...original.snapshot, state: 'running' as const, health } };
+  const widget = {
+    ...original,
+    actions: [],
+    snapshot: { ...original.snapshot, state: 'running' as const, health, ...lifecycle },
+  };
   return render(
     <LocaleContext
       value={{
@@ -78,16 +83,19 @@ describe('container health observations', () => {
   it.each([false, true])('shows a running unhealthy card with a distinct failure signal (embedded=%s)', (embedded) => {
     const { container } = renderCard('unhealthy', embedded);
     expect(screen.getByText('running', { exact: true })).toBeVisible();
-    expect(screen.getByText('Health: unhealthy')).toBeVisible();
-    expect(screen.getByText('Health: unhealthy')).toHaveClass('negative');
+    expect(screen.getByText('Unhealthy')).toBeVisible();
+    expect(screen.getByText('Unhealthy')).toHaveClass('negative');
+    expect(screen.getByText('Healthcheck').nextElementSibling).toHaveTextContent('Unhealthy');
+    const heading = container.querySelector(embedded ? '.widget-head' : '.container-heading')!;
+    expect(within(heading as HTMLElement).queryByText('Unhealthy')).not.toBeInTheDocument();
     expect(container.querySelectorAll('.actions button')).toHaveLength(0);
   });
 
   it.each([
-    ['healthy', 'Health: healthy', 'positive'],
-    ['starting', 'Health: starting', 'warning'],
-    [null, 'Health: not reported', 'neutral'],
-    [undefined, 'Health: not reported', 'neutral'],
+    ['healthy', 'Healthy', 'positive'],
+    ['starting', 'Starting', 'warning'],
+    [null, 'Not reported', 'neutral'],
+    [undefined, 'Not reported', 'neutral'],
   ] as const)('presents health %s honestly', (health, label, tone) => {
     renderCard(health);
     expect(screen.getByText(label)).toBeVisible();
@@ -106,6 +114,25 @@ describe('container health observations', () => {
     expect(screen.getByText('ghcr.io/northstar/checkout:3.2.4')).toBeVisible();
   });
 
+  it.each([false, true])('separates a stopped process from its last healthcheck (embedded=%s)', (embedded) => {
+    const { container } = renderCard('unhealthy', embedded, 'ru', { state: 'exited', exit_code: 0 });
+    const heading = container.querySelector(embedded ? '.widget-head' : '.container-heading')!;
+    expect(within(heading as HTMLElement).getByText('завершён')).toHaveClass('neutral');
+    expect(within(heading as HTMLElement).queryByText('Сбой')).not.toBeInTheDocument();
+    expect(screen.getByText('Последняя проверка').nextElementSibling).toHaveTextContent('Сбой');
+    expect(screen.getByText('Сбой')).toHaveClass('negative');
+  });
+
+  it.each([0, 1])('distinguishes exit code %s from a neutral exited process', (exit_code) => {
+    renderCard(null, true, 'en', { state: 'exited', exit_code });
+    expect(screen.getByText('exited', { exact: true })).toHaveClass('neutral');
+    const exit = screen.getByText('Exit code').nextElementSibling;
+    expect(exit).toHaveTextContent(String(exit_code));
+    if (exit_code) expect(exit).toHaveClass('negative');
+    else expect(exit).not.toHaveClass('negative');
+    expect(screen.getByText('Last healthcheck').nextElementSibling).toHaveTextContent('Not reported');
+  });
+
   it('shows the same running unhealthy observation in inventory and direct container facts', async () => {
     const snapshot = {
       ...demoContainer(2, 'demo-eu', '2026-10-27T12:00:00Z'),
@@ -116,11 +143,30 @@ describe('container health observations', () => {
     vi.spyOn(DemoClient.prototype, 'container').mockResolvedValue(snapshot);
     render(<App />);
     const row = await screen.findByTitle(snapshot.name);
-    expect(within(row).getByText('Health: unhealthy')).toBeVisible();
+    expect(within(row).getByText('Unhealthy')).toBeVisible();
+    expect(within(row).getByText('Healthcheck')).toBeVisible();
     fireEvent.click(row);
     const facts = await screen.findByRole('region', { name: 'Container facts' });
-    expect(await within(facts).findByText('Health: unhealthy')).toBeVisible();
+    expect(await within(facts).findByText('Unhealthy')).toBeVisible();
     expect(within(facts).getByText('running', { exact: true })).toBeVisible();
+  });
+
+  it('keeps failed exits distinguishable from normal completion in compact inventory', async () => {
+    const failed = {
+      ...demoContainer(2, 'demo-eu', '2026-10-27T12:00:00Z'),
+      state: 'exited' as const,
+      exit_code: 1,
+      health: null,
+    };
+    const completed = { ...failed, id: 'b'.repeat(64), name: 'batch-completed', exit_code: 0 };
+    vi.spyOn(DemoClient.prototype, 'containers').mockResolvedValue([failed, completed]);
+    render(<App />);
+    const failedRow = await screen.findByTitle(failed.name);
+    expect(within(failedRow).getByText('exited', { exact: true })).toHaveClass('neutral');
+    expect(within(failedRow).getByText('Exit code 1')).toHaveClass('negative');
+    const completedRow = screen.getByTitle(completed.name);
+    expect(within(completedRow).getByText('exited', { exact: true })).toHaveClass('neutral');
+    expect(within(completedRow).queryByText('Exit code 0')).not.toBeInTheDocument();
   });
 
   it('retains running totals while showing unhealthy Compose members and unknown health', () => {
@@ -154,8 +200,8 @@ describe('container health observations', () => {
         }}
       />,
     );
-    expect(screen.getByText('Health: unhealthy')).toHaveClass('negative');
-    expect(screen.getByText('Health: not reported')).toBeVisible();
+    expect(screen.getByText('Unhealthy')).toHaveClass('negative');
+    expect(screen.getByText('Not reported')).toBeVisible();
     expect(screen.getByText('containers running').parentElement).toHaveTextContent('2 / 2');
   });
 });

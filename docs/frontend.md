@@ -4,6 +4,9 @@ Container process state and healthcheck results remain separate in inventory, cu
 Compose member rows. Missing or null health is displayed as not reported, including responses from older servers.
 Running counts continue to describe processes; they do not imply successful healthchecks.
 Russian health badges use compact labels; their tooltip identifies the Docker healthcheck.
+Diagnostic card headers show process state only. Healthchecks have a separate fact row; stopped processes show
+**Last healthcheck** to distinguish the retained result from an active check. Compact lists label health separately.
+An exited process has a neutral status; a nonzero exit code is highlighted in the container facts and inventory.
 
 See the [quick start](../README.md#quick-start) to run the client,
 [usage examples](examples.md) for an investigation, and [deployment](configuration.md#frontend-deployment)

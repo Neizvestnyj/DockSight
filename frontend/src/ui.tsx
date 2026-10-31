@@ -7,7 +7,7 @@ import type { Container } from './contracts';
 /** Pair a semantic status color with readable text rather than relying on color alone. */
 export function Status({ state, action = false }: { state: string; action?: boolean }) {
   const { t } = useLocale();
-  const tone = ['failed', 'dead', 'exited'].includes(state)
+  const tone = ['failed', 'dead'].includes(state)
     ? 'negative'
     : ['restarting', 'expired', 'indeterminate'].includes(state)
       ? 'warning'
@@ -22,8 +22,35 @@ export function Status({ state, action = false }: { state: string; action?: bool
   );
 }
 
-/** Distinguish Docker health observations from lifecycle state without inferring missing checks. */
+/** Label process state and healthcheck separately in compact inventory and member lists. */
 export function ContainerStatus({ state, health }: { state: string; health: Container['health'] }) {
+  const { t } = useLocale();
+  return (
+    <span className="container-status">
+      <Status state={state} />
+      <span className="health-summary">
+        <span className="health-caption">{t(state === 'running' ? 'Healthcheck' : 'Last healthcheck')}</span>
+        <HealthStatus health={health} />
+      </span>
+    </span>
+  );
+}
+
+/** Keep the reported healthcheck in its own fact row, identifying retained results for stopped processes. */
+export function HealthFact({ state, health }: { state: string; health: Container['health'] }) {
+  const { t } = useLocale();
+  return (
+    <dl className="health-fact">
+      <dt>{t(state === 'running' ? 'Healthcheck' : 'Last healthcheck')}</dt>
+      <dd>
+        <HealthStatus health={health} />
+      </dd>
+    </dl>
+  );
+}
+
+/** Render only the observed health result without interpreting process state or missing checks. */
+function HealthStatus({ health }: { health: Container['health'] }) {
   const { t } = useLocale();
   const tone =
     health === 'unhealthy'
@@ -42,12 +69,9 @@ export function ContainerStatus({ state, health }: { state: string; health: Cont
           ? 'Health: healthy'
           : 'Health: not reported';
   return (
-    <span className="container-status">
-      <Status state={state} />
-      <span className={`status health-status ${tone}`} title={t('Docker healthcheck')}>
-        <span aria-hidden="true" className="status-dot" />
-        {t(label)}
-      </span>
+    <span className={`status health-status ${tone}`} title={t('Docker healthcheck')}>
+      <span aria-hidden="true" className="status-dot" />
+      {t(label)}
     </span>
   );
 }

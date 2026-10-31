@@ -68,7 +68,7 @@ for (const locale of ['en', 'ru'] as const) {
       'Inspecting host observations',
     );
     await expect(overview.locator('dl')).toContainText('7');
-    await expect(overview.getByText('Health: unhealthy')).toBeVisible();
+    await expect(overview.getByText('Unhealthy')).toBeVisible();
     await expect(overview.getByText('Collection limit reached')).toHaveCount(2);
     await expect(overview.getByText('Log read failed')).toBeVisible();
     await expect(overview.getByText('swarm_unavailable')).toBeVisible();
@@ -78,7 +78,7 @@ for (const locale of ['en', 'ru'] as const) {
     await page.getByRole('textbox').fill('Keep this unrelated draft');
     await page.getByRole('combobox', { name: 'Language' }).selectOption(locale);
     overview = page.getByRole('region', { name: locale === 'ru' ? 'Обзор хоста' : 'Host overview', exact: true });
-    await expect(overview.getByText(locale === 'ru' ? 'Сбой' : 'Health: unhealthy')).toBeVisible();
+    await expect(overview.getByText(locale === 'ru' ? 'Сбой' : 'Unhealthy')).toBeVisible();
     await expect(page.locator('.conclusion')).toContainText(answer.summary);
     await overview.scrollIntoViewIfNeeded();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
