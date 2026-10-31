@@ -6,6 +6,13 @@ This file records notable changes to DockSight. The format follows
 
 Dates below record each version's merge into `master` in Europe/Moscow. Version links show the corresponding changes.
 
+## [0.6.0]
+
+### Fixed
+
+- Docker log tails retain transport timeouts and abort at a fixed deadline. Stalled or slowly delivered responses release
+  worker capacity and cannot return partial logs as a successful read or prevent backend shutdown.
+
 ## [0.5.0] - 2026-10-31
 
 ### Fixed
@@ -147,6 +154,8 @@ Dates below record each version's merge into `master` in Europe/Moscow. Version 
 - Prepared actions are bound to the caller and exact target. Unknown mutation outcomes block conflicting actions;
   runtime mutations are never retried automatically.
 
+[0.6.0]: https://github.com/Neizvestnyj/DockSight/compare/093f3c7e0a90251cfe73aba503576bd2280cca12...feature/public-mvp-readiness
+[0.5.0]: https://github.com/Neizvestnyj/DockSight/compare/83c8fa477bfc63aa4c0d4f21f33bf676c0649e41...093f3c7e0a90251cfe73aba503576bd2280cca12
 [0.4.0]: https://github.com/Neizvestnyj/DockSight/compare/5ac9a9ed6db7ec57b6ae3848365fb24adfc25b32...83c8fa477bfc63aa4c0d4f21f33bf676c0649e41
 [0.3.0]: https://github.com/Neizvestnyj/DockSight/compare/bced0aeab5c9287e4dd4916e9b6631b5a017cdf9...5ac9a9ed6db7ec57b6ae3848365fb24adfc25b32
 [0.2.0]: https://github.com/Neizvestnyj/DockSight/compare/bc073208b7a7f7ec33f227ffa70c3fb895fd3680...bced0aeab5c9287e4dd4916e9b6631b5a017cdf9

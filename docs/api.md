@@ -9,8 +9,8 @@ and `/openapi.json` are public.
 |--------|------------------------------------------------|--------------------------------------------------------|
 | GET    | `/hosts`                                       | Configured host IDs and display names                  |
 | GET    | `/system/status?host=local`                    | Safe configuration and independent availability checks |
-| GET    | `/model-providers`                            | Configured providers and the default model             |
-| GET    | `/model-providers/{provider}/models`          | Lazy, bounded model catalog and freshness              |
+| GET    | `/model-providers`                             | Configured providers and the default model             |
+| GET    | `/model-providers/{provider}/models`           | Lazy, bounded model catalog and freshness              |
 | GET    | `/hosts/{host}/containers`                     | Up to 200 inspected containers                         |
 | GET    | `/hosts/{host}/containers/{id}`                | Sanitized snapshot                                     |
 | GET    | `/hosts/{host}/containers/{id}/logs?lines=200` | Bounded timestamped logs                               |
@@ -27,6 +27,8 @@ bodies are limited to 16 KiB. Host IDs resolve through server configuration; cal
 the byte limit, logs retain the newest complete lines after redaction, discarding an incomplete leading fragment.
 They remain in Docker output order. A finite tail scan is limited to 8 MiB and the Docker timeout; exceeding the scan
 limit returns `log_read_limit` instead of a middle excerpt presented as the latest output.
+A timed-out tail returns `runtime_timeout` without partial log output. Its connection is aborted to release Docker
+worker capacity, including when a response keeps delivering bytes slowly.
 Diagnostic JSON-budget clipping can shorten the beginning of the oldest retained message and sets `truncated=true`.
 
 Container and stack GET requests pass through HTTP routes, `RuntimeQueries`, and the Docker adapter. The Docker adapter

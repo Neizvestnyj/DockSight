@@ -24,7 +24,8 @@ pytestmark = [
 ]
 
 
-async def test_real_container_reads_redaction_and_mutations() -> None:
+@pytest.mark.parametrize("tty", [False, True], ids=["multiplexed", "tty"])
+async def test_real_container_reads_redaction_and_mutations(tty: bool) -> None:
     """Exercise Docker reads and mutations when startup logs are delayed."""
     owner = str(uuid4())
     client = docker.from_env()
@@ -37,6 +38,7 @@ async def test_real_container_reads_redaction_and_mutations() -> None:
             "import time; time.sleep(1); print('password=test-sentinel-9281'); time.sleep(300)",
         ],
         detach=True,
+        tty=tty,
         name=f"docksight-test-{owner}",
         labels={"com.docksight.test": owner},
         environment={"DB_PASSWORD": "test-sentinel-9281", "APP_ENV": "test"},

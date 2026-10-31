@@ -86,14 +86,14 @@ diagnosis and confirmed container actions; it has no persistent monitoring histo
 
 Settings are loaded from environment variables or the root `.env` file.
 
-| Variable | Purpose |
-|----------|---------|
-| `DOCKSIGHT_API_TOKEN` | Required bearer token, at least 24 characters |
-| `DOCKSIGHT_PROVIDER` | `ollama` (default), `openai`, `anthropic`, `gemini`, or `compatible` |
-| `DOCKSIGHT_MODEL` | Model name; defaults to `qwen3.5:9b` |
-| `DOCKSIGHT_MODEL_BASE_URL` | Custom model endpoint |
-| `DOCKSIGHT_MODEL_API_KEY` | Credentials for the selected provider |
-| `DOCKSIGHT_HOSTS_FILE` | YAML configuration for local, SSH, or mTLS Docker hosts |
+| Variable                   | Purpose                                                              |
+|----------------------------|----------------------------------------------------------------------|
+| `DOCKSIGHT_API_TOKEN`      | Required bearer token, at least 24 characters                        |
+| `DOCKSIGHT_PROVIDER`       | `ollama` (default), `openai`, `anthropic`, `gemini`, or `compatible` |
+| `DOCKSIGHT_MODEL`          | Model name; defaults to `qwen3.5:9b`                                 |
+| `DOCKSIGHT_MODEL_BASE_URL` | Custom model endpoint                                                |
+| `DOCKSIGHT_MODEL_API_KEY`  | Credentials for the selected provider                                |
+| `DOCKSIGHT_HOSTS_FILE`     | YAML configuration for local, SSH, or mTLS Docker hosts              |
 
 See [configuration and deployment](docs/configuration.md) for provider examples, CORS, limits, and Docker connections.
 
