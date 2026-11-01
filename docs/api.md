@@ -32,6 +32,11 @@ A timed-out tail returns `runtime_timeout` without partial log output. Its conne
 worker capacity, including when a response keeps delivering bytes slowly.
 Diagnostic JSON-budget clipping can shorten the beginning of the oldest retained message and sets `truncated=true`.
 
+An error code does not determine its HTTP status alone. For example, `provider_not_configured` is 422 for an invalid
+model selection and 503 when the server has no model-selection service. Failure categories remain internal;
+the public error envelope contains no category field. Failures after streaming starts use
+[`turn.failed` events](#diagnostic-stream).
+
 Container and stack GET requests pass through HTTP routes, `RuntimeQueries`, and the Docker adapter. The Docker adapter
 applies field allowlists and redaction before returning owned values; the HTTP adapter serializes them as JSON.
 

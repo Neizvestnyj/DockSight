@@ -20,6 +20,7 @@ Dates below record each version's merge into `master`. Version links show the co
   indeterminate target blocks.
 - Backend failures carry transport-independent categories. The HTTP adapter translates them into the existing
   response statuses without changing public error codes, messages, or diagnostic stream events.
+- Architecture checks enforce independent inbound and outbound adapters, with concrete wiring confined to bootstrap.
 
 ### Security
 

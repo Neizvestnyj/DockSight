@@ -105,3 +105,9 @@ name = "Application owns its ports"
 type = "forbidden"
 source_modules = ["docksight.application"]
 forbidden_modules = ["docksight.adapters", "docksight.bootstrap", "fastapi", "docker", "httpx", "httpx2", "openai", "anthropic", "pydantic_settings", "yaml"]
+
+[[tool.importlinter.contracts]]
+name = "Inbound and outbound adapters remain independent"
+type = "independence"
+modules = ["docksight.adapters.inbound", "docksight.adapters.outbound"]
+broken_contract_guidance = "Use application-owned contracts; wire concrete adapters only in bootstrap."

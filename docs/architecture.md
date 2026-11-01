@@ -21,6 +21,8 @@ run in the same process as the core.
 
 Arrows show allowed source-code dependencies. Outbound adapters implement application-owned ports; `bootstrap.py`
 selects the concrete implementations and injects them into use cases.
+Inbound and outbound adapters do not import each other, directly or indirectly. They interact through application-owned
+contracts; the composition root may import both to construct the application.
 
 ![Allowed source-code dependencies and application-owned ports](diagrams/code-dependencies.png)
 
@@ -129,6 +131,9 @@ target for the backend process lifetime. See the [execution sequence](api.md#act
 
 ## Boundaries that matter
 
+- `DockSightError` carries a safe public code, message, and transport-independent `ErrorKind`. The HTTP adapter maps
+  the category to a response status. The same public code can have different categories depending on context;
+  core rules and outbound adapters do not select client HTTP statuses.
 - Diagnostics receive a read-only runtime port. Actions receive the mutation port. Model tool registration includes no
   mutation method.
 - Collect allowlisted, sanitized evidence before model access. The model proposes evidence references, explanation text,
@@ -151,6 +156,7 @@ target for the backend process lifetime. See the [execution sequence](api.md#act
 
 - Enforce import direction in CI with `import-linter`. Verify that application imports no adapters, FastAPI, Docker SDK,
   HTTPX, provider SDKs, or settings; verify that domain imports no application, adapter, or third-party package.
+  An independence contract rejects direct and indirect imports between inbound and outbound adapters.
 - Test domain rules and use cases through fake ports. Test adapter mappings separately, then verify HTTP contracts and
   the real Docker example.
 
