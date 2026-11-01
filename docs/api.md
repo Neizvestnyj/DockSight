@@ -130,7 +130,7 @@ Catalog listing does not establish generation access or diagnostic capability.
 Turns accept optional `model_selection: {"provider":"ollama","model":"your-installed-model"}`.
 The server validates the configured connection and catalog membership before streaming. Explicit default/fallback models
 work without a catalog request. Unknown/unconfigured providers and unlisted models fail with HTTP 422.
-Omitting selection keeps the legacy default path. Selection never changes the process-wide default or other callers.
+Omitting selection uses the configured default model. Selection never changes the process-wide default or other callers.
 Turns share existing session history, action state, redaction, and the global diagnostic concurrency budget.
 The trace records the actual selected identity. The client retains selection only in tab memory and resets it on reconnect.
 
@@ -181,7 +181,7 @@ snapshots, with an explicit truncation flag. It retains conversation context, to
 evidence catalog; the final request repeats the redacted current question before the causal guidance.
 Prompt guidance separates clean exits, confirmed OOM, unexplained exit 137, unhealthy probes, and historical request
 errors. The opt-in [causal regression package](../CONTRIBUTING.md#live-docker-and-local-model-end-to-end-suite)
-checks these boundaries in English/Russian responses; it does not guarantee arbitrary model claims are correct.
+checks these boundaries in model responses; it does not guarantee arbitrary model claims are correct.
 
 Container status, log, and environment cards each reference exactly one container. A question about several containers
 uses separate cards. A model proposal contains at most eight cards; server assembly retains collected facts and may
@@ -237,18 +237,18 @@ Disconnecting cancels diagnostic work. Streams do not support replay or automati
 
 Generation HTTP 404 errors use `model_unavailable`: the configured model is missing or inaccessible to the API key.
 HTTP 400/422 rejections use `model_not_supported` for request or capability mismatches. Both map to HTTP 422 before
-streaming starts. Provider response bodies are never included. The client localizes these two diagnostic codes in
-English/Russian and retains unknown server messages verbatim. Metadata checks do not verify generation access.
+streaming starts. Provider response bodies are never included. The client provides guidance for these two diagnostic
+codes and retains unknown server messages verbatim. Metadata checks do not verify generation access.
 
 Native Ollama replies that fill the configured context window before the output budget use `model_context_limit`.
 Output-budget exhaustion uses `model_truncated`; when usage is unavailable, truncation retains that generic code.
-The client distinguishes these failures in English/Russian. Increasing the output limit alone cannot enlarge the
-context window shared by the prompt and response.
+The client distinguishes these failures. Increasing the output limit alone cannot enlarge the context window shared
+by the prompt and response.
 
 ## Host overview
 
-Bare English/Russian incident questions such as "What happened?" or "Что случилось?" collect a bounded overview of the
-selected host before model exploration. They do not require choosing a Compose project or Swarm stack. The model can
+Bare incident questions such as "What happened?" collect a bounded overview of the selected host before model
+exploration. They do not require choosing a Compose project or Swarm stack. The model can
 also request the read-only `inspect_host` tool for other broad questions. Explicit container or group scope cannot be
 expanded into a host overview.
 
@@ -292,7 +292,7 @@ Compose project is inspected automatically; otherwise stack names are discovered
 IDs/names preserve container scope. A whole query token with one substitution, insertion, deletion, or adjacent
 transposition can match a known group name of at least six characters, only when no exact resource matches.
 The complete canonical group name may also be written with spaces in place of hyphens; a prefix alone is not an exact match.
-Explicit `container NAME` or Russian container references take precedence over an identically named group. Explicit
+Explicit container references, such as `container NAME`, take precedence over an identically named group. Explicit
 Compose/Swarm references select that group namespace. An unqualified container/group collision produces typed choices
 for the observed container and group, without calling the model or reading their logs.
 A single explicit container name or full ID binds the turn's tool reads to that observed container, including inventory
@@ -365,8 +365,8 @@ Optional `cause` separates model-authored `immediate`, nullable `underlying`, `u
 `evidence_ids`. References are validated and narrative fields are redacted. For example, a database connection refusal
 can explain startup failure while the reason for database unavailability remains unknown. The existing `uncertain`
 field remains available for older clients and responses.
-Final narrative values follow the question language (English/Russian), unless the operator explicitly asks for another
-language. Log entries, environment values, identifiers, and schema keys remain verbatim. Cause text containing only
+Final narrative values follow the question language unless the operator explicitly asks for another language.
+Log entries, environment values, identifiers, and schema keys remain verbatim. Cause text containing only
 machine codes, evidence IDs, or empty placeholders such as the string `[]` is rejected through the single repair attempt.
 Unestablished causes use `null`; unresolved questions use natural-language list entries.
 

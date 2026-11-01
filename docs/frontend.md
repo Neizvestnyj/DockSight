@@ -3,7 +3,6 @@
 Container process state and healthcheck results remain separate in inventory, current facts, diagnostic cards, and
 Compose member rows. Missing or null health is displayed as not reported, including responses from older servers.
 Running counts continue to describe processes; they do not imply successful healthchecks.
-Russian health badges use compact labels; their tooltip identifies the Docker healthcheck.
 Diagnostic card headers show process state only. Healthchecks have a separate fact row; stopped processes show
 **Last healthcheck** to distinguish the retained result from an active check. Compact lists label health separately.
 An exited process has a neutral status; a nonzero exit code is highlighted in the container facts and inventory.
@@ -151,16 +150,13 @@ is written to browser storage. Keys remain in server environment settings; catal
 
 ![Demo: provider and model selection in the header](screenshots/model-selection.jpg)
 
-## Language and lifetime
+## Browser state and lifetime
 
-Language follows `navigator.languages` unless the operator selects English or Russian. System mode follows browser
-`languagechange` events and falls back to English. Only `docksight.locale` is stored in localStorage; invalid or unavailable
-storage falls back to System. Manual selection still works in memory. Document language and title follow the locale.
-
-Switching language preserves connections, sessions, drafts, evidence, traces, actions, and execution keys.
-Interface copy and numeric formatting are localized. Logs, environment values, identifiers, and API/model text remain
-verbatim. Demo questions and explanations have authored translations; operator-entered text is unchanged.
-An API explanation remains verbatim even if it matches demo text. Self-hosted fonts include Latin and Cyrillic subsets.
+Only the display-language preference (`docksight.locale`) is stored in localStorage. It defaults to the browser's language
+preferences; invalid or unavailable storage falls back to System. Changing this preference preserves connections,
+sessions, drafts, evidence, traces, actions, and execution keys.
+Logs, environment values, identifiers, and API/model text remain verbatim; changing the display language never translates
+an API explanation, even if it matches Demo text.
 
 The client has no durable conversation history, metric history, environment editing, or stack deployment.
 Streams cannot replay or reconnect automatically. Refresh the container overview for current facts or run a new diagnosis
