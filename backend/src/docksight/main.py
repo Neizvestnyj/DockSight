@@ -18,6 +18,7 @@ def create_app(settings: Settings | None = None, components: Components | None =
     """Create the HTTP application with explicit service ownership and safe defaults."""
     config = settings or Settings()
     services = components or build_components(config)
+    credentials = tuple((actor, token.encode()) for actor, token in config.api_credentials().items())
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
@@ -43,7 +44,7 @@ def create_app(settings: Settings | None = None, components: Components | None =
         """Assign request IDs and enforce API authentication before dispatch."""
         request_id = str(uuid4())
         request.state.request_id = request_id
-        denial = _authorize(request, config)
+        denial = _authorize(request, config, credentials)
         if denial is not None:
             return denial
         response = await call_next(request)
@@ -73,12 +74,13 @@ def create_app(settings: Settings | None = None, components: Components | None =
     return app
 
 
-def _authorize(request: Request, config: Settings) -> Response | None:
-    """Authenticate API requests and reject origins outside the configured allowlist."""
+def _authorize(request: Request, config: Settings, credentials: tuple[tuple[str, bytes], ...]) -> Response | None:
+    """Authenticate API requests, record the caller's actor, and reject origins outside the allowlist."""
     if not request.url.path.startswith("/api/"):
         return None
     scheme, _, token = request.headers.get("authorization", "").partition(" ")
-    if scheme.lower() != "bearer" or not compare_digest(token.encode(), config.api_token.get_secret_value().encode()):
+    actor = _authenticate(token.encode(), credentials) if scheme.lower() == "bearer" else None
+    if actor is None:
         response = error_response(request, "unauthorized", "Authentication required", 401)
         response.headers["WWW-Authenticate"] = "Bearer"
 
@@ -87,4 +89,14 @@ def _authorize(request: Request, config: Settings) -> Response | None:
     same_origin = f"{request.url.scheme}://{request.url.netloc}"
     if origin and origin != same_origin and origin not in config.cors_origins:
         return error_response(request, "origin_not_allowed", "Origin is not allowed", 403)
+    request.state.actor = actor
     return None
+
+
+def _authenticate(token: bytes, credentials: tuple[tuple[str, bytes], ...]) -> str | None:
+    """Compare against every configured token so the matching position does not shorten the check."""
+    matched: str | None = None
+    for actor, expected in credentials:
+        if compare_digest(token, expected):
+            matched = actor
+    return matched

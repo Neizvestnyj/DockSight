@@ -106,7 +106,8 @@ Settings are loaded from environment variables or the root `.env` file.
 
 | Variable                   | Purpose                                                              |
 |----------------------------|----------------------------------------------------------------------|
-| `DOCKSIGHT_API_TOKEN`      | Required bearer token, at least 24 characters                        |
+| `DOCKSIGHT_API_TOKEN`      | Bearer token, at least 24 characters                                 |
+| `DOCKSIGHT_API_TOKENS`     | Optional named tokens for several operators, as a JSON object        |
 | `DOCKSIGHT_PROVIDER`       | `ollama` (default), `openai`, `anthropic`, `gemini`, or `compatible` |
 | `DOCKSIGHT_MODEL`          | Model name; defaults to `qwen3.5:9b`                                 |
 | `DOCKSIGHT_MODEL_BASE_URL` | Custom model endpoint                                                |

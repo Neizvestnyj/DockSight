@@ -3,7 +3,8 @@
 Diagram source: [backend.drawio](diagrams/backend.drawio).
 
 Base path: `/api/v1`. All API routes require `Authorization: Bearer TOKEN`. `/health/live`, `/health/ready`, `/docs`,
-and `/openapi.json` are public.
+and `/openapi.json` are public. The token determines the actor: sessions and actions created with one token return
+`session_not_found` or `action_not_found` to any other token. See [API tokens](configuration.md#api-tokens).
 
 | Method | Path                                           | Result                                                 |
 |--------|------------------------------------------------|--------------------------------------------------------|

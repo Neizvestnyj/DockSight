@@ -10,7 +10,8 @@ Names below omit the `DOCKSIGHT_` prefix. Array values use JSON, for example `DO
 
 | Setting | Default | Purpose |
 |---------|---------|---------|
-| `API_TOKEN` | Required | Bearer token of at least 24 characters |
+| `API_TOKEN` | Required unless `API_TOKENS` is set | Bearer token of at least 24 characters; its actor is `operator` |
+| `API_TOKENS` | `{}` | Named operator tokens; see [API tokens](#api-tokens) |
 | `PROVIDER` / `MODEL` | `ollama` / `qwen3.5:9b` | Independent provider and model selection |
 | `MODEL_BASE_URL` / `MODEL_API_KEY` | Provider default / unset | Model endpoint and credentials |
 | `MODEL_STRUCTURED_OUTPUT` | `native` | Compatible and Gemini providers also support `tool` |
@@ -28,6 +29,21 @@ Generate a token with:
 uv run --project backend python -c "import secrets; print(secrets.token_urlsafe(32))"
 ```
 
+### API tokens
+
+Each token identifies one actor. Diagnostic sessions and prepared actions belong to the actor whose token created
+them; another token cannot read, continue, or execute them. Audit records name the actor.
+
+For several operators, give each one a separate token:
+
+```dotenv
+DOCKSIGHT_API_TOKENS={"alice":"generated-token-1","ci-bot":"generated-token-2"}
+```
+
+Actor names use 1–64 letters, digits, dots, underscores, or hyphens. Tokens must be distinct and at least
+24 characters. `DOCKSIGHT_API_TOKEN` can be used alongside them as the `operator` actor, so `API_TOKENS` cannot also
+define `operator`. All tokens have the same permissions.
+
 ## Model providers
 
 Choose a model that supports tool calls and structured output. Use the matching example as the model-settings portion
@@ -42,7 +58,8 @@ of your root `.env`, retaining your API token and browser settings:
 | Compatible API | [Compatible server](../examples/providers/compatible.env.example) |
 
 OpenAI, Anthropic, and Gemini also accept `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and `GEMINI_API_KEY`, respectively.
-`DOCKSIGHT_MODEL_API_KEY` takes precedence. Cloud providers receive the sanitized
+`DOCKSIGHT_MODEL_API_KEY` takes precedence. The compatible provider uses only `DOCKSIGHT_MODEL_API_KEY` or
+`DOCKSIGHT_COMPATIBLE_API_KEY`; it never sends another provider's key. Cloud providers receive the sanitized
 Docker evidence selected by the diagnostic loop. Log redaction is best effort; review what your workload writes to logs.
 
 The header model selector also offers secondary providers configured on the server. Set `DOCKSIGHT_OPENAI_API_KEY`,
