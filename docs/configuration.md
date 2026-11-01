@@ -10,7 +10,7 @@ Names below omit the `DOCKSIGHT_` prefix. Array values use JSON, for example `DO
 
 | Setting                              | Default                  | Purpose                                                           |
 |--------------------------------------|--------------------------|-------------------------------------------------------------------|
-| `API_TOKEN`                          | Required                 | Bearer token of at least 24 characters                            |
+| `API_TOKEN`                          | Required or `API_TOKENS` | Bearer token of at least 24 characters; its actor is `operator`   |
 | `API_TOKENS`                         | `{}`                     | Named operator tokens; see [API tokens](#api-tokens)              |
 | `PROVIDER` / `MODEL`                 | `ollama` / `qwen3.5:9b`  | Independent provider and model selection                          |
 | `MODEL_BASE_URL` / `MODEL_API_KEY`   | Provider default / unset | Model endpoint and credentials                                    |
@@ -69,7 +69,8 @@ Requests without a model selection use this connection.
 OpenAI, Anthropic, and Gemini also accept `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and `GEMINI_API_KEY`, respectively.
 The corresponding `DOCKSIGHT_OPENAI_API_KEY`, `DOCKSIGHT_ANTHROPIC_API_KEY`, or `DOCKSIGHT_GEMINI_API_KEY` takes precedence
 over the standard name. `DOCKSIGHT_MODEL_API_KEY` overrides both for the default model. These settings load from the root
-`.env` file or environment variables.
+`.env` file or environment variables. The compatible provider uses only `DOCKSIGHT_MODEL_API_KEY` or
+`DOCKSIGHT_COMPATIBLE_API_KEY`; it never sends another provider's key.
 
 ### Additional providers
 
