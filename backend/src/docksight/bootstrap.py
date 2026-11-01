@@ -1,14 +1,14 @@
 import logging
-import os
+import re
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
-from typing import Literal
+from typing import Final, Literal, Self
 from urllib.parse import urlparse
 
 import httpx
 from anthropic import AsyncAnthropic
 from openai import AsyncOpenAI
-from pydantic import AliasChoices, Field, SecretStr, field_validator
+from pydantic import AliasChoices, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from docksight.adapters.outbound.audit import JsonAudit
@@ -32,6 +32,10 @@ from docksight.application.redaction import Redactor
 from docksight.application.system_status import SystemStatus
 from docksight.application.views.assembler import ViewAssembler
 
+DEFAULT_ACTOR: Final = "operator"
+ACTOR_PATTERN: Final = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}")
+MIN_TOKEN_LENGTH: Final = 24
+
 
 class Settings(BaseSettings):
     """Validate environment-based credentials, provider selection, and resource budgets."""
@@ -41,6 +45,7 @@ class Settings(BaseSettings):
     )
 
     api_token: SecretStr = SecretStr("")
+    api_tokens: dict[str, SecretStr] = Field(default_factory=dict, max_length=32)
     provider: Literal["ollama", "openai", "anthropic", "compatible", "gemini"] = "ollama"
     model: str = Field(default="qwen3.5:9b", min_length=1, max_length=256)
     model_base_url: str | None = None
@@ -85,14 +90,20 @@ class Settings(BaseSettings):
     model_supports_tools: bool = True
     model_structured_output: Literal["native", "tool"] = "native"
 
-    @field_validator("api_token")
-    @classmethod
-    def validate_token(cls, value: SecretStr) -> SecretStr:
-        """Reject API tokens shorter than the minimum operator credential length."""
-        if len(value.get_secret_value()) < 24:
-            raise ValueError("API token must contain at least 24 characters")
+    @model_validator(mode="after")
+    def validate_credentials(self) -> Self:
+        """Require at least one operator credential, each long, unique, and bound to a safe actor name."""
+        if self.api_token.get_secret_value() and DEFAULT_ACTOR in self.api_tokens:
+            raise ValueError(f"DOCKSIGHT_API_TOKENS cannot redefine the {DEFAULT_ACTOR!r} actor of DOCKSIGHT_API_TOKEN")
+        _check_credentials(self.api_credentials())
+        return self
 
-        return value
+    def api_credentials(self) -> dict[str, str]:
+        """Map each authenticated actor to its bearer token, including the single-token default."""
+        credentials = {actor: token.get_secret_value() for actor, token in self.api_tokens.items()}
+        if self.api_token.get_secret_value():
+            credentials[DEFAULT_ACTOR] = self.api_token.get_secret_value()
+        return credentials
 
     @field_validator("provider_fallback_models")
     @classmethod
@@ -131,6 +142,18 @@ class Settings(BaseSettings):
         return value
 
 
+def _check_credentials(credentials: Mapping[str, str]) -> None:
+    """Reject missing, short, shared, or log-unsafe API credentials without echoing token values."""
+    if not credentials:
+        raise ValueError("Configure DOCKSIGHT_API_TOKEN or DOCKSIGHT_API_TOKENS")
+    if any(not ACTOR_PATTERN.fullmatch(actor) for actor in credentials):
+        raise ValueError("Actor names require 1-64 letters, digits, dots, underscores, or hyphens")
+    if any(len(token) < MIN_TOKEN_LENGTH for token in credentials.values()):
+        raise ValueError(f"API tokens must contain at least {MIN_TOKEN_LENGTH} characters")
+    if len(set(credentials.values())) != len(credentials):
+        raise ValueError("Each actor requires a distinct API token")
+
+
 @dataclass
 class Components:
     """Own wired application services and the cleanup callbacks for their adapters."""
@@ -161,17 +184,12 @@ def configure_logging() -> None:
 
 
 def _provider_key(settings: Settings) -> str | None:
-    """Resolve explicit credentials before provider-specific environment defaults."""
-    if settings.model_api_key and settings.model_api_key.get_secret_value():
-        return settings.model_api_key.get_secret_value()
-    configured_secret = getattr(settings, f"{settings.provider}_api_key")
-    if configured_secret:
-        return configured_secret.get_secret_value()
-    provider = "openai" if settings.provider == "compatible" else settings.provider
-    secret = getattr(settings, f"{provider}_api_key")
-    if secret:
-        return secret.get_secret_value()
-    return os.getenv(f"{provider.upper()}_API_KEY") if provider != "ollama" else None
+    """Resolve explicit credentials before the selected provider's own key, never another provider's key."""
+    secret: SecretStr | None = getattr(settings, f"{settings.provider}_api_key")
+    for candidate in (settings.model_api_key, secret):
+        if candidate and candidate.get_secret_value():
+            return candidate.get_secret_value()
+    return None
 
 
 def _openai_model(
@@ -274,7 +292,7 @@ def build_components(
     """Wire hexagonal services with configured adapters or explicitly injected test ports."""
     configure_logging()
     effective_key = _provider_key(settings)
-    secrets = (settings.api_token.get_secret_value(),)
+    secrets = tuple(settings.api_credentials().values())
     secrets = (
         *secrets,
         *(

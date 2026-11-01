@@ -10,11 +10,18 @@ from tests.fakes import FakeRuntime, ScriptedModel
 
 TOKEN = "test-token-at-least-24-characters"
 HEADERS = {"Authorization": f"Bearer {TOKEN}"}
+ALICE = {"Authorization": "Bearer alice-token-at-least-24-characters"}
+BOB = {"Authorization": "Bearer bob-token-at-least-24-characters"}
 
 
-def client(suggested: bool = False) -> TestClient:
+def client(suggested: bool = False, api_tokens: dict[str, str] | None = None) -> TestClient:
     """Create an authenticated in-process client with deterministic runtime and model ports."""
-    settings = Settings(api_token=TOKEN, cors_origins=("http://localhost:5173",), _env_file=None)
+    settings = Settings(
+        api_token=TOKEN,
+        api_tokens=api_tokens or {},
+        cors_origins=("http://localhost:5173",),
+        _env_file=None,
+    )
     runtime = FakeRuntime()
     model = ScriptedModel(
         [
@@ -95,6 +102,35 @@ def test_action_endpoint_requires_confirmation_and_deduplicates_execution() -> N
         result = api.post(path, headers=headers, json={"confirmed": True})
         assert result.json()["state"] == "succeeded"
         assert api.post(path, headers=headers, json={"confirmed": True}).json() == result.json()
+
+
+def test_named_tokens_isolate_actions_and_sessions_between_actors() -> None:
+    tokens = {"alice": ALICE["Authorization"][7:], "bob": BOB["Authorization"][7:]}
+    with client(api_tokens=tokens) as api:
+        prepared = api.post(
+            "/api/v1/actions",
+            headers=ALICE,
+            json={"host": "local", "container_id": "a" * 64, "operation": "restart"},
+        ).json()
+        path = f"/api/v1/actions/{prepared['id']}"
+        for headers in (BOB, HEADERS):
+            assert api.get(path, headers=headers).json()["code"] == "action_not_found"
+            execute_headers = {**headers, "Idempotency-Key": "k-1"}
+            denied = api.post(f"{path}/execute", headers=execute_headers, json={"confirmed": True})
+            assert denied.status_code == 404
+        assert api.get(path, headers=ALICE).json()["state"] == "prepared"
+
+        turn = api.post("/api/v1/chat/turns", headers=ALICE, json={"host": "local", "query": "Inspect worker"})
+        events = [json.loads(line[6:]) for line in turn.text.splitlines() if line.startswith("data: ")]
+        session_id = events[0]["session_id"]
+        follow_up = api.post(
+            "/api/v1/chat/turns",
+            headers=BOB,
+            json={"host": "local", "query": "And now?", "session_id": session_id},
+        )
+        failed = [json.loads(line[6:]) for line in follow_up.text.splitlines() if line.startswith("data: ")][-1]
+        assert (failed["type"], failed["code"]) == ("turn.failed", "session_not_found")
+        assert tokens["alice"] not in turn.text + follow_up.text
 
 
 def test_recommended_action_uses_server_id_and_redacts_its_model_reason() -> None:

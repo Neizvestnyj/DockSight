@@ -6,6 +6,19 @@ This file records notable changes to DockSight. The format follows
 
 Dates below record each version's merge into `master`. Version links show the corresponding changes.
 
+## [0.7.0]
+
+### Added
+
+- `DOCKSIGHT_API_TOKENS` defines named operators, each with its own bearer token. Diagnostic sessions and prepared
+  actions belong to the operator whose token created them, and audit records name that operator.
+  `DOCKSIGHT_API_TOKEN` keeps working as the `operator` identity.
+
+### Security
+
+- The compatible provider no longer falls back to `OPENAI_API_KEY` or `DOCKSIGHT_OPENAI_API_KEY`, so an OpenAI key is
+  never sent to a third-party or local endpoint. Use `DOCKSIGHT_MODEL_API_KEY` or `DOCKSIGHT_COMPATIBLE_API_KEY`.
+
 ## [0.6.0] - 2026-11-01
 
 ### Added
@@ -191,6 +204,7 @@ Dates below record each version's merge into `master`. Version links show the co
 - Prepared actions are bound to the caller and exact target. Unknown mutation outcomes block conflicting actions;
   runtime mutations are never retried automatically.
 
+[0.7.0]: https://github.com/Neizvestnyj/DockSight/compare/3c69d1ac9d2316bf84582ec230c5290779967cf7...feature/security-fixes
 [0.6.0]: https://github.com/Neizvestnyj/DockSight/compare/093f3c7e0a90251cfe73aba503576bd2280cca12...3c69d1ac9d2316bf84582ec230c5290779967cf7
 [0.5.0]: https://github.com/Neizvestnyj/DockSight/compare/83c8fa477bfc63aa4c0d4f21f33bf676c0649e41...093f3c7e0a90251cfe73aba503576bd2280cca12
 [0.4.0]: https://github.com/Neizvestnyj/DockSight/compare/5ac9a9ed6db7ec57b6ae3848365fb24adfc25b32...83c8fa477bfc63aa4c0d4f21f33bf676c0649e41

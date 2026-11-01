@@ -31,6 +31,14 @@ from docksight.domain.runtime import (
 )
 
 
+def _actor(request: Request) -> str:
+    """Return the identity that API authentication resolved from the caller's bearer token."""
+    return request.state.actor
+
+
+type Actor = Annotated[str, Depends(_actor)]
+
+
 def build_router(
     queries: RuntimeQueries,
     diagnostics: Diagnostics,
@@ -111,23 +119,24 @@ def build_router(
         return await queries.stacks(host, kind)
 
     @router.post("/actions", status_code=201, tags=["Actions"])
-    async def prepare(action: ActionPrepare) -> ActionView:
+    async def prepare(action: ActionPrepare, actor: Actor) -> ActionView:
         """Prepare an expiring action bound to the authenticated actor."""
-        return await actions.prepare("operator", action.host, action.container_id, action.operation)
+        return await actions.prepare(actor, action.host, action.container_id, action.operation)
 
     @router.get("/actions/{action_id}", tags=["Actions"])
-    async def action_state(action_id: UUID) -> ActionView:
+    async def action_state(action_id: UUID, actor: Actor) -> ActionView:
         """Read an action only within the authenticated actor's scope."""
-        return await actions.get(str(action_id), "operator")
+        return await actions.get(str(action_id), actor)
 
     @router.post("/actions/{action_id}/execute", tags=["Actions"])
     async def execute(
         action_id: UUID,
         confirmation: ActionExecute,
         idempotency_key: Annotated[str, Header(min_length=3, max_length=128)],
+        actor: Actor,
     ) -> ActionView:
         """Execute a confirmed action using the supplied idempotency key."""
-        return await actions.execute(str(action_id), "operator", idempotency_key, confirmation.confirmed)
+        return await actions.execute(str(action_id), actor, idempotency_key, confirmation.confirmed)
 
     @router.get("/widgets/schema", tags=["Schemas"])
     async def schema() -> JsonObject:
@@ -141,12 +150,12 @@ def build_router(
         tags=["Chat"],
         responses={200: {"content": {"text/event-stream": {}}}},
     )
-    async def chat(turn: ChatTurn, request: Request) -> EventResponse:
+    async def chat(turn: ChatTurn, request: Request, actor: Actor) -> EventResponse:
         """Stream a bounded diagnostic turn as server-sent events."""
         queries.check_host(turn.host)
         selected = await _selected_diagnostics(diagnostics, models, turn.model_selection)
         source = selected.stream(
-            "operator",
+            actor,
             turn.host,
             turn.query,
             str(turn.session_id) if turn.session_id else None,

@@ -82,6 +82,37 @@ def test_gemini_requires_its_own_credentials(monkeypatch: pytest.MonkeyPatch) ->
         build_components(settings, reader=runtime, writer=runtime)
 
 
+@pytest.mark.parametrize(
+    "compatible_key,expected",
+    [(None, "local-no-key"), ("compatible-gateway-key", "compatible-gateway-key")],
+)
+async def test_compatible_endpoint_never_receives_openai_credentials(
+    monkeypatch: pytest.MonkeyPatch, compatible_key: str | None, expected: str
+) -> None:
+    """Keep OpenAI keys away from a third-party endpoint configured as the compatible provider."""
+    monkeypatch.setenv("OPENAI_API_KEY", "unrelated-openai-key")
+    monkeypatch.setenv("DOCKSIGHT_OPENAI_API_KEY", "unrelated-docksight-openai-key")
+    monkeypatch.delenv("DOCKSIGHT_MODEL_API_KEY", raising=False)
+    settings = Settings(
+        api_token="test-token-at-least-24-chars",
+        provider="compatible",
+        model="local-model",
+        model_base_url="http://127.0.0.1:8080/v1/",
+        compatible_api_key=compatible_key,
+        _env_file=None,
+    )
+    runtime = FakeRuntime()
+    components = build_components(settings, reader=runtime, writer=runtime)
+    try:
+        generation, probe = components.diagnostics.model, components.status.probe
+        assert isinstance(generation, CompatibleModel)
+        assert isinstance(probe, ModelAvailability)
+        assert generation.client.api_key == expected
+        assert probe.client.headers["Authorization"] == f"Bearer {expected}"
+    finally:
+        await components.close()
+
+
 @pytest.mark.parametrize("provider,variable", [("openai", "OPENAI_BASE_URL"), ("anthropic", "ANTHROPIC_BASE_URL")])
 async def test_status_probe_uses_the_generation_clients_effective_endpoint(
     monkeypatch: pytest.MonkeyPatch,
@@ -123,6 +154,34 @@ def test_missing_token_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_invalid_provider_and_short_token_are_rejected() -> None:
     with pytest.raises(ValidationError):
         Settings(api_token="short", provider="unknown", _env_file=None)
+
+
+def test_named_tokens_replace_the_single_token_and_map_to_their_actors(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("DOCKSIGHT_API_TOKEN", raising=False)
+    monkeypatch.setenv(
+        "DOCKSIGHT_API_TOKENS",
+        json.dumps({"alice": "alice-token-at-least-24-characters", "ci.bot": "bot-token-at-least-24-characters"}),
+    )
+    settings = Settings(_env_file=None)
+    assert settings.api_credentials() == {
+        "alice": "alice-token-at-least-24-characters",
+        "ci.bot": "bot-token-at-least-24-characters",
+    }
+
+
+@pytest.mark.parametrize(
+    "api_tokens",
+    [
+        {"alice": "short"},
+        {"bad name": "alice-token-at-least-24-characters"},
+        {"alice": "shared-token-at-least-24-characters", "bob": "shared-token-at-least-24-characters"},
+        {"operator": "other-token-at-least-24-characters"},
+    ],
+)
+def test_named_tokens_reject_weak_shared_or_unsafe_identities(api_tokens: dict[str, str]) -> None:
+    with pytest.raises(ValidationError) as error:
+        Settings(api_token="test-token-at-least-24-chars", api_tokens=api_tokens, _env_file=None)
+    assert not any(token in str(error.value) for token in api_tokens.values())
 
 
 def test_health_does_not_require_a_docker_connection() -> None:
