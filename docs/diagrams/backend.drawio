@@ -367,7 +367,7 @@
                   <mxPoint x="75" y="233" as="targetPoint" />
                 </mxGeometry>
               </mxCell>
-            <mxCell edge="1" parent="1" source="3" style="endArrow=block;endSize=9;verticalAlign=bottom;spacingBottom=2;edgeStyle=sequenceEdgeStyle;libavoidRouting=0;curved=0;rounded=0;fontSize=16;labelBackgroundColor=none;strokeColor=#52627A;strokeWidth=1.5;fontSize=14;fontColor=#17202A;sketch=1;fillStyle=solid;curveFitting=1;jiggle=2;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;" target="4" id="21" value="Query, history, and allowed tools">
+            <mxCell edge="1" parent="1" source="3" style="endArrow=block;endSize=9;verticalAlign=bottom;spacingBottom=2;edgeStyle=sequenceEdgeStyle;libavoidRouting=0;curved=0;rounded=0;fontSize=16;labelBackgroundColor=none;strokeColor=#52627A;strokeWidth=1.5;fontSize=14;fontColor=#17202A;sketch=1;fillStyle=solid;curveFitting=1;jiggle=2;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;" target="4" id="21" value="Query, labeled history, allowed tools">
                 <mxGeometry relative="1" as="geometry">
                   <Array as="points">
                     <mxPoint x="453" y="369" />
@@ -403,7 +403,7 @@
                   <mxPoint x="799" y="552" as="targetPoint" />
                 </mxGeometry>
               </mxCell>
-            <mxCell edge="1" parent="1" source="5" style="endArrow=block;endSize=9;verticalAlign=bottom;spacingBottom=2;edgeStyle=sequenceEdgeStyle;libavoidRouting=0;curved=0;rounded=0;fontSize=16;labelBackgroundColor=none;strokeColor=#52627A;strokeWidth=1.5;fontSize=14;fontColor=#17202A;sketch=1;fillStyle=solid;curveFitting=1;jiggle=2;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;" target="6" id="25" value="Read the selected host">
+            <mxCell edge="1" parent="1" source="5" style="endArrow=block;endSize=9;verticalAlign=bottom;spacingBottom=2;edgeStyle=sequenceEdgeStyle;libavoidRouting=0;curved=0;rounded=0;fontSize=16;labelBackgroundColor=none;strokeColor=#52627A;strokeWidth=1.5;fontSize=14;fontColor=#17202A;sketch=1;fillStyle=solid;curveFitting=1;jiggle=2;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;" target="6" id="25" value="Read host (uncached calls)">
                 <mxGeometry relative="1" as="geometry">
                   <Array as="points">
                     <mxPoint x="913" y="598" />
@@ -485,7 +485,7 @@
                   <mxPoint x="75" y="980" as="targetPoint" />
                 </mxGeometry>
               </mxCell>
-            <mxCell edge="1" parent="1" source="3" style="endArrow=block;endSize=9;verticalAlign=bottom;spacingBottom=2;edgeStyle=sequenceEdgeStyle;libavoidRouting=0;curved=0;rounded=0;fontSize=16;labelBackgroundColor=none;strokeColor=#52627A;strokeWidth=1.5;fontSize=14;fontColor=#17202A;sketch=1;fillStyle=solid;curveFitting=1;jiggle=2;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;" target="4" id="35" value="Final structured diagnosis request">
+            <mxCell edge="1" parent="1" source="3" style="endArrow=block;endSize=9;verticalAlign=bottom;spacingBottom=2;edgeStyle=sequenceEdgeStyle;libavoidRouting=0;curved=0;rounded=0;fontSize=16;labelBackgroundColor=none;strokeColor=#52627A;strokeWidth=1.5;fontSize=14;fontColor=#17202A;sketch=1;fillStyle=solid;curveFitting=1;jiggle=2;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;" target="4" id="35" value="Final schema + lifecycle recap">
                 <mxGeometry relative="1" as="geometry">
                   <Array as="points">
                     <mxPoint x="453" y="1046" />
@@ -576,6 +576,9 @@
                   <mxPoint x="75" y="1519" as="targetPoint" />
                 </mxGeometry>
               </mxCell>
+            <mxCell id="turn-context-note" parent="1" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacing=14;fontSize=16;fontColor=#17202A;fillColor=#F5F5F5;strokeColor=#666666;strokeWidth=2;sketch=1;fillStyle=solid;curveFitting=1;jiggle=2;fontFamily=Architects Daughter;" value="Same-turn evidence reuse: successful reads with identical arguments and scope return evidence IDs without another Docker call. Failed reads are not cached. An all-reused batch ends exploration.&lt;br&gt;&lt;br&gt;Final generation drops the unvalidated prose draft and recaps the latest collected lifecycle facts. Reference validation does not establish whether the model explanation is true." vertex="1">
+              <mxGeometry x="45" y="1680" width="1452" height="150" as="geometry" />
+            </mxCell>
             <mxCell id="scope-routing-note" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=16;fontColor=#17202A;sketch=1;fillStyle=solid;curveFitting=1;jiggle=2;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;" value="Bare host incident: server discovery + inspect_host, then explanation (Diagnostic overview).&lt;br&gt;Ambiguous named resource: return typed clarification before diagnosis.&lt;br&gt;Explicit group/container selection: use the scoped read flow below." vertex="1">
               <mxGeometry height="100" width="1030" x="455" y="95" as="geometry" />
             </mxCell>

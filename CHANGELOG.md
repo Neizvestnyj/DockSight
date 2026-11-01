@@ -10,6 +10,7 @@ Dates below record each version's merge into `master` in Europe/Moscow. Version 
 
 ### Added
 
+- Apache-2.0 license for the public repository and third-party notices in frontend builds.
 - Docker healthcheck status appears separately from process state in container facts, diagnostic cards, inventory,
   and Compose members. Running unhealthy containers receive bounded diagnostic log collection even without restarts;
   missing health observations remain unknown, and probe commands and output are not exposed.
@@ -20,6 +21,9 @@ Dates below record each version's merge into `master` in Europe/Moscow. Version 
 
 ### Changed
 
+- Public setup documentation explains automatic host scope, evidence limits, and model uncertainty. English Demo
+  screenshots reflect the current interface; the diagnostic sequence documents evidence reuse and final context.
+  Local connection guidance covers working-directory configuration, occupied ports, and isolated Docker examples.
 - Selection menus share custom styling, keyboard navigation, typeahead, and explicit selected or disabled states.
   Optional diagnostic-scope guidance appears beside a help button, available by hover, focus, or tap.
 - Container card headers show process state only, with healthchecks in separate facts. Stopped containers identify the

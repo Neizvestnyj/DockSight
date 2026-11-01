@@ -79,14 +79,14 @@ Gemini uses Google's [OpenAI-compatible API](https://ai.google.dev/gemini-api/do
 `https://generativelanguage.googleapis.com/v1beta/openai/` by default. Remove an old `DOCKSIGHT_MODEL_BASE_URL`
 override when switching providers. Tool-call signatures are retained internally for multi-step Gemini diagnostics.
 Server-created preliminary reads use Google's documented signature marker; model-issued signatures replay unchanged.
-Use `gemini-3.5-flash-lite`. Google rejects generation with `gemini-2.5-flash-lite` for new users, even when its
-metadata lookup succeeds. A successful metadata check does not guarantee access to generation.
+Choose a model enabled for your API key from the provider's catalog. A successful metadata check does not guarantee
+access to generation; available IDs and access depend on the provider and account.
 For a Compose service, put these settings in its `environment` mapping and supply the key from your local environment:
 
 ```yaml
 environment:
   DOCKSIGHT_PROVIDER: gemini
-  DOCKSIGHT_MODEL: gemini-3.5-flash-lite
+  DOCKSIGHT_MODEL: your-enabled-gemini-model
   DOCKSIGHT_MODEL_API_KEY: ${GEMINI_API_KEY:?Set GEMINI_API_KEY}
 ```
 
@@ -129,6 +129,28 @@ The production build self-hosts IBM Plex fonts.
 
 The browser holds API credentials in memory. Never put tokens in source, browser storage, URLs, or `VITE_*` variables.
 Reload returns to Demo and requires reconnecting. Only the locale preference is persisted.
+
+### Local ports and connection errors
+
+Run commands from the repository root so the backend loads the intended `.env`. Environment variables take precedence
+over that file; check for older `DOCKSIGHT_*` settings when a fresh configuration behaves unexpectedly.
+
+If port 8000 is occupied, start a separate backend on a free port:
+
+```sh
+uv run --project backend uvicorn docksight.main:create_app --factory --host 127.0.0.1 --port 18080 --workers 1
+```
+
+In **Connect API**, replace `/api/v1` with `http://127.0.0.1:18080/api/v1` and enter the new backend's token.
+The Vite proxy still targets port 8000. For direct connections, `.env.example` allows frontend origins on ports 5173 and
+4173; add the exact origin if Vite prints another port. Restart the backend after changing its settings.
+
+A 401 response usually means the browser token differs from the backend token. A working `/health/live` endpoint does
+not verify Docker or model access. Open the status panel for dependency checks, then run a diagnosis to verify generation.
+
+`invalid_diagnosis` means the model's proposed response failed schema or evidence checks after one repair attempt.
+A group answer can fail when the model uses group-only evidence for an individual-container card. Selecting the exact
+container and choosing **Diagnose** collects its snapshot and logs; it does not bypass response validation.
 
 ## Backend image
 

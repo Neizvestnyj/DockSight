@@ -34,6 +34,14 @@ state, coverage limits, and collected fact cards are server-owned and remain ava
 The model cannot replace this overview with a group chooser. Optional narrowing starts a separate investigation with
 fresh observations of the selected group or exact container.
 
+Each turn owns a bounded evidence context and read-result memo. Repeated successful reads with the same arguments and
+scope return evidence references instead of duplicating observations; failures are not cached. A batch containing only
+reused reads ends model exploration. Final generation omits unvalidated prose drafts and includes a bounded recap of
+the latest collected lifecycle facts. Earlier questions and summaries are labeled context, not current observations.
+
+Schema and evidence-reference validation do not verify the truth of model explanations. Causal regression tests detect
+selected known contradictions; they are not a runtime factuality filter.
+
 Named ambiguity still requires clarification. The application validates choices against discovery and ends that turn
 without diagnosis or session history. Container/group name collisions include the observed container's exact identity.
 The client continues the same question and session with an explicit target, revalidated against fresh Docker data.
