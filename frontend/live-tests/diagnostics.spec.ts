@@ -1,6 +1,7 @@
 import { writeFile } from 'node:fs/promises';
 import { expect, test, type Page, type Response } from '@playwright/test';
 import { answerSchema, targetSelectionSchema, type Answer, type TurnInput } from '../src/contracts';
+import { chooseOption } from '../tests/helpers/select';
 
 interface Input {
   project: string;
@@ -167,7 +168,7 @@ test('shows scoped host or group observations from the real backend', async ({ p
   try {
     await captureStreams(page);
     await page.goto('/');
-    await page.locator('.language-switch select').selectOption(locale);
+    await chooseOption(page.locator('.language-switch [role="combobox"]'), locale);
     await page.getByRole('button', { name: labels.connectApi, exact: true }).click();
     await page.getByLabel(labels.endpoint, { exact: true }).fill(`${process.env.DOCKSIGHT_E2E_API}/api/v1`);
     await page.getByLabel(labels.token, { exact: true }).fill(process.env.DOCKSIGHT_E2E_TOKEN!);
@@ -175,10 +176,10 @@ test('shows scoped host or group observations from the real backend', async ({ p
     await expect(page.locator('.composer-foot')).toContainText('e2e');
     const scope = page.getByRole('combobox', { name: labels.scope, exact: true });
     if (scenario.explicit) {
-      await scope.selectOption('compose');
-      await page.getByRole('combobox', { name: labels.group, exact: true }).selectOption(scenario.project);
+      await chooseOption(scope, 'compose');
+      await chooseOption(page.getByRole('combobox', { name: labels.group, exact: true }), scenario.project);
     } else {
-      await expect(scope).toHaveValue('all');
+      await expect(scope).toContainText(locale === 'ru' ? 'Автоматически' : 'Automatic');
       await page.locator('#query').fill(scenario.query);
     }
     const pending = page.waitForResponse(
@@ -212,7 +213,9 @@ test('shows scoped host or group observations from the real backend', async ({ p
       exact: true,
     });
     const memberSelector = scenario.host_overview ? '.host-member' : '.group-member';
-    const memberCount = scenario.host_overview ? answer.host_overview!.members.length : 3;
+    const members = scenario.host_overview ? answer.host_overview!.members : answer.group!.summary.members;
+    expect(members).toBeDefined();
+    const memberCount = members!.length;
     if (scenario.host_overview) {
       expect(answer.host_overview).toBeTruthy();
       expect(answer.group).toBeNull();
@@ -231,7 +234,7 @@ test('shows scoped host or group observations from the real backend', async ({ p
     for (const card of answer.widgets.filter((row) => row.widget_type === 'container_status')) {
       await expect(sources.getByRole('group', { name: card.snapshot.name, exact: true })).toBeVisible();
     }
-    await scope.selectOption('all');
+    await chooseOption(scope, 'all');
     await expect(report.locator(memberSelector)).toHaveCount(memberCount);
     await expect(page.locator('.widget-container_status')).toHaveCount(
       answer.widgets.filter((row) => row.widget_type === 'container_status').length,

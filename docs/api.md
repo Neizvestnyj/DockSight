@@ -170,6 +170,10 @@ This bounds redundant context, not total model tokens. New turns collect new obs
 
 Final and repair JSON schemas constrain every `evidence_ids` array to IDs collected in the current turn. A compact
 current-turn catalog identifies their observation kind and exact container; quoted log messages are not reference IDs.
+The schemas limit widget types to typed data available for assembly. Group-only evidence offers `compose_stack`;
+individual status and environment cards require snapshots, and log cards require collected logs with a snapshot.
+When no card type has supporting data, the model returns `widgets:null`, normalized to an empty public widget array.
+Group and host reports remain server-owned.
 Server validation still rejects unknown references or references that cannot support the requested card.
 This validates reference integrity and card data, not the semantic correctness of a model's causal explanation.
 Final generation omits the last prose-only exploration draft and recaps at most eight latest per-resource lifecycle

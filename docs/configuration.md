@@ -149,8 +149,8 @@ A 401 response usually means the browser token differs from the backend token. A
 not verify Docker or model access. Open the status panel for dependency checks, then run a diagnosis to verify generation.
 
 `invalid_diagnosis` means the model's proposed response failed schema or evidence checks after one repair attempt.
-A group answer can fail when the model uses group-only evidence for an individual-container card. Selecting the exact
-container and choosing **Diagnose** collects its snapshot and logs; it does not bypass response validation.
+Selecting an exact container and choosing **Diagnose** collects its snapshot and logs for a focused investigation;
+it does not bypass response validation.
 
 ## Backend image
 

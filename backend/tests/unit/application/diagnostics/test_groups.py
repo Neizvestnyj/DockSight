@@ -1,5 +1,6 @@
 import json
 from dataclasses import replace
+from unittest.mock import patch
 
 import pytest
 
@@ -128,6 +129,42 @@ async def test_running_members_without_failure_signals_do_not_spend_the_group_lo
     )
     assert not runtime.reads
     assert result["group"]["logs"] == []
+
+
+@pytest.mark.parametrize("repair", [False, True])
+async def test_healthy_group_final_and_repair_schemas_only_offer_cards_with_collected_data(repair: bool) -> None:
+    """A group-only observation must not let constrained generation select an individual-container card."""
+    runtime = GroupRuntime()
+    runtime.rows = (replace(runtime.rows[0], state="running", exit_code=0, restart_count=0, health="healthy"),)
+    answer = {
+        "summary": "The project has one running, healthy container",
+        "uncertain": False,
+        "evidence_ids": ["e1"],
+        "widgets": [{"widget_type": "compose_stack", "evidence_ids": ["e1"]}],
+    }
+    invalid = {**answer, "widgets": [{"widget_type": "container_status", "evidence_ids": ["e1"]}]}
+    model = ScriptedModel(
+        [ModelReply("Ready"), *([ModelReply(json.dumps(invalid))] if repair else []), ModelReply(json.dumps(answer))]
+    )
+    service = Diagnostics(runtime, model, MemorySessions(), Redactor())
+    with patch.object(model, "complete", wraps=model.complete) as complete:
+        events = [
+            event
+            async for event in service.stream(
+                "alice",
+                "local",
+                "Show the current state of Compose project infra",
+                group=GroupTarget(kind="compose", name="infra"),
+            )
+        ]
+    assert events[-1]["type"] == "turn.completed"
+    for call in complete.call_args_list[1:]:
+        schema = call.kwargs["schema"]
+        assert schema["$defs"]["WidgetProposal"]["properties"]["widget_type"]["enum"] == ["compose_stack"]
+    report = next(event["answer"] for event in events if event["type"] == "answer.ready")
+    assert report["group"]["summary"]["running"] == 1
+    assert [card["widget_type"] for card in report["widgets"]] == ["compose_stack"]
+    assert not runtime.reads and not runtime.mutations
 
 
 async def test_group_inspection_keeps_all_member_states_and_reports_failed_and_omitted_logs() -> None:

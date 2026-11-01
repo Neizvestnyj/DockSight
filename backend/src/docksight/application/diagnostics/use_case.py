@@ -397,7 +397,7 @@ class Diagnostics:
         for attempt in range(2):
             yield trace.begin("model", "repair_response" if attempt else "final_response")
             reply = await _before_deadline(
-                deadline, lambda: self.model.complete(messages, schema=proposal_schema(tuple(context.evidence)))
+                deadline, lambda: self.model.complete(messages, schema=proposal_schema(context))
             )
             yield trace.finish(reply=reply, preview=True)
             yield trace.begin("validation", "validate_diagnosis")

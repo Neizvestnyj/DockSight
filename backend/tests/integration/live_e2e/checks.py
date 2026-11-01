@@ -8,7 +8,7 @@ from docksight.application.views.schemas import (
     GroupSelection,
     LogAnomalyCard,
 )
-from docksight.domain.runtime import ContainerSnapshot
+from docksight.domain.runtime import ContainerSnapshot, StackSummary
 from tests.integration.live_e2e.cases import Case
 from tests.integration.live_e2e.causal_checks import check_causality
 from tests.integration.live_e2e.host_checks import check_host
@@ -151,6 +151,9 @@ def _check_status_scope(card: ContainerStatusCard, answer: DiagnosisResponse, id
 def _check_group(answer: DiagnosisResponse, lab: ComposeLab) -> None:
     """Require both independent failures, not a plausible explanation for only the last inspected container."""
     assert answer.group is not None
+    if lab.case.name == "compose-healthy":
+        _check_healthy_group(answer.group.summary, lab)
+        return
     group = answer.group.summary
     assert (group.kind, group.name, group.total, group.running) == ("compose", lab.project, 3, 1)
     assert {row.id for row in group.members} == {row.id for row in lab.containers.values()}
@@ -165,6 +168,15 @@ def _check_group(answer: DiagnosisResponse, lab: ComposeLab) -> None:
     assert len(logs) == len(set(logs)), "Duplicate log cards for the same group member"
     assert {row.container_id for row in answer.group.logs} >= failed
     _check_failed_cards(answer, failed)
+
+
+def _check_healthy_group(group: StackSummary, lab: ComposeLab) -> None:
+    """Compare a group-only diagnosis with the real healthy member without requiring uncollected log cards."""
+    container = lab.containers["nginx"]
+    assert (group.kind, group.name, group.total, group.running) == ("compose", lab.project, 1, 1)
+    assert len(group.members) == 1
+    member = group.members[0]
+    assert (member.id, member.state, member.health) == (container.id, "running", "healthy")
 
 
 def _check_failed_cards(answer: DiagnosisResponse, failed: set[str]) -> None:
@@ -231,7 +243,8 @@ def _check_logs(answer: DiagnosisResponse, lab: ComposeLab) -> None:
         containers.update(lab.peers)
         containers.update(lab.standalone)
     cards = [row for row in answer.widgets if isinstance(row, LogAnomalyCard)]
-    assert cards, "The diagnosis omitted supported requested logs"
+    if lab.case.name != "compose-healthy":
+        assert cards, "The diagnosis omitted supported requested logs"
     for card in cards:
         assert card.host == "e2e" and card.container_id in containers
         _check_log_source(card, answer, lab.case.log_limits[0])

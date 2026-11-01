@@ -46,6 +46,11 @@ class Case:
 
     def _group_query(self, project: str, language: Language) -> str:
         """Vary how a real group is named while keeping its diagnostic intent unchanged."""
+        if self.name == "compose-healthy":
+            return {
+                "ru": f"Покажи текущее состояние контейнера в Compose-проекте {project}.",
+                "en": f"Show the current state of the container in Compose project {project}.",
+            }[language]
         if self.spelling == "unscoped":
             return "Что случилось?" if language == "ru" else "What happened?"
         if self.spelling in {"cyrillic", "ambiguous"}:
@@ -79,6 +84,7 @@ FOLLOW_UP_SHUTDOWN_CASE: Final = Case(
 FOLLOW_UP_CASES: Final = (FOLLOW_UP_CASE, FOLLOW_UP_NOISY_CASE, FOLLOW_UP_SHUTDOWN_CASE)
 
 CASES: Final = (
+    Case("compose-healthy", ("nginx",), group=True, production_limits=True),
     Case("compose-explicit", ("backend", "grafana", "nginx"), group=True, explicit=True),
     Case("compose-chat", ("backend", "grafana", "nginx"), group=True),
     Case("compose-typo", ("backend", "grafana", "nginx"), group=True, typo=True),

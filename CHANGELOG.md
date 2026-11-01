@@ -6,7 +6,7 @@ This file records notable changes to DockSight. The format follows
 
 Dates below record each version's merge into `master` in Europe/Moscow. Version links show the corresponding changes.
 
-## [0.6.0]
+## [0.6.0] - 2026-11-01
 
 ### Added
 
@@ -36,6 +36,9 @@ Dates below record each version's merge into `master` in Europe/Moscow. Version 
 
 ### Fixed
 
+- Healthy Compose-group diagnoses offer model cards only when their required data was collected. Group-only evidence
+  supports group cards without unsupported individual-container cards. Final generation and repair share this
+  restriction. No-card replies preserve empty public card lists through provider schema conversion.
 - Host model projections limit repeated member detail. Final generation omits unvalidated prose drafts across scopes
   and recaps bounded latest lifecycle facts. Causal guidance separates clean shutdowns and unknown stop reasons from
   old errors; model explanations still require review.

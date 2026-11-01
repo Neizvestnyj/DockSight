@@ -2,7 +2,7 @@ import re
 from datetime import datetime
 from typing import Annotated, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from docksight.domain.actions import ActionState, Operation
 from docksight.domain.diagnostics import EvidenceRef
@@ -199,6 +199,12 @@ class DiagnosisProposal(Contract):
     uncertain: bool
     cause: CauseAssessment | None = None
     widgets: list[WidgetProposal] = Field(max_length=8)
+
+    @field_validator("widgets", mode="before")
+    @classmethod
+    def empty_widgets(cls, value: object) -> object:
+        """Normalize no-card model replies to the application's stable list contract."""
+        return [] if value is None else value
 
     @model_validator(mode="after")
     def check_evidence(self) -> Self:

@@ -187,9 +187,11 @@ Additional cases stop an owned Python process through Docker SIGTERM, observe a 
 503 probe, and retain old request errors while a process remains running. PostgreSQL-style histories are synthetic;
 these workloads do not host a database engine. Exit 137 without OOM is an explicit process exit, not an injected SIGKILL.
 
-Select a smaller matrix with repeated `--e2e-case` options: `compose-explicit`, `compose-chat`, `compose-typo`,
-`compose-spaced`, `compose-cyrillic`, `compose-ambiguous`, `oom`, `crash-loop`, `truncated-logs`, `unknown-exit`,
-`clean-shutdown`, `unhealthy`, or `running-history`.
+Select a smaller matrix with repeated `--e2e-case` options: `compose-healthy`, `compose-explicit`, `compose-chat`,
+`compose-typo`, `compose-spaced`, `compose-cyrillic`, `compose-ambiguous`, `oom`, `crash-loop`, `truncated-logs`,
+`unknown-exit`, `clean-shutdown`, `unhealthy`, or `running-history`.
+`compose-healthy` asks about a healthy group with no precollected individual snapshots or problem logs; its group report
+must remain usable without unsupported container cards.
 Both English and Russian run by default; repeat `--e2e-language en`
 or `--e2e-language ru` to restrict the matrix. Assertions check runtime facts, exact resource identities, card coverage,
 observed log content, and evidence references rather than exact model prose. A script-based language check covers each
