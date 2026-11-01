@@ -18,6 +18,8 @@ Dates below record each version's merge into `master`. Version links show the co
 
 - Action-store regression coverage protects owner isolation, retention, concurrent claims, cancellation, and
   indeterminate target blocks.
+- Backend failures carry transport-independent categories. The HTTP adapter translates them into the existing
+  response statuses without changing public error codes, messages, or diagnostic stream events.
 
 ### Security
 

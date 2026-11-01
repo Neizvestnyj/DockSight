@@ -1,13 +1,27 @@
 import json
 import logging
 import traceback
+from typing import Final
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException
 
-from docksight.domain.errors import DockSightError
+from docksight.domain.errors import DockSightError, ErrorKind
+
+_HTTP_STATUS: Final[dict[ErrorKind, int]] = {
+    ErrorKind.INVALID: 400,
+    ErrorKind.FORBIDDEN: 403,
+    ErrorKind.NOT_FOUND: 404,
+    ErrorKind.CONFLICT: 409,
+    ErrorKind.VALIDATION: 422,
+    ErrorKind.RATE_LIMIT: 429,
+    ErrorKind.CONFIGURATION: 500,
+    ErrorKind.DEPENDENCY: 502,
+    ErrorKind.UNAVAILABLE: 503,
+    ErrorKind.TIMEOUT: 504,
+}
 
 
 def safe_stack(exc: Exception) -> list[dict[str, str | int]]:
@@ -49,8 +63,8 @@ def install_errors(app: FastAPI) -> None:
 
     @app.exception_handler(DockSightError)
     async def domain_error(request: Request, exc: DockSightError) -> JSONResponse:
-        """Expose the domain error's public code, message, and status."""
-        return error_response(request, exc.code, exc.message, exc.status)
+        """Translate a semantic failure category while preserving its public details."""
+        return error_response(request, exc.code, exc.message, _HTTP_STATUS[exc.kind])
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:

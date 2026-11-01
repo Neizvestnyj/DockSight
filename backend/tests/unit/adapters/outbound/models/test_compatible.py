@@ -6,7 +6,7 @@ from openai import AsyncOpenAI
 
 from docksight.adapters.outbound.models.compatible import CompatibleModel
 from docksight.application.ports.models import ModelMessage, ToolCall, ToolSpec
-from docksight.domain.errors import DockSightError
+from docksight.domain.errors import DockSightError, ErrorKind
 
 
 async def test_gemini_retired_model_error_is_safe_and_distinct_from_unsupported_requests() -> None:
@@ -38,7 +38,7 @@ async def test_gemini_retired_model_error_is_safe_and_distinct_from_unsupported_
             )
     error = caught.value
     assert error.code == "model_unavailable"
-    assert error.status == 422
+    assert error.kind == ErrorKind.VALIDATION
     assert "Check the model name and your access" in error.message
     assert all(
         value not in str(error) for value in ("private-provider-key", "private-prompt", "gemini-3.5", "Interactions")

@@ -14,7 +14,7 @@ from docksight.adapters.outbound.docker.hosts import HostConfig
 from docksight.adapters.outbound.docker.runtime import DockerRuntime
 from docksight.application.redaction import Redactor
 from docksight.bootstrap import Settings, build_components
-from docksight.domain.errors import DockSightError
+from docksight.domain.errors import DockSightError, ErrorKind
 from docksight.domain.runtime import ContainerSnapshot, LogBatch, ResourceMetrics, StackSummary
 from docksight.main import create_app
 from tests.integration.live_e2e.lab import ComposeLab
@@ -55,7 +55,9 @@ class FixtureRuntime(DockerRuntime):
     def _require_fixture(self, container_id: str) -> None:
         """Reject reads outside the exact containers created by this run."""
         if container_id not in self.ids:
-            raise DockSightError("fixture_scope_violation", "Resource is outside the live-e2e fixture", 403)
+            raise DockSightError(
+                "fixture_scope_violation", "Resource is outside the live-e2e fixture", ErrorKind.FORBIDDEN
+            )
 
     async def containers(self, host: str) -> tuple[ContainerSnapshot, ...]:
         """Inspect exact owned IDs without enumerating unrelated host workloads."""

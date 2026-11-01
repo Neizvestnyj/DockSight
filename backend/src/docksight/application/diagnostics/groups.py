@@ -9,7 +9,7 @@ from docksight.application.diagnostics.logs import collect_logs, needs_logs
 from docksight.application.ports.runtime import RuntimeReadPort
 from docksight.application.views.schemas import GroupInspection, GroupLogResult, GroupTarget
 from docksight.domain.diagnostics import JsonObject, JsonValue
-from docksight.domain.errors import DockSightError
+from docksight.domain.errors import DockSightError, ErrorKind
 from docksight.domain.runtime import StackSummary
 
 _STACKS: Final = TypeAdapter(tuple[StackSummary, ...])
@@ -23,7 +23,7 @@ async def inspect_group(
     groups = await runtime.stacks(host, target.kind)
     summary = next((row for row in groups if row.kind == target.kind and row.name == target.name), None)
     if summary is None:
-        raise DockSightError("group_not_found", "Group not found on the selected host", 404)
+        raise DockSightError("group_not_found", "Group not found on the selected host", ErrorKind.NOT_FOUND)
     summary = _bounded_summary(summary, min(context.remaining_bytes, 32768))
     data: JsonObject = {"stacks": cast(list[JsonValue], _STACKS.dump_python((summary,), mode="json"))}
     ref = context.record("stack", host, data, stacks=(summary,))
@@ -51,7 +51,7 @@ def group_result(context: EvidenceContext) -> JsonObject:
     """Give the model real collected observations, bounding repeated coverage metadata separately."""
     report = context.group
     if report is None:
-        raise DockSightError("group_not_found", "No group has been inspected", 409)
+        raise DockSightError("group_not_found", "No group has been inspected", ErrorKind.CONFLICT)
     projection = report.model_copy(deep=True)
     observations: list[JsonValue] = [
         {"evidence_id": row.id, "kind": row.kind, "container_id": row.container_id, "data": row.data}

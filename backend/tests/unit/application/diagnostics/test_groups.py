@@ -13,7 +13,7 @@ from docksight.application.ports.models import ModelReply, ToolCall
 from docksight.application.redaction import Redactor
 from docksight.application.views.assembler import ViewAssembler
 from docksight.application.views.schemas import DiagnosisProposal, GroupTarget
-from docksight.domain.errors import DockSightError
+from docksight.domain.errors import DockSightError, ErrorKind
 from docksight.domain.runtime import ContainerSnapshot, LogBatch, StackMember, StackSummary
 from tests.fakes import FakeRuntime, ScriptedModel
 
@@ -67,7 +67,7 @@ class GroupRuntime(FakeRuntime):
         """Fail one read without hiding other members or retrying it."""
         self.reads.append(container_id)
         if container_id == "2" * 64:
-            raise DockSightError("runtime_unavailable", "Docker operation failed", 503)
+            raise DockSightError("runtime_unavailable", "Docker operation failed", ErrorKind.UNAVAILABLE)
         return self.log_batch
 
 
@@ -101,7 +101,7 @@ async def test_unavailable_inventory_preserves_unhealthy_member_log_coverage() -
 
         async def containers(self, host: str) -> tuple[ContainerSnapshot, ...]:
             """Report the failed local read without erasing observed group members."""
-            raise DockSightError("runtime_unavailable", "Docker operation failed", 503)
+            raise DockSightError("runtime_unavailable", "Docker operation failed", ErrorKind.UNAVAILABLE)
 
     runtime = UnavailableInventory()
     runtime.rows = (replace(runtime.rows[0], state="running", exit_code=0, health="unhealthy"),)
@@ -258,7 +258,7 @@ async def test_failed_local_inventory_keeps_the_group_and_reports_missing_log_co
 
         async def containers(self, host: str) -> tuple[ContainerSnapshot, ...]:
             """Report a transient local read failure."""
-            raise DockSightError("runtime_unavailable", "Docker operation failed", 503)
+            raise DockSightError("runtime_unavailable", "Docker operation failed", ErrorKind.UNAVAILABLE)
 
     context = EvidenceContext()
     result = await DiagnosticTools(OfflineInventory(), context, "local").execute(
@@ -496,7 +496,7 @@ async def test_failed_optional_swarm_discovery_does_not_block_container_diagnost
 
         async def stacks(self, host: str, kind: str) -> tuple[StackSummary, ...]:
             """Report a bounded manager read failure."""
-            raise DockSightError("runtime_timeout", "Docker operation timed out", 504)
+            raise DockSightError("runtime_timeout", "Docker operation timed out", ErrorKind.TIMEOUT)
 
     model = ScriptedModel(
         [

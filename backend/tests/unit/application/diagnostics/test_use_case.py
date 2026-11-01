@@ -10,7 +10,7 @@ from docksight.application.diagnostics.use_case import Diagnostics
 from docksight.application.ports.models import ModelMessage, ModelReply, ToolCall
 from docksight.application.redaction import Redactor
 from docksight.application.views.schemas import GroupTarget
-from docksight.domain.errors import DockSightError
+from docksight.domain.errors import DockSightError, ErrorKind
 from docksight.domain.runtime import ContainerSnapshot, LogBatch, StackSummary
 from tests.fakes import DiscoveryRuntime, FakeRuntime, ScriptedModel
 
@@ -194,7 +194,7 @@ async def test_selected_container_retains_its_status_when_prefetched_logs_are_un
 
         async def logs(self, host: str, container_id: str, lines: int, max_bytes: int) -> LogBatch:
             """Fail only the log read after the runtime snapshot has been recorded."""
-            raise DockSightError("logs_unavailable", "Container logs are unavailable", 502)
+            raise DockSightError("logs_unavailable", "Container logs are unavailable", ErrorKind.DEPENDENCY)
 
     model = ScriptedModel([ModelReply("Ready"), ModelReply(proposal())])
     events = [

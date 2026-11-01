@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from docksight.adapters.outbound.models.common import parse_object, provider_error
 from docksight.application.ports.models import ModelMessage, ModelReply, ToolCall, ToolSpec
 from docksight.domain.diagnostics import JsonObject
-from docksight.domain.errors import DockSightError
+from docksight.domain.errors import DockSightError, ErrorKind
 
 
 class _Function(BaseModel):
@@ -72,9 +72,11 @@ def _reply(data: object, max_tokens: int, context_length: int) -> ModelReply:
             and validated.prompt_eval_count + validated.eval_count >= context_length
         ):
             raise DockSightError(
-                "model_context_limit", "Model context window is full; reduce input or increase its size", 502
+                "model_context_limit",
+                "Model context window is full; reduce input or increase its size",
+                ErrorKind.DEPENDENCY,
             )
-        raise DockSightError("model_truncated", "Model output exceeded its token limit", 502)
+        raise DockSightError("model_truncated", "Model output exceeded its token limit", ErrorKind.DEPENDENCY)
     calls = tuple(
         ToolCall(raw.id or f"call_{uuid4().hex}", raw.function.name, parse_object(raw.function.arguments))
         for raw in validated.message.tool_calls
@@ -140,8 +142,12 @@ class OllamaModel:
                 raise provider_error(response.status_code)
             return _reply(response.json(), self.max_tokens, self.context_length)
         except httpx.TimeoutException as exc:
-            raise DockSightError("provider_timeout", "Model provider timed out", 504) from exc
+            raise DockSightError("provider_timeout", "Model provider timed out", ErrorKind.TIMEOUT) from exc
         except httpx.HTTPError as exc:
-            raise DockSightError("provider_unavailable", "Model provider is unavailable", 503) from exc
+            raise DockSightError(
+                "provider_unavailable", "Model provider is unavailable", ErrorKind.UNAVAILABLE
+            ) from exc
         except (ValueError, KeyError, TypeError) as exc:
-            raise DockSightError("invalid_model_response", "Model provider returned an invalid response", 502) from exc
+            raise DockSightError(
+                "invalid_model_response", "Model provider returned an invalid response", ErrorKind.DEPENDENCY
+            ) from exc

@@ -11,7 +11,7 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 from docksight.application.ports.runtime import RuntimeReadPort
 from docksight.application.ports.status import CheckCode, CheckState, ModelStatusPort, ProbeResult
-from docksight.domain.errors import DockSightError
+from docksight.domain.errors import DockSightError, ErrorKind
 
 MESSAGES: Final[dict[CheckCode, str]] = {
     "ok": "Availability check succeeded.",
@@ -131,7 +131,7 @@ class SystemStatus:
     async def check(self, host: str | None, request_id: str | None = None) -> SystemStatusView:
         """Reject unknown hosts before external work and collect bounded checks concurrently."""
         if host is not None and host not in {item.id for item in self.runtime.hosts()}:
-            raise DockSightError("host_not_found", "Configured host not found", 404)
+            raise DockSightError("host_not_found", "Configured host not found", ErrorKind.NOT_FOUND)
         docker, model = await asyncio.gather(self._docker(host, request_id), self._model(host, request_id))
         return SystemStatusView(
             host=host,

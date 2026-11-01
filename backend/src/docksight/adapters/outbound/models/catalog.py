@@ -4,7 +4,7 @@ from typing import Final
 import httpx
 from pydantic import BaseModel, Field, ValidationError
 
-from docksight.domain.errors import DockSightError
+from docksight.domain.errors import DockSightError, ErrorKind
 
 MAX_BYTES: Final = 262144
 MAX_MODELS: Final = 1900
@@ -50,11 +50,15 @@ class ModelCatalog:
         try:
             return await self._fetch()
         except httpx.TimeoutException as error:
-            raise DockSightError("timeout", "Model catalog timed out", 502) from error
+            raise DockSightError("timeout", "Model catalog timed out", ErrorKind.DEPENDENCY) from error
         except httpx.HTTPError as error:
-            raise DockSightError("connection_failed", "Model catalog could not be reached", 502) from error
+            raise DockSightError(
+                "connection_failed", "Model catalog could not be reached", ErrorKind.DEPENDENCY
+            ) from error
         except (ValidationError, ValueError) as error:
-            raise DockSightError("invalid_response", "Model catalog metadata is invalid", 502) from error
+            raise DockSightError(
+                "invalid_response", "Model catalog metadata is invalid", ErrorKind.DEPENDENCY
+            ) from error
 
     async def _fetch(self) -> tuple[str, ...]:
         """Handle native endpoint formats and retain all pages within explicit global bounds."""
@@ -75,7 +79,7 @@ class ModelCatalog:
             cursor = _next_cursor(page, cursors)
             cursors.add(cursor)
             params = _parameters(self.provider, cursor)
-        raise DockSightError("partial_catalog", "Model catalog exceeded pagination limits", 502)
+        raise DockSightError("partial_catalog", "Model catalog exceeded pagination limits", ErrorKind.DEPENDENCY)
 
     async def _read(self, path: str, params: dict[str, str]) -> bytes:
         """Bound decoded response memory and map status codes to safe public reasons."""
@@ -88,12 +92,14 @@ class ModelCatalog:
                     429: "rate_limited",
                 }
                 raise DockSightError(
-                    codes.get(response.status_code, "upstream_error"), "Model catalog unavailable", 502
+                    codes.get(response.status_code, "upstream_error"), "Model catalog unavailable", ErrorKind.DEPENDENCY
                 )
             content = bytearray()
             async for chunk in response.aiter_bytes():
                 if len(content) + len(chunk) > MAX_BYTES:
-                    raise DockSightError("invalid_response", "Model catalog exceeded metadata limits", 502)
+                    raise DockSightError(
+                        "invalid_response", "Model catalog exceeded metadata limits", ErrorKind.DEPENDENCY
+                    )
                 content.extend(chunk)
         # Parse strictly here as JSON libraries otherwise accept non-finite numeric metadata.
         json.loads(content)
@@ -111,7 +117,7 @@ def _next_cursor(page: _Page, cursors: set[str]) -> str:
     """Reject malformed or repeated pagination cursors instead of truncating results."""
     cursor = _cursor(page)
     if cursor is None or cursor in cursors:
-        raise DockSightError("partial_catalog", "Model catalog pagination is incomplete", 502)
+        raise DockSightError("partial_catalog", "Model catalog pagination is incomplete", ErrorKind.DEPENDENCY)
     return cursor
 
 

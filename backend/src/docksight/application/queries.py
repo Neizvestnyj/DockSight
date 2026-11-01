@@ -1,7 +1,7 @@
 from typing import Literal
 
 from docksight.application.ports.runtime import RuntimeReadPort
-from docksight.domain.errors import DockSightError
+from docksight.domain.errors import DockSightError, ErrorKind
 from docksight.domain.runtime import (
     ContainerSnapshot,
     Host,
@@ -27,7 +27,7 @@ class RuntimeQueries:
     def check_host(self, host: str) -> None:
         """Reject host identifiers outside the operator-configured inventory."""
         if host not in {item.id for item in self.runtime.hosts()}:
-            raise DockSightError("host_not_found", "Configured host not found", 404)
+            raise DockSightError("host_not_found", "Configured host not found", ErrorKind.NOT_FOUND)
 
     async def containers(self, host: str) -> tuple[ContainerSnapshot, ...]:
         """Read bounded sanitized container snapshots for one host."""
@@ -45,7 +45,9 @@ class RuntimeQueries:
         """Read sanitized container logs within explicit line and byte limits."""
         snapshot = await self.inspect(host, container_id)
         if not 1 <= lines <= self.log_lines:
-            raise DockSightError("invalid_log_limit", "Requested log limit exceeds configured bounds", 422)
+            raise DockSightError(
+                "invalid_log_limit", "Requested log limit exceeds configured bounds", ErrorKind.VALIDATION
+            )
 
         return await self.runtime.logs(host, snapshot.id, lines, self.log_bytes)
 

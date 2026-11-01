@@ -3,7 +3,7 @@ import asyncio
 import pytest
 
 from docksight.application.model_catalog import CatalogCache
-from docksight.domain.errors import DockSightError
+from docksight.domain.errors import DockSightError, ErrorKind
 
 
 async def test_catalog_coalesces_and_reuses_fresh_rows() -> None:
@@ -36,7 +36,7 @@ async def test_stale_refresh_failure_retains_rows_and_cools_down() -> None:
         nonlocal calls
         calls += 1
         if calls > 1:
-            raise DockSightError("metadata_forbidden", "Private upstream text", 502)
+            raise DockSightError("metadata_forbidden", "Private upstream text", ErrorKind.DEPENDENCY)
         return ("listed",)
 
     cache = CatalogCache("openai", ("alias",), fetch, clock=lambda: clock[0])

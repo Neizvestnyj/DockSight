@@ -11,7 +11,7 @@ from docksight.application.ports.models import ModelReply, ToolCall
 from docksight.application.redaction import Redactor
 from docksight.application.views.assembler import ViewAssembler
 from docksight.application.views.schemas import DiagnosisProposal, HostInspection, WidgetProposal
-from docksight.domain.errors import DockSightError
+from docksight.domain.errors import DockSightError, ErrorKind
 from docksight.domain.runtime import ContainerSnapshot, LogBatch, LogEntry, StackSummary
 from tests.fakes import FakeRuntime, ScriptedModel
 
@@ -49,14 +49,14 @@ class HostRuntime(FakeRuntime):
     async def stacks(self, host: str, kind: str) -> tuple[StackSummary, ...]:
         """Allow optional manager metadata failure without losing local container observations."""
         if self.swarm_error:
-            raise DockSightError("runtime_unavailable", "Swarm discovery failed", 503)
+            raise DockSightError("runtime_unavailable", "Swarm discovery failed", ErrorKind.UNAVAILABLE)
         return ()
 
     async def logs(self, host: str, container_id: str, lines: int, max_bytes: int) -> LogBatch:
         """Record finite reads and preserve failures as failures rather than empty successful logs."""
         self.reads.append(container_id)
         if container_id in self.failures:
-            raise DockSightError("runtime_unavailable", "Docker log read failed", 503)
+            raise DockSightError("runtime_unavailable", "Docker log read failed", ErrorKind.UNAVAILABLE)
         return self.log_batch
 
 

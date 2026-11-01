@@ -14,7 +14,7 @@ from docksight.application.views.schemas import (
     WidgetProposal,
 )
 from docksight.domain.actions import Operation, allowed_operations
-from docksight.domain.errors import DockSightError
+from docksight.domain.errors import DockSightError, ErrorKind
 from docksight.domain.runtime import ContainerSnapshot
 
 type PrepareAction = Callable[[str, str, str, Operation], Awaitable[ActionView]]
@@ -46,7 +46,7 @@ class ViewAssembler:
             )
         )
         if any(ref not in context.evidence for ref in references):
-            raise DockSightError("invalid_evidence", "Diagnosis references unknown evidence", 502)
+            raise DockSightError("invalid_evidence", "Diagnosis references unknown evidence", ErrorKind.DEPENDENCY)
         widgets = [await self._card(card, context, actor) for card in cards]
 
         return DiagnosisResponse(
@@ -85,7 +85,7 @@ class ViewAssembler:
             )
         ref = next((ref for ref in card.evidence_ids if ref in context.logs), None)
         if ref is None:
-            raise DockSightError("invalid_evidence", "Log card requires log evidence", 502)
+            raise DockSightError("invalid_evidence", "Log card requires log evidence", ErrorKind.DEPENDENCY)
         return LogAnomalyCard(
             host=snapshot.host,
             container_id=snapshot.id,
@@ -165,13 +165,13 @@ def _stack_card(refs: list[str], context: EvidenceContext) -> ComposeStackCard:
     """Require stack evidence before constructing a server-owned stack card."""
     ref = next((ref for ref in refs if ref in context.stacks), None)
     if ref is None:
-        raise DockSightError("invalid_evidence", "Stack card requires stack evidence", 502)
+        raise DockSightError("invalid_evidence", "Stack card requires stack evidence", ErrorKind.DEPENDENCY)
     stacks = context.stacks[ref]
     if context.group:
         target = context.group.summary
         stacks = tuple(row for row in stacks if (row.kind, row.name) == (target.kind, target.name))
         if not stacks:
-            raise DockSightError("resource_outside_group", "Card is outside the selected group", 502)
+            raise DockSightError("resource_outside_group", "Card is outside the selected group", ErrorKind.DEPENDENCY)
     return ComposeStackCard(host=context.evidence[ref].host, stacks=list(stacks), evidence_ids=refs)
 
 
@@ -179,8 +179,8 @@ def _container_snapshot(refs: list[str], context: EvidenceContext) -> ContainerS
     """Resolve card references to one exact container and use its latest snapshot."""
     snapshots = [row for ref, row in context.snapshots.items() if ref in refs]
     if not snapshots or len({(row.host, row.id) for row in snapshots}) != 1:
-        raise DockSightError("invalid_evidence", "Card requires evidence for one exact container", 502)
+        raise DockSightError("invalid_evidence", "Card requires evidence for one exact container", ErrorKind.DEPENDENCY)
     snapshot = max(enumerate(snapshots), key=lambda item: (item[1].observed_at, item[0]))[1]
     if context.group and snapshot.id not in context.group.summary.container_ids:
-        raise DockSightError("resource_outside_group", "Card is outside the selected group", 502)
+        raise DockSightError("resource_outside_group", "Card is outside the selected group", ErrorKind.DEPENDENCY)
     return snapshot

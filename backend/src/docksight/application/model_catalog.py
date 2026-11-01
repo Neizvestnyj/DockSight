@@ -6,7 +6,7 @@ from typing import Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
-from docksight.domain.errors import DockSightError
+from docksight.domain.errors import DockSightError, ErrorKind
 
 
 class ModelSelection(BaseModel):
@@ -111,7 +111,9 @@ class CatalogCache:
                 rows = await self.fetch()
             combined = tuple(dict.fromkeys((*self.fallback, *rows)))
             if len(combined) > 2000:
-                raise DockSightError("partial_catalog", "Model catalog exceeds the supported model count", 502)
+                raise DockSightError(
+                    "partial_catalog", "Model catalog exceeds the supported model count", ErrorKind.DEPENDENCY
+                )
             self.rows = combined
             self.updated = self.clock()
             self.code = "ok"
@@ -129,7 +131,9 @@ class CatalogCache:
             return
         view = await self.get()
         if model not in {row.id for row in view.models}:
-            raise DockSightError("model_not_listed", "Select a model from the configured provider catalog", 422)
+            raise DockSightError(
+                "model_not_listed", "Select a model from the configured provider catalog", ErrorKind.VALIDATION
+            )
 
     async def close(self) -> None:
         """Cancel metadata work before the owning HTTP clients close."""

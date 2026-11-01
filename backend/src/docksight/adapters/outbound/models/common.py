@@ -3,7 +3,7 @@ from typing import Final
 from pydantic import TypeAdapter
 
 from docksight.domain.diagnostics import JsonObject, JsonValue
-from docksight.domain.errors import DockSightError
+from docksight.domain.errors import DockSightError, ErrorKind
 
 _OBJECT: Final = TypeAdapter(JsonObject)
 _UNSUPPORTED: Final = {
@@ -27,24 +27,24 @@ def parse_object(value: object) -> JsonObject:
 def provider_error(status: int) -> DockSightError:
     """Map an HTTP provider status to a safe public domain error."""
     if status == 429:
-        return DockSightError("provider_rate_limit", "Model provider rate limit reached", 429)
+        return DockSightError("provider_rate_limit", "Model provider rate limit reached", ErrorKind.RATE_LIMIT)
     if status == 404:
         return DockSightError(
             "model_unavailable",
             "The configured model was not found or is unavailable to this API key. "
             "Check the model name and your access.",
-            422,
+            ErrorKind.VALIDATION,
         )
     if status in {400, 422}:
         return DockSightError(
             "model_not_supported",
             "Model request rejected; verify model capabilities and configuration",
-            422,
+            ErrorKind.VALIDATION,
         )
     if status in {401, 403}:
-        return DockSightError("provider_authentication", "Model provider authentication failed", 502)
+        return DockSightError("provider_authentication", "Model provider authentication failed", ErrorKind.DEPENDENCY)
 
-    return DockSightError("provider_unavailable", "Model provider is unavailable", 503)
+    return DockSightError("provider_unavailable", "Model provider is unavailable", ErrorKind.UNAVAILABLE)
 
 
 def strict_schema(schema: JsonObject) -> JsonObject:

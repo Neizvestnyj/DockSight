@@ -14,7 +14,7 @@ from docksight.application.model_catalog import CatalogCache, ModelSelection, Pr
 from docksight.application.model_choices import ModelChoices
 from docksight.application.ports.models import ModelPort
 from docksight.application.ports.status import ModelStatusPort
-from docksight.domain.errors import DockSightError
+from docksight.domain.errors import DockSightError, ErrorKind
 
 if TYPE_CHECKING:
     from docksight.bootstrap import Settings
@@ -68,7 +68,9 @@ class _Connection:
         """Reuse generation-aligned metadata authentication without exposing connection data."""
         self._ensure()
         if not isinstance(self.probe, ModelAvailability):
-            raise DockSightError("unsupported", "Model catalog is not configured for this adapter", 502)
+            raise DockSightError(
+                "unsupported", "Model catalog is not configured for this adapter", ErrorKind.DEPENDENCY
+            )
         return await ModelCatalog(self.probe.client, self.settings.provider).fetch()
 
     def select(self, model: str) -> tuple[ModelPort, ModelStatusPort | None]:
@@ -79,9 +81,11 @@ class _Connection:
             selected = copy(selected)
             selected.model = model
         elif model != self.settings.model:
-            raise DockSightError("model_not_listed", "Injected adapter only supports its configured model", 422)
+            raise DockSightError(
+                "model_not_listed", "Injected adapter only supports its configured model", ErrorKind.VALIDATION
+            )
         if selected is None:
-            raise DockSightError("provider_not_configured", "Provider is not configured", 422)
+            raise DockSightError("provider_not_configured", "Provider is not configured", ErrorKind.VALIDATION)
         probe = self.probe
         if isinstance(probe, ModelAvailability):
             probe = ModelAvailability(probe.client, self.settings.provider, model)

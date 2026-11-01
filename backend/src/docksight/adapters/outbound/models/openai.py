@@ -7,7 +7,7 @@ from openai.types.responses import Response, ResponseInputParam, ResponseTextCon
 from docksight.adapters.outbound.models.common import parse_object, provider_error, strict_schema
 from docksight.application.ports.models import ModelMessage, ModelReply, ToolCall, ToolSpec
 from docksight.domain.diagnostics import JsonObject
-from docksight.domain.errors import DockSightError
+from docksight.domain.errors import DockSightError, ErrorKind
 
 
 def _messages(messages: Sequence[ModelMessage]) -> list[JsonObject]:
@@ -26,13 +26,13 @@ def _messages(messages: Sequence[ModelMessage]) -> list[JsonObject]:
 def _reply(response: Response) -> ModelReply:
     """Reject incomplete or refused output and preserve replayable native items."""
     if response.status != "completed":
-        raise DockSightError("model_incomplete", "Model response did not complete", 502)
+        raise DockSightError("model_incomplete", "Model response did not complete", ErrorKind.DEPENDENCY)
     calls: list[ToolCall] = []
     for item in response.output:
         if item.type == "function_call":
             calls.append(ToolCall(item.call_id, item.name, parse_object(item.arguments)))
         if item.type == "message" and any(block.type == "refusal" for block in item.content):
-            raise DockSightError("model_refusal", "Model declined this request", 422)
+            raise DockSightError("model_refusal", "Model declined this request", ErrorKind.VALIDATION)
     return ModelReply(
         response.output_text,
         tuple(calls),
@@ -91,8 +91,12 @@ class OpenAIModel:
         except APIStatusError as exc:
             raise provider_error(exc.status_code) from exc
         except APITimeoutError as exc:
-            raise DockSightError("provider_timeout", "Model provider timed out", 504) from exc
+            raise DockSightError("provider_timeout", "Model provider timed out", ErrorKind.TIMEOUT) from exc
         except OpenAIError as exc:
-            raise DockSightError("provider_unavailable", "Model provider is unavailable", 503) from exc
+            raise DockSightError(
+                "provider_unavailable", "Model provider is unavailable", ErrorKind.UNAVAILABLE
+            ) from exc
         except (ValueError, KeyError, TypeError) as exc:
-            raise DockSightError("invalid_model_response", "Model provider returned an invalid response", 502) from exc
+            raise DockSightError(
+                "invalid_model_response", "Model provider returned an invalid response", ErrorKind.DEPENDENCY
+            ) from exc

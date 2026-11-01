@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from typing import Any, cast
 
 from docksight.application.redaction import Redactor, secret_name
-from docksight.domain.errors import DockSightError
+from docksight.domain.errors import DockSightError, ErrorKind
 from docksight.domain.runtime import (
     ContainerHealth,
     ContainerSnapshot,
@@ -38,7 +38,7 @@ def map_container(
     raw_environment: list[str] = config.get("Env") or []
     status = state.get("Status")
     if status not in {"created", "running", "paused", "restarting", "removing", "exited", "dead"}:
-        raise DockSightError("invalid_runtime_data", "Unknown container state", 502)
+        raise DockSightError("invalid_runtime_data", "Unknown container state", ErrorKind.DEPENDENCY)
     clean = redactor.with_environment(raw_environment)
     environment = tuple(
         (key, clean.text(value))
@@ -69,12 +69,12 @@ def _health(raw: object) -> ContainerHealth | None:
     if raw is None:
         return None
     if not isinstance(raw, dict):
-        raise DockSightError("invalid_runtime_data", "Invalid container health data", 502)
+        raise DockSightError("invalid_runtime_data", "Invalid container health data", ErrorKind.DEPENDENCY)
     status = cast(dict[str, object], raw).get("Status")
     if status == "none":
         return None
     if status not in ("starting", "healthy", "unhealthy"):
-        raise DockSightError("invalid_runtime_data", "Unknown container health status", 502)
+        raise DockSightError("invalid_runtime_data", "Unknown container health status", ErrorKind.DEPENDENCY)
     return status
 
 

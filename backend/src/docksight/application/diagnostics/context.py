@@ -5,7 +5,7 @@ from typing import Final, Literal
 
 from docksight.application.views.schemas import GroupInspection, HostInspection, TargetSelection
 from docksight.domain.diagnostics import EvidenceRef, JsonObject
-from docksight.domain.errors import DockSightError
+from docksight.domain.errors import DockSightError, ErrorKind
 from docksight.domain.runtime import ContainerSnapshot, LogBatch, StackSummary
 
 EVIDENCE_BYTES: Final = 65536
@@ -42,7 +42,9 @@ class EvidenceContext:
         """Assign an evidence ID and retain its typed data within turn limits."""
         size = len(json.dumps(data, ensure_ascii=False).encode())
         if len(self.evidence) >= 64 or size > self.remaining_bytes:
-            raise DockSightError("evidence_limit", "Evidence budget reached; finalize with collected evidence", 409)
+            raise DockSightError(
+                "evidence_limit", "Evidence budget reached; finalize with collected evidence", ErrorKind.CONFLICT
+            )
         evidence_id = f"e{len(self.evidence) + 1}"
         item = EvidenceRef(
             evidence_id,

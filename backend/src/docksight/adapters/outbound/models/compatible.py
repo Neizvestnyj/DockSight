@@ -14,7 +14,7 @@ from openai.types.shared_params import ResponseFormatJSONSchema, ResponseFormatT
 from docksight.adapters.outbound.models.common import parse_object, provider_error, strict_schema
 from docksight.application.ports.models import ModelMessage, ModelReply, ToolCall, ToolSpec
 from docksight.domain.diagnostics import JsonObject
-from docksight.domain.errors import DockSightError
+from docksight.domain.errors import DockSightError, ErrorKind
 
 
 def _messages(messages: Sequence[ModelMessage], require_tool_signatures: bool) -> list[dict[str, Any]]:
@@ -52,9 +52,9 @@ def _reply(response: ChatCompletion, tool_output: bool) -> ModelReply:
     """Normalize native output or the forced final-diagnosis tool response."""
     item = response.choices[0]
     if item.finish_reason in {"length", "content_filter"}:
-        raise DockSightError("model_incomplete", "Model response did not complete", 502)
+        raise DockSightError("model_incomplete", "Model response did not complete", ErrorKind.DEPENDENCY)
     if item.message.refusal:
-        raise DockSightError("model_refusal", "Model declined this request", 422)
+        raise DockSightError("model_refusal", "Model declined this request", ErrorKind.VALIDATION)
     calls = tuple(
         ToolCall(call.id, call.function.name, parse_object(call.function.arguments))
         for call in item.message.tool_calls or []
@@ -63,7 +63,7 @@ def _reply(response: ChatCompletion, tool_output: bool) -> ModelReply:
     content = item.message.content or ""
     if tool_output:
         if len(calls) != 1 or calls[0].name != "submit_diagnosis":
-            raise DockSightError("invalid_model_response", "Model did not submit a diagnosis", 502)
+            raise DockSightError("invalid_model_response", "Model did not submit a diagnosis", ErrorKind.DEPENDENCY)
         content = json.dumps(calls[0].arguments)
         calls = ()
     return ModelReply(
@@ -158,8 +158,12 @@ class CompatibleModel:
         except APIStatusError as exc:
             raise provider_error(exc.status_code) from exc
         except APITimeoutError as exc:
-            raise DockSightError("provider_timeout", "Model provider timed out", 504) from exc
+            raise DockSightError("provider_timeout", "Model provider timed out", ErrorKind.TIMEOUT) from exc
         except OpenAIError as exc:
-            raise DockSightError("provider_unavailable", "Model provider is unavailable", 503) from exc
+            raise DockSightError(
+                "provider_unavailable", "Model provider is unavailable", ErrorKind.UNAVAILABLE
+            ) from exc
         except (ValueError, KeyError, TypeError, IndexError) as exc:
-            raise DockSightError("invalid_model_response", "Model provider returned an invalid response", 502) from exc
+            raise DockSightError(
+                "invalid_model_response", "Model provider returned an invalid response", ErrorKind.DEPENDENCY
+            ) from exc

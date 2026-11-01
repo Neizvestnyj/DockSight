@@ -13,7 +13,7 @@ from docker.utils import version_lt
 from paramiko import ProxyCommand, SSHException
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from docksight.domain.errors import DockSightError
+from docksight.domain.errors import DockSightError, ErrorKind
 
 
 class _BoundedSSHAdapter(SSHHTTPAdapter):
@@ -141,7 +141,7 @@ def load_hosts(path: str | None) -> tuple[HostConfig, ...]:
         if len(ids) != len(set(ids)):
             raise ValueError("Duplicate host IDs")
     except (OSError, ValueError, ValidationError, yaml.YAMLError) as exc:
-        raise DockSightError("invalid_hosts", "Invalid Docker host configuration", 500) from exc
+        raise DockSightError("invalid_hosts", "Invalid Docker host configuration", ErrorKind.CONFIGURATION) from exc
 
     return tuple(config.hosts)
 
@@ -152,7 +152,7 @@ def connect(host: HostConfig, timeout: float) -> DockerClient:
         client = _ConfiguredClient.from_env(timeout=max(1, int(timeout)))
         if client.api.base_url.startswith("http://"):
             client.close()
-            raise DockSightError("insecure_transport", "Docker TCP connections require mTLS", 500)
+            raise DockSightError("insecure_transport", "Docker TCP connections require mTLS", ErrorKind.CONFIGURATION)
 
         return client
     if host.url.startswith("ssh://"):

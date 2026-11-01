@@ -7,7 +7,7 @@ from pydantic import ValidationError
 
 from docksight.application.ports.runtime import RuntimeReadPort
 from docksight.application.views.schemas import ContainerTarget, GroupSelection, GroupTarget, TargetSelection
-from docksight.domain.errors import DockSightError
+from docksight.domain.errors import DockSightError, ErrorKind
 from docksight.domain.runtime import ContainerSnapshot
 
 
@@ -48,7 +48,9 @@ async def resolve_target(
     rows = await runtime.containers(host)
     if container_id is not None:
         if not any(row.id == container_id for row in rows):
-            raise DockSightError("container_not_found", "Selected container is no longer available on this host", 404)
+            raise DockSightError(
+                "container_not_found", "Selected container is no longer available on this host", ErrorKind.NOT_FOUND
+            )
         return TargetResolution(None, rows, container_id=container_id)
     container = _container_target(query, rows)
     if container:

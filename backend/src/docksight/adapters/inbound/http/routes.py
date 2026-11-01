@@ -21,7 +21,7 @@ from docksight.application.system_status import SystemStatus, SystemStatusView
 from docksight.application.views.registry import widget_schema
 from docksight.application.views.schemas import ActionView
 from docksight.domain.diagnostics import JsonObject
-from docksight.domain.errors import DockSightError
+from docksight.domain.errors import DockSightError, ErrorKind
 from docksight.domain.runtime import (
     ContainerSnapshot,
     Host,
@@ -69,7 +69,7 @@ def build_router(
         """Expose safe configured providers without fetching their model catalogs."""
         response.headers["Cache-Control"] = "no-store"
         if models is None:
-            raise DockSightError("provider_not_configured", "Model selection is not configured", 503)
+            raise DockSightError("provider_not_configured", "Model selection is not configured", ErrorKind.UNAVAILABLE)
         return models.providers
 
     @router.get("/model-providers/{provider}/models", tags=["Models"])
@@ -81,7 +81,7 @@ def build_router(
         """Return bounded lazy metadata with explicit freshness and failure state."""
         response.headers["Cache-Control"] = "no-store"
         if models is None:
-            raise DockSightError("provider_not_configured", "Model selection is not configured", 503)
+            raise DockSightError("provider_not_configured", "Model selection is not configured", ErrorKind.UNAVAILABLE)
         return await models.catalog(provider, refresh)
 
     @router.get("/hosts", tags=["Runtime"])
@@ -178,7 +178,9 @@ async def _selected_status(
     if provider is None and model is None:
         return status
     if provider is None or model is None or models is None:
-        raise DockSightError("invalid_model_selection", "Provider and model must be selected together", 422)
+        raise DockSightError(
+            "invalid_model_selection", "Provider and model must be selected together", ErrorKind.VALIDATION
+        )
     _, probe = await models.select(ModelSelection(provider=provider, model=model))
     return status.with_model(probe, provider, model)
 
@@ -192,6 +194,6 @@ async def _selected_diagnostics(
     if selection is None:
         return diagnostics
     if models is None:
-        raise DockSightError("provider_not_configured", "Model selection is not configured", 422)
+        raise DockSightError("provider_not_configured", "Model selection is not configured", ErrorKind.VALIDATION)
     model, _ = await models.select(selection)
     return diagnostics.with_model(model, (selection.provider, selection.model))
