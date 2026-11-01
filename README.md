@@ -1,9 +1,9 @@
 # DockSight
 
+[![Backend CI][backend-ci-badge]][backend-ci]
+[![Frontend CI][frontend-ci-badge]][frontend-ci]
+[![License: Apache-2.0][license-badge]](LICENSE)
 ![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
-![React](https://img.shields.io/badge/React-20232A?logo=react&logoColor=61DAFB)
-![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
 
 **Docker troubleshooting with AI explanations and runtime evidence.**
@@ -19,7 +19,6 @@ state and bounded logs, asks an LLM to explain the observations, and offers rest
 - **Ask follow-up questions.** Investigate a problem in a session scoped to one Docker host.
 - **Choose your model.** Use Ollama locally, OpenAI, Anthropic, Gemini, or a compatible API.
 - **Review before acting.** Models have read-only tools; restart and stop require separate confirmation.
-- **Work in English or Russian.** Switch the interface language without losing the active investigation.
 
 ## Why use it instead of pasting logs into a chat?
 
@@ -132,3 +131,9 @@ check, test, and build targets. Run `make help` to list them.
 
 DockSight is licensed under [Apache-2.0](LICENSE). Frontend builds include
 [third-party notices](frontend/public/licenses/) for IBM Plex, React/ReactDOM/Scheduler, Zod, and Lucide/Feather.
+
+[backend-ci-badge]: https://github.com/Neizvestnyj/DockSight/actions/workflows/backend.yml/badge.svg?branch=master
+[backend-ci]: https://github.com/Neizvestnyj/DockSight/actions/workflows/backend.yml
+[frontend-ci-badge]: https://github.com/Neizvestnyj/DockSight/actions/workflows/frontend.yml/badge.svg?branch=master
+[frontend-ci]: https://github.com/Neizvestnyj/DockSight/actions/workflows/frontend.yml
+[license-badge]: https://img.shields.io/badge/license-Apache--2.0-blue

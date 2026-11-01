@@ -63,10 +63,10 @@ Docker and live-model tests remain separate opt-in commands described below.
   package metadata and lockfile aligned. Documentation alone needs no bump.
   Follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/): group notable outcomes under applicable categories and
   omit empty ones. Use linked `[version] - YYYY-MM-DD` headings for merged versions, dated by the merge into `master`
-  in Europe/Moscow unless a separate release date is recorded. Several commits can contribute to one entry.
+  unless a separate release date is recorded. Several commits can contribute to one entry.
 
 Keep Python and Markdown prose within 120 characters per line. Use UTF-8 without BOM and LF line endings.
-Write documentation, comments, docstrings, and runtime messages in English; product copy belongs in the English/Russian
+Write documentation, comments, docstrings, and runtime messages in English; product copy belongs in the localization
 catalog. Production functions and classes, including private helpers, need brief docstrings. Test helpers and fixtures
 need docstrings; descriptive `test_*` names need one only for additional context.
 
@@ -192,15 +192,14 @@ Select a smaller matrix with repeated `--e2e-case` options: `compose-healthy`, `
 `unknown-exit`, `clean-shutdown`, `unhealthy`, or `running-history`.
 `compose-healthy` asks about a healthy group with no precollected individual snapshots or problem logs; its group report
 must remain usable without unsupported container cards.
-Both English and Russian run by default; repeat `--e2e-language en`
-or `--e2e-language ru` to restrict the matrix. Assertions check runtime facts, exact resource identities, card coverage,
-observed log content, and evidence references rather than exact model prose. A script-based language check covers each
+All supported question languages run by default; use `--e2e-language en` to restrict the matrix to one language.
+Assertions check runtime facts, exact resource identities, card coverage, observed log content, and evidence references
+rather than exact model prose. A script-based language check covers each
 summary, cause, unresolved detail, and action recommendation independently, excluding quoted observed log messages,
 inline/fenced code, resource identifiers, and common fixture terms such as PostgreSQL and Telegram.
-This detects English/Russian mismatches;
-it does not grade translation quality or model reasoning.
+This detects response-language mismatches; it does not grade translation quality or model reasoning.
 
-Run the causal regression package in both languages:
+Run the causal regression package with the default language matrix:
 
 ```sh
 uv run --project backend pytest backend/tests/integration/live_e2e --no-cov --live-e2e --e2e-model qwen3.5:9b --e2e-suite causal -vv -s
@@ -209,17 +208,17 @@ uv run --project backend pytest backend/tests/integration/live_e2e --no-cov --li
 Packages and repeated `--e2e-case` selections combine without duplicate runs. The `causal` package includes these
 single-container cases and the noisy/shutdown follow-ups below:
 
-| Case | Observed fixture facts | Narrative boundary |
-|------|------------------------|--------------------|
-| `clean-shutdown` | Real SIGTERM, exit 0, orderly stop after old request errors | Stop initiator and reason remain unknown |
-| `unknown-exit` | Exit 137, `OOMKilled=false` | Neither OOM nor SIGKILL is established |
-| `oom` | Memory limit enforced, exit 137, `OOMKilled=true` | Recognize the observed OOM kill |
-| `unhealthy` | Running process, Docker health `unhealthy`, HTTP 503 | Failed probes do not mean process termination |
-| `running-history` | Running process after synthetic SQL errors | Request errors do not establish a crash or health |
+| Case              | Observed fixture facts                                      | Narrative boundary                                |
+|-------------------|-------------------------------------------------------------|---------------------------------------------------|
+| `clean-shutdown`  | Real SIGTERM, exit 0, orderly stop after old request errors | Stop initiator and reason remain unknown          |
+| `unknown-exit`    | Exit 137, `OOMKilled=false`                                 | Neither OOM nor SIGKILL is established            |
+| `oom`             | Memory limit enforced, exit 137, `OOMKilled=true`           | Recognize the observed OOM kill                   |
+| `unhealthy`       | Running process, Docker health `unhealthy`, HTTP 503        | Failed probes do not mean process termination     |
+| `running-history` | Running process after synthetic SQL errors                  | Request errors do not establish a crash or health |
 
 These single-container cases and shutdown follow-ups use production log budgets. The noisy follow-up keeps smaller
 budgets to exercise truncation and final-line retention. Checks inspect summary, immediate/deeper cause, unknowns, and
-action reasons, using authored EN/RU fixtures with negation, hypotheses, and quoted collected logs. They are bounded
+action reasons, using narrative fixtures with negation, hypotheses, and quoted collected logs. They are bounded
 clause heuristics for one target, not a universal factuality judge; unfamiliar phrasing and causal claims still need
 manual review of saved responses. Runtime schema validation does not apply this test-only heuristic.
 Temporal ordering alone does not assert a cause: "exited after errors" is allowed when the stop reason remains unknown;
@@ -228,7 +227,7 @@ new phrasing so unrelated negation or omitted synonyms do not mask a genuine con
 The unhealthy fixture also rejects authored database/dependency outage claims and guaranteed restart cures;
 its observed 503 response establishes neither. Exact collected resource identifiers cannot hide those assertions.
 Follow-ups also reject categorical "unrelated"/"not related" claims: different project names and failure modes do not
-establish independence. Qualified hypotheses remain allowed; this check covers those authored EN/RU phrase families.
+establish independence. Qualified hypotheses remain allowed; this check covers only the fixture phrase families.
 Live runs evaluate the selected model as well as the integration. A valid schema and factual cards do not ensure that
 the explanation preserves an unresolved stop reason, especially in follow-ups across projects. Retain failed response
 artifacts and review them when choosing a model; do not weaken causal expectations to obtain a passing run.
@@ -247,7 +246,7 @@ actual SIGTERM/exit-0 dependency. Both exercise explicit container and mixed con
 The shutdown case also follows up on its single-member Compose group. They require fresh scoped cards and actual final
 log lines; causal checks reject old request errors being presented as the reason for stopping.
 
-`--e2e-case compose-unscoped` asks "What happened?" in English/Russian with 21 containers across two observed projects
+`--e2e-case compose-unscoped` asks a general incident question with 21 containers across two observed projects
 and an ungrouped failure: 16 running processes, four failed exits, and one normal exit. It uses production log limits.
 It requires a host overview without a project chooser, then checks counts, exact member identities, process and health
 state, bounded log coverage, factual cards, and their references against Docker. Browser runs also require the overview.

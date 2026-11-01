@@ -4,7 +4,7 @@ This file records notable changes to DockSight. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-Dates below record each version's merge into `master` in Europe/Moscow. Version links show the corresponding changes.
+Dates below record each version's merge into `master`. Version links show the corresponding changes.
 
 ## [0.7.0]
 
@@ -27,16 +27,16 @@ Dates below record each version's merge into `master` in Europe/Moscow. Version 
 - Docker healthcheck status appears separately from process state in container facts, diagnostic cards, inventory,
   and Compose members. Running unhealthy containers receive bounded diagnostic log collection even without restarts;
   missing health observations remain unknown, and probe commands and output are not exposed.
-  Russian health badges use compact labels with a healthcheck hint.
-- A selectable local Docker/model causal regression package covers clean shutdowns, OOM, unexplained exits, unhealthy
-  probes, and dependency follow-ups. Authored English/Russian narrative fixtures check known contradictions across
-  explanations and recommendations, including unsupported project-independence claims; unfamiliar claims need review.
+- Local Docker/model regression scenarios cover clean shutdowns, OOM, unexplained exits, failing healthchecks, and
+  dependency follow-ups. Checks flag selected contradictions in explanations and recommendations, including unsupported
+  claims that failures are unrelated; other claims still need review.
 
 ### Changed
 
-- Public setup documentation explains automatic host scope, evidence limits, and model uncertainty. English Demo
-  screenshots reflect the current interface; the diagnostic sequence documents evidence reuse and final context.
-  Local connection guidance covers working-directory configuration, occupied ports, and isolated Docker examples.
+- Setup guides explain host scope, evidence limits, model uncertainty, provider settings, and local connection errors.
+  English Demo screenshots show the current interface; diagnostic diagrams describe evidence reuse and final context.
+  The README focuses on diagnosis and confirmed actions, with CI and license badges. Release links point to merged
+  commits, and contributor rules no longer embed a stale version.
 - Selection menus share custom styling, keyboard navigation, typeahead, and explicit selected or disabled states.
   Optional diagnostic-scope guidance appears beside a help button, available by hover, focus, or tap.
 - Container card headers show process state only, with healthchecks in separate facts. Stopped containers identify the
@@ -72,16 +72,16 @@ Dates below record each version's merge into `master` in Europe/Moscow. Version 
   directly instead of failing with a missing-answer lookup.
 - Provider/model selection initializes on Python 3.12 and 3.13 by deferring type-only settings annotations.
   Backend CI uses Node.js 24 actions and a fixed Ubuntu image; a compatibility failure leaves the other version running.
-- Language selection sizes to its localized options so the Russian system-language label remains fully visible.
+- Language selection fits its option labels without clipping.
 - Dialogs close on an outside click while preserving drafts and prepared actions. Clicks inside and text selection
   remain within the dialog without dismissing it.
-- Model generation distinguishes missing or inaccessible models from unsupported requests, with English/Russian guidance
+- Model generation distinguishes missing or inaccessible models from unsupported requests, with guidance
   to check the model name and API-key access. Provider response bodies remain private.
 - Bounded Docker log reads and diagnostic byte budgets retain the latest output instead of the start of a tail window.
   Log viewers show the retained UTC date range and order; oversized scans fail explicitly rather than hiding final events.
 - Final and repair schemas restrict evidence references to the current turn instead of accepting arbitrary strings.
   A noisy SQL-log follow-up covers exact-container evidence, card content, and response language.
-- Explicit English/Russian container references preserve container scope when a Compose project has the same name,
+- Explicit container references preserve container scope when a Compose project has the same name,
   allowing dependency follow-ups to continue the existing conversation with fresh observations. Server tool scope keeps
   earlier group context from adding unrelated container cards to the new answer. Exact-target status and bounded logs are
   collected before model exploration; missing model cards are filled from those facts, and unavailable logs retain status.
@@ -115,7 +115,7 @@ Dates below record each version's merge into `master` in Europe/Moscow. Version 
 ### Added
 
 - Opt-in end-to-end diagnostics using isolated Docker Compose workloads and configurable local Ollama models, including
-  real browser flows, English/Russian questions, exact-resource evidence checks, and retained diagnostic artifacts.
+  real browser flows, exact-resource evidence checks, and retained diagnostic artifacts.
 - Optional root Make commands with English help for setup, development servers, checks, tests, and frontend builds.
 
 ### Changed
@@ -160,8 +160,7 @@ Dates below record each version's merge into `master` in Europe/Moscow. Version 
 
 ### Added
 
-- Responsive React workspace with DockSight branding, browser-selected English/Russian localization, and locale switching
-  that preserves active investigations and prepared actions.
+- Responsive React workspace with Docker inventory, evidence-linked investigations, and confirmed actions.
 - Visibly separate demo scenarios for trying investigations and confirmed actions without Docker or a model.
 - Read-only container overview for state, metrics, logs, and allowlisted environment values, with automatic inventory
   refresh that preserves earlier diagnostic observations.

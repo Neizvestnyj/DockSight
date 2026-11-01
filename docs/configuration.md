@@ -8,19 +8,19 @@ Keep credentials in environment variables or external secret files; never put th
 
 Names below omit the `DOCKSIGHT_` prefix. Array values use JSON, for example `DOCKSIGHT_ENV_ALLOWLIST=["APP_ENV"]`.
 
-| Setting | Default | Purpose |
-|---------|---------|---------|
-| `API_TOKEN` | Required unless `API_TOKENS` is set | Bearer token of at least 24 characters; its actor is `operator` |
-| `API_TOKENS` | `{}` | Named operator tokens; see [API tokens](#api-tokens) |
-| `PROVIDER` / `MODEL` | `ollama` / `qwen3.5:9b` | Independent provider and model selection |
-| `MODEL_BASE_URL` / `MODEL_API_KEY` | Provider default / unset | Model endpoint and credentials |
-| `MODEL_STRUCTURED_OUTPUT` | `native` | Compatible and Gemini providers also support `tool` |
-| `OLLAMA_CONTEXT_LENGTH` | `16384` tokens | Native Ollama context for prompts, tools, and replies |
-| `HOSTS_FILE` | Unset | Configured Docker hosts; see [hosts.yaml](../examples/hosts.yaml) |
-| `ENV_ALLOWLIST` / `CORS_ORIGINS` | `[]` / `[]` | Environment fields and allowed browser origins |
-| `MAX_MODEL_CALLS` / `MAX_TOOL_CALLS` | `6` / `12` | Per-turn budgets, including finalization and repair |
-| `MODEL_TIMEOUT` / `TURN_TIMEOUT` | `60` / `180` seconds | Model request and total turn deadlines |
-| `LOG_LINES` / `LOG_BYTES` | `200` / `65536` | Log response bounds |
+| Setting                              | Default                  | Purpose                                                           |
+|--------------------------------------|--------------------------|-------------------------------------------------------------------|
+| `API_TOKEN`                          | Required                 | Bearer token of at least 24 characters                            |
+| `API_TOKENS`                         | `{}`                     | Named operator tokens; see [API tokens](#api-tokens)              |
+| `PROVIDER` / `MODEL`                 | `ollama` / `qwen3.5:9b`  | Independent provider and model selection                          |
+| `MODEL_BASE_URL` / `MODEL_API_KEY`   | Provider default / unset | Model endpoint and credentials                                    |
+| `MODEL_STRUCTURED_OUTPUT`            | `native`                 | Compatible and Gemini providers also support `tool`               |
+| `OLLAMA_CONTEXT_LENGTH`              | `16384` tokens           | Native Ollama context for prompts, tools, and replies             |
+| `HOSTS_FILE`                         | Unset                    | Configured Docker hosts; see [hosts.yaml](../examples/hosts.yaml) |
+| `ENV_ALLOWLIST` / `CORS_ORIGINS`     | `[]` / `[]`              | Environment fields and allowed browser origins                    |
+| `MAX_MODEL_CALLS` / `MAX_TOOL_CALLS` | `6` / `12`               | Per-turn budgets, including finalization and repair               |
+| `MODEL_TIMEOUT` / `TURN_TIMEOUT`     | `60` / `180` seconds     | Model request and total turn deadlines                            |
+| `LOG_LINES` / `LOG_BYTES`            | `200` / `65536`          | Log response bounds                                               |
 
 The [.env example](../.env.example) includes browser origins for local development and preview.
 Generate a token with:
@@ -49,41 +49,58 @@ define `operator`. All tokens have the same permissions.
 Choose a model that supports tool calls and structured output. Use the matching example as the model-settings portion
 of your root `.env`, retaining your API token and browser settings:
 
-| Provider | Configuration example |
-|----------|-----------------------|
-| Ollama | [Local Ollama](../examples/providers/ollama.env.example) |
-| OpenAI | [OpenAI](../examples/providers/openai.env.example) |
-| Anthropic | [Anthropic](../examples/providers/anthropic.env.example) |
-| Gemini | [Gemini](../examples/providers/gemini.env.example) |
+| Provider       | Configuration example                                             |
+|----------------|-------------------------------------------------------------------|
+| Ollama         | [Local Ollama](../examples/providers/ollama.env.example)          |
+| OpenAI         | [OpenAI](../examples/providers/openai.env.example)                |
+| Anthropic      | [Anthropic](../examples/providers/anthropic.env.example)          |
+| Gemini         | [Gemini](../examples/providers/gemini.env.example)                |
 | Compatible API | [Compatible server](../examples/providers/compatible.env.example) |
 
+Cloud providers receive the sanitized Docker evidence selected by the diagnostic loop. Log redaction is best effort;
+review what your workload writes to logs.
+
+### Default model
+
+`DOCKSIGHT_PROVIDER` and `DOCKSIGHT_MODEL` select the default model. Use `DOCKSIGHT_MODEL_BASE_URL` for its endpoint,
+`DOCKSIGHT_MODEL_API_KEY` for its credentials, and `DOCKSIGHT_MODEL_STRUCTURED_OUTPUT` for its output mode.
+Requests without a model selection use this connection.
+
 OpenAI, Anthropic, and Gemini also accept `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and `GEMINI_API_KEY`, respectively.
-`DOCKSIGHT_MODEL_API_KEY` takes precedence. The compatible provider uses only `DOCKSIGHT_MODEL_API_KEY` or
-`DOCKSIGHT_COMPATIBLE_API_KEY`; it never sends another provider's key. Cloud providers receive the sanitized
-Docker evidence selected by the diagnostic loop. Log redaction is best effort; review what your workload writes to logs.
+The corresponding `DOCKSIGHT_OPENAI_API_KEY`, `DOCKSIGHT_ANTHROPIC_API_KEY`, or `DOCKSIGHT_GEMINI_API_KEY` takes precedence
+over the standard name. `DOCKSIGHT_MODEL_API_KEY` overrides both for the default model. These settings load from the root
+`.env` file or environment variables.
 
-The header model selector also offers secondary providers configured on the server. Set `DOCKSIGHT_OPENAI_API_KEY`,
-`DOCKSIGHT_ANTHROPIC_API_KEY`, or `DOCKSIGHT_GEMINI_API_KEY`; these take precedence over the standard key names above.
-Both forms load from the root `.env` file. Optional `DOCKSIGHT_<PROVIDER>_BASE_URL` settings override secondary endpoints,
-where `<PROVIDER>` is `OLLAMA`, `OPENAI`, `ANTHROPIC`, `GEMINI`, or `COMPATIBLE`. Ollama defaults to loopback.
-Compatible requires `DOCKSIGHT_COMPATIBLE_BASE_URL` and optionally `DOCKSIGHT_COMPATIBLE_API_KEY`.
-`DOCKSIGHT_OLLAMA_API_KEY` supports authenticated Ollama gateways.
-Legacy `DOCKSIGHT_PROVIDER`, `DOCKSIGHT_MODEL`, `DOCKSIGHT_MODEL_BASE_URL`, and `DOCKSIGHT_MODEL_API_KEY` continue to
-define the default connection. Provider-specific endpoint settings apply to secondary connections.
-For secondary compatible/Gemini endpoints requiring schema output through a forced tool, set
-`DOCKSIGHT_COMPATIBLE_STRUCTURED_OUTPUT=tool` or `DOCKSIGHT_GEMINI_STRUCTURED_OUTPUT=tool` (default: `native`).
-The default connection continues to use `DOCKSIGHT_MODEL_STRUCTURED_OUTPUT`.
+### Additional providers
 
-For aliases or providers without a catalog endpoint, explicitly allow fallback IDs using a JSON object of arrays:
+The header model selector offers other providers configured on the server. Their settings are independent of the
+default connection:
+
+| Provider       | Enable it                                            | Optional settings                                                        |
+|----------------|------------------------------------------------------|--------------------------------------------------------------------------|
+| Ollama         | Available at loopback by default                     | `DOCKSIGHT_OLLAMA_BASE_URL`, `DOCKSIGHT_OLLAMA_API_KEY`                  |
+| OpenAI         | `DOCKSIGHT_OPENAI_API_KEY` or `OPENAI_API_KEY`       | `DOCKSIGHT_OPENAI_BASE_URL`                                              |
+| Anthropic      | `DOCKSIGHT_ANTHROPIC_API_KEY` or `ANTHROPIC_API_KEY` | `DOCKSIGHT_ANTHROPIC_BASE_URL`                                           |
+| Gemini         | `DOCKSIGHT_GEMINI_API_KEY` or `GEMINI_API_KEY`       | `DOCKSIGHT_GEMINI_BASE_URL`, `DOCKSIGHT_GEMINI_STRUCTURED_OUTPUT`        |
+| Compatible API | `DOCKSIGHT_COMPATIBLE_BASE_URL`                      | `DOCKSIGHT_COMPATIBLE_API_KEY`, `DOCKSIGHT_COMPATIBLE_STRUCTURED_OUTPUT` |
+
+For additional Gemini or compatible endpoints that require schema output through a forced tool, set their
+`STRUCTURED_OUTPUT` setting to `tool` (default: `native`). Provider-specific endpoint and output-mode settings apply only
+when that provider is not the default; the default uses the `DOCKSIGHT_MODEL_*` settings above.
+
+The browser selects only provider/model identities; it cannot submit endpoints or keys. Selection affects the next
+question and its status check. Sessions, prepared actions, and the global turn concurrency budget remain shared.
+
+### Model catalogs
+
+For aliases or providers without a catalog endpoint, allow model IDs using a JSON object of arrays:
 
 ```dotenv
 DOCKSIGHT_PROVIDER_FALLBACK_MODELS={"openai":["your-model-alias"],"compatible":["your-local-model"]}
 ```
 
-Use at most 100 IDs of 1–256 characters per provider. The first fallback is the secondary provider's default model;
-without one, the operator chooses a catalog row. The legacy default model is always allowed without a catalog request.
-The browser cannot submit endpoints or keys. Provider/model selection affects the next question and its status check;
-sessions, history, prepared actions, redaction, and the global turn concurrency budget remain shared.
+Use at most 100 IDs of 1–256 characters per provider. The first ID is the initial model for an additional provider;
+without one, the operator chooses a catalog row. The configured default model is allowed without a catalog request.
 
 Catalogs load lazily, retain successful rows for five minutes, and share concurrent refresh requests. Stale rows return
 immediately while refreshing in the background. Requests have a five-second total deadline; failures retain prior rows
@@ -91,6 +108,8 @@ and impose a 30-second retry cooldown, including manual refresh. Each metadata p
 20 pages and 1,900 catalog IDs. Partial or unsupported catalogs return an explicit failure code and preserve fallbacks.
 Metadata listings do not verify generation access, tool calling, or structured output. Cache and clients live in the
 backend process and close at shutdown.
+
+### Provider notes
 
 Gemini uses Google's [OpenAI-compatible API](https://ai.google.dev/gemini-api/docs/openai) at
 `https://generativelanguage.googleapis.com/v1beta/openai/` by default. Remove an old `DOCKSIGHT_MODEL_BASE_URL`
