@@ -14,6 +14,11 @@ Dates below record each version's merge into `master`. Version links show the co
   actions belong to the operator whose token created them, and audit records name that operator.
   `DOCKSIGHT_API_TOKEN` keeps working as the `operator` identity.
 
+### Changed
+
+- Action-store regression coverage protects owner isolation, retention, concurrent claims, cancellation, and
+  indeterminate target blocks.
+
 ### Security
 
 - The compatible provider no longer falls back to `OPENAI_API_KEY` or `DOCKSIGHT_OPENAI_API_KEY`, so an OpenAI key is
