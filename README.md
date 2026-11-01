@@ -8,8 +8,8 @@
 
 **Docker troubleshooting with AI explanations and runtime evidence.**
 
-Find out why a container keeps restarting, ran out of memory, or failed to start. DockSight brings Docker state,
-logs, and model explanations into one workspace, with restart and stop actions you review and confirm.
+Inspect Docker containers, Compose projects, and Swarm stacks through a local web interface. DockSight collects runtime
+state and bounded logs, asks an LLM to explain the observations, and offers restart or stop actions for confirmation.
 
 ![DockSight explaining a container restart loop alongside Docker state, logs, and evidence](docs/screenshots/investigation.jpg)
 
@@ -20,6 +20,15 @@ logs, and model explanations into one workspace, with restart and stop actions y
 - **Choose your model.** Use Ollama locally, OpenAI, Anthropic, Gemini, or a compatible API.
 - **Review before acting.** Models have read-only tools; restart and stop require separate confirmation.
 - **Work in English or Russian.** Switch the interface language without losing the active investigation.
+
+## Why use it instead of pasting logs into a chat?
+
+DockSight reads the selected Docker environment and links explanations to collected observations. Container state,
+healthchecks, metrics, and available actions come from the backend. Follow-up questions collect fresh evidence;
+restart and stop use expiring, server-prepared actions with separate confirmation.
+
+Model explanations can still be wrong. Evidence-reference validation checks that an observation exists; it does not
+prove the model's interpretation or root-cause claim. Review the linked facts before acting.
 
 ## Quick start
 
@@ -59,6 +68,7 @@ ollama pull qwen3.5:9b
 
 Set `DOCKSIGHT_API_TOKEN` in `.env` to the generated token. Keep the other defaults for local Ollama, or choose
 [another provider](docs/configuration.md#model-providers).
+The backend reads `.env` from the working directory, so run it from the repository root.
 
 **2. Start the backend in one terminal.**
 
@@ -69,6 +79,10 @@ uv run --project backend uvicorn docksight.main:create_app --factory --host 127.
 **3. Keep the frontend running in another terminal** using the demo commands above. Choose **Connect API**, keep
 `/api/v1`, and enter the same token. Select a host and container, then ask what went wrong. The token stays in browser
 memory. Interactive API documentation is available at [localhost:8000/docs](http://localhost:8000/docs).
+If port 8000 is occupied, follow the [alternate-port instructions](docs/configuration.md#local-ports-and-connection-errors).
+
+To investigate the whole host, leave **Investigation scope** on **Automatic** and ask "What happened?". Name a container,
+Compose project, or Swarm stack to narrow the question. Ambiguous names require a target choice.
 
 For a reproducible failure and confirmed restart, follow the [working example](docs/examples.md#docker-example).
 
@@ -82,18 +96,22 @@ typed UI cards. Runtime values and permissions come from the backend. Confirmed 
 Sessions and action records are temporary. Use one backend worker; restarting it clears that state. DockSight provides
 diagnosis and confirmed container actions; it has no persistent monitoring history or stack deployment workflow.
 
+This is an early MVP for operator-assisted diagnosis. Host overviews and logs are bounded and disclose collection gaps.
+Swarm diagnostics cannot read logs from remote nodes. Docker healthchecks describe probe results separately from process
+state. A clean exit or an old error message alone does not establish why a container stopped.
+
 ## Configuration
 
 Settings are loaded from environment variables or the root `.env` file.
 
-| Variable | Purpose |
-|----------|---------|
-| `DOCKSIGHT_API_TOKEN` | Required bearer token, at least 24 characters |
-| `DOCKSIGHT_PROVIDER` | `ollama` (default), `openai`, `anthropic`, `gemini`, or `compatible` |
-| `DOCKSIGHT_MODEL` | Model name; defaults to `qwen3.5:9b` |
-| `DOCKSIGHT_MODEL_BASE_URL` | Custom model endpoint |
-| `DOCKSIGHT_MODEL_API_KEY` | Credentials for the selected provider |
-| `DOCKSIGHT_HOSTS_FILE` | YAML configuration for local, SSH, or mTLS Docker hosts |
+| Variable                   | Purpose                                                              |
+|----------------------------|----------------------------------------------------------------------|
+| `DOCKSIGHT_API_TOKEN`      | Required bearer token, at least 24 characters                        |
+| `DOCKSIGHT_PROVIDER`       | `ollama` (default), `openai`, `anthropic`, `gemini`, or `compatible` |
+| `DOCKSIGHT_MODEL`          | Model name; defaults to `qwen3.5:9b`                                 |
+| `DOCKSIGHT_MODEL_BASE_URL` | Custom model endpoint                                                |
+| `DOCKSIGHT_MODEL_API_KEY`  | Credentials for the selected provider                                |
+| `DOCKSIGHT_HOSTS_FILE`     | YAML configuration for local, SSH, or mTLS Docker hosts              |
 
 See [configuration and deployment](docs/configuration.md) for provider examples, CORS, limits, and Docker connections.
 
@@ -108,3 +126,8 @@ See [configuration and deployment](docs/configuration.md) for provider examples,
 
 For development shortcuts, optional [Make commands](CONTRIBUTING.md#make-commands) provide setup, server,
 check, test, and build targets. Run `make help` to list them.
+
+## License
+
+DockSight is licensed under [Apache-2.0](LICENSE). Frontend builds include
+[third-party notices](frontend/public/licenses/) for IBM Plex, React/ReactDOM/Scheduler, Zod, and Lucide/Feather.

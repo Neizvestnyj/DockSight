@@ -1,3 +1,4 @@
+import { chooseOption } from '../test-utils/select';
 import '@testing-library/jest-dom/vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -100,13 +101,13 @@ describe('investigation workspace', () => {
 
   it('does not create container evidence or actions by choosing a scenario on an empty demo host', async () => {
     render(<App />);
-    fireEvent.change(screen.getByLabelText('Configured host'), { target: { value: 'demo-empty' } });
-    fireEvent.change(screen.getByLabelText('Demo scenario'), { target: { value: 'oom' } });
+    chooseOption(screen.getByLabelText('Configured host'), 'demo-empty');
+    chooseOption(screen.getByLabelText('Demo scenario'), 'oom');
     expect(screen.queryByRole('button', { name: 'Review restart' })).not.toBeInTheDocument();
     expect(screen.getByText('No UI cards were returned for this answer.')).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText('Configured host'), { target: { value: 'demo-eu' } });
-    fireEvent.change(screen.getByLabelText('Simulated connection'), { target: { value: 'empty' } });
-    fireEvent.change(screen.getByLabelText('Demo scenario'), { target: { value: 'dependency' } });
+    chooseOption(screen.getByLabelText('Configured host'), 'demo-eu');
+    chooseOption(screen.getByLabelText('Simulated connection'), 'empty');
+    chooseOption(screen.getByLabelText('Demo scenario'), 'dependency');
     expect(screen.queryByRole('button', { name: 'Review restart' })).not.toBeInTheDocument();
     expect(screen.getByText('No UI cards were returned for this answer.')).toBeInTheDocument();
   });
@@ -127,11 +128,11 @@ describe('investigation workspace', () => {
   });
   it('does not replay a demo result after changing away from and back to a host', async () => {
     render(<App />);
-    fireEvent.change(screen.getByLabelText('Demo scenario'), { target: { value: 'oom' } });
-    fireEvent.change(screen.getByLabelText('Configured host'), { target: { value: 'demo-empty' } });
-    fireEvent.change(screen.getByLabelText('Configured host'), { target: { value: 'demo-eu' } });
+    chooseOption(screen.getByLabelText('Demo scenario'), 'oom');
+    chooseOption(screen.getByLabelText('Configured host'), 'demo-empty');
+    chooseOption(screen.getByLabelText('Configured host'), 'demo-eu');
     expect(await screen.findByText('Start an investigation')).toBeInTheDocument();
-    expect(screen.getByLabelText('Demo scenario')).toHaveValue('oom');
+    expect(screen.getByLabelText('Demo scenario')).toHaveTextContent('Out of memory');
   });
   it('reuses the original execution key only after a read confirms the action is still prepared', async () => {
     const answer = demoAnswer('crash_loop');
@@ -167,7 +168,7 @@ describe('investigation workspace', () => {
   it('starts an empty separate investigation when the host changes', async () => {
     render(<App />);
     await screen.findByRole('button', { name: 'Review stop' });
-    fireEvent.change(screen.getByLabelText('Configured host'), { target: { value: 'demo-empty' } });
+    chooseOption(screen.getByLabelText('Configured host'), 'demo-empty');
     expect(await screen.findByText('Start an investigation')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Review stop' })).not.toBeInTheDocument();
     expect(await screen.findByText('No containers on this host.')).toBeInTheDocument();

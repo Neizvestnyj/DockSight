@@ -1,3 +1,4 @@
+import { chooseOption } from './helpers/select';
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 import { demoAnswer, demoSystemStatus } from '../src/demo';
@@ -52,7 +53,7 @@ for (const kind of ['container', 'compose'] as const) {
     await page.getByRole('textbox').fill('Why did vintoria-infra fail?');
     await page.getByRole('button', { name: 'Investigate', exact: true }).click();
     await expect(page.locator('.widget-container_status')).toHaveCount(1);
-    await page.getByRole('combobox', { name: 'Language' }).selectOption('ru');
+    await chooseOption(page.getByRole('combobox', { name: 'Language' }), 'ru');
     const question = 'А может потому-что vintoria-db не запущен?';
     await page.getByRole('textbox').fill(question);
     await page.getByRole('button', { name: 'Исследовать', exact: true }).click();

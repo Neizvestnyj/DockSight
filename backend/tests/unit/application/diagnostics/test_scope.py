@@ -36,17 +36,31 @@ async def test_explicit_compose_reference_disambiguates_a_container_project_coll
 
 @pytest.mark.parametrize(
     "query",
-    ["Что случилось?", "\u0410 что упало?", "Что не так?", "What happened?", "What's wrong?", "What failed?"],
+    [
+        "Что случилось?",
+        "\u0410 что упало?",
+        "Что не так?",
+        "What happened?",
+        "What's wrong?",
+        "What failed?",
+        "What happened on this host?",
+        "Which containers need attention, and why?",
+        "Check this host",
+        "Что произошло на хосте?",
+        "Какие контейнеры требуют внимания и почему?",
+        "Проверь хост",
+    ],
 )
-async def test_unscoped_incident_questions_require_a_choice_between_observed_projects(query: str) -> None:
+async def test_unscoped_incident_questions_keep_host_scope_instead_of_forcing_a_project(query: str) -> None:
     result = await resolve_target(DiscoveryRuntime(), "local", query)
     assert result.group is None
     assert result.container_id is None
-    assert result.selection is not None
-    assert result.selection.candidates == [
+    assert result.selection is None
+    assert result.host_wide
+    assert result.candidates == (
         GroupTarget(kind="compose", name="other-project"),
         GroupTarget(kind="compose", name="vintoria-infra"),
-    ]
+    )
 
 
 @pytest.mark.parametrize(

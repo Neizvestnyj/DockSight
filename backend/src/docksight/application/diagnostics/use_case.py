@@ -10,7 +10,13 @@ from uuid import uuid4
 from pydantic import ValidationError
 
 from docksight.application.diagnostics.context import EvidenceContext
-from docksight.application.diagnostics.prompts import SYSTEM_PROMPT, final_prompt, group_catalog, repair_feedback
+from docksight.application.diagnostics.prompts import (
+    SYSTEM_PROMPT,
+    final_prompt,
+    group_catalog,
+    history_context,
+    repair_feedback,
+)
 from docksight.application.diagnostics.scope import resolve_target
 from docksight.application.diagnostics.tools import DiagnosticTools, tool_specs
 from docksight.application.diagnostics.trace import DiagnosticTrace, schema_issues
@@ -155,7 +161,7 @@ class Diagnostics:
         }
         messages = [
             ModelMessage("system", SYSTEM_PROMPT),
-            *session.history,
+            *history_context(session.history),
             ModelMessage("user", self.redactor.text(query)),
         ]
         context = EvidenceContext()
@@ -167,7 +173,7 @@ class Diagnostics:
         if call:
             messages.append(ModelMessage("assistant", "", (call,)))
             async for event in self._record_tool(
-                call, tools, messages, deadline, 0, trace, strict=tools.group is not None
+                call, tools, messages, deadline, 0, trace, strict=tools.group is not None or tools.host_wide
             ):
                 yield event
         async for event in self._explore(messages, tools, deadline, trace, int(call is not None)):
@@ -190,6 +196,8 @@ class Diagnostics:
             return ToolCall("selected-group", "inspect_group", tools.group.model_dump())
         if tools.context.container_id:
             return ToolCall("selected-container", "get_container_logs", {"container_id": tools.context.container_id})
+        if tools.host_wide:
+            return ToolCall("selected-host", "inspect_host", {})
         return None
 
     async def _answer_turn(
@@ -202,7 +210,9 @@ class Diagnostics:
         trace: DiagnosticTrace,
     ) -> AsyncGenerator[TurnEvent]:
         """Retain validated answers in history without recording unresolved clarification turns."""
-        messages.append(ModelMessage("user", final_prompt(query, context)))
+        if messages[-1].role == "assistant" and not messages[-1].tool_calls:
+            messages = messages[:-1]
+        messages.append(ModelMessage("user", final_prompt(self.redactor.text(query), context)))
         async for event in self._finalize(messages, context, session.actor, deadline, trace):
             if event["type"] == "answer.ready":
                 session.history.extend(
@@ -231,6 +241,7 @@ class Diagnostics:
         tools.inventory, tools.group, tools.candidates = resolved.containers, resolved.group, resolved.candidates
         tools.context.container_id = resolved.container_id
         tools.context.selection = resolved.selection
+        tools.host_wide, tools.discovery_code = resolved.host_wide, resolved.discovery_code
         yield trace.finish(code=resolved.discovery_code)
         yield {
             "type": "tool.completed",
@@ -260,6 +271,15 @@ class Diagnostics:
                     ),
                 )
             )
+        elif tools.host_wide:
+            messages.append(
+                ModelMessage(
+                    "system",
+                    "This turn covers the selected host, across observed projects and "
+                    "ungrouped containers. Explain the host overview before the operator narrows "
+                    "scope in a new turn; do not replace it with a group choice.",
+                )
+            )
         elif tools.group is None and tools.candidates:
             messages.append(ModelMessage("system", group_catalog(tools.candidates)))
 
@@ -282,10 +302,15 @@ class Diagnostics:
             messages.append(ModelMessage("assistant", reply.content, reply.tool_calls, native=reply.native))
             if self._exploration_complete(reply, tools, messages):
                 break
+            reused = tools.reused_reads
             async for event in self._tool_batch(reply.tool_calls, tools, messages, deadline, tool_calls, trace):
                 yield event
             tool_calls += len(reply.tool_calls)
-            if tools.context.selection or tool_calls >= self.max_tool_calls:
+            if (
+                tools.context.selection
+                or tool_calls >= self.max_tool_calls
+                or (reply.tool_calls and tools.reused_reads - reused == len(reply.tool_calls))
+            ):
                 break
 
     def _exploration_complete(self, reply: ModelReply, tools: DiagnosticTools, messages: list[ModelMessage]) -> bool:
@@ -343,10 +368,12 @@ class Diagnostics:
         if traced:
             error = result.get("error")
             yield trace.finish(code=error if isinstance(error, str) else None)
-        messages.append(ModelMessage("tool", json.dumps(result), tool_call_id=call.id, tool_name=call.name))
+        messages.append(
+            ModelMessage("tool", json.dumps(result, ensure_ascii=False), tool_call_id=call.id, tool_name=call.name)
+        )
         yield {"type": "tool.completed", "turn_id": trace.turn_id, "tool": name, "ok": "error" not in result}
         if strict and isinstance(result.get("error"), str):
-            raise DockSightError(str(result["error"]), "Selected group could not be inspected", 502)
+            raise DockSightError(str(result["error"]), "Selected scope could not be inspected", 502)
 
     async def _tool_result(self, call: ToolCall, tools: DiagnosticTools, deadline: float, used: int) -> JsonObject:
         """Return a safe tool result while preserving the absolute turn deadline."""
@@ -370,7 +397,7 @@ class Diagnostics:
         for attempt in range(2):
             yield trace.begin("model", "repair_response" if attempt else "final_response")
             reply = await _before_deadline(
-                deadline, lambda: self.model.complete(messages, schema=proposal_schema(tuple(context.evidence)))
+                deadline, lambda: self.model.complete(messages, schema=proposal_schema(context))
             )
             yield trace.finish(reply=reply, preview=True)
             yield trace.begin("validation", "validate_diagnosis")

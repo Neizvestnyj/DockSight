@@ -1,3 +1,5 @@
+@import './controls.css';
+
 :root {
   font-family: 'IBM Plex Sans', system-ui, sans-serif;
   color: var(--text);
@@ -611,7 +613,7 @@ textarea {
   color: var(--muted);
   margin: 0 4px 8px;
 }
-.host-switch select {
+.host-switch .select-trigger {
   width: 100%;
   background: var(--ground);
   font-size: 13px;
@@ -687,7 +689,13 @@ textarea {
 .container-name svg {
   color: var(--muted);
 }
+.container-row .container-status {
+  margin: 4px 0 0 22px;
+}
 .container-row .status {
+  font-size: 11px;
+}
+.container-exit {
   margin: 4px 0 0 22px;
   font-size: 11px;
 }
@@ -884,7 +892,7 @@ textarea {
   margin-top: 0;
   font-size: 13px;
 }
-.model-provider-field select {
+.model-provider-field .select-trigger {
   width: 100%;
 }
 .model-search-row {
@@ -1132,7 +1140,7 @@ textarea {
   gap: 6px;
   color: var(--muted);
 }
-.language-switch select {
+.language-switch .select-trigger {
   width: auto;
   flex-shrink: 0;
   font-size: 12px;
@@ -1182,7 +1190,7 @@ textarea {
 .demo-bar label {
   flex-shrink: 0;
 }
-.demo-bar select {
+.demo-bar .select-trigger {
   background: var(--surface);
   font-size: 12px;
   min-height: 28px;
@@ -1209,7 +1217,7 @@ textarea {
   flex-direction: column;
   gap: 6px;
 }
-.demo-controls select {
+.demo-controls .select-trigger {
   font-size: 13px;
 }
 .demo-controls label > span {
@@ -1686,6 +1694,55 @@ textarea {
   background: currentColor;
   flex: none;
 }
+.container-status {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  min-width: 0;
+}
+.container-status > .status.positive:not(.health-status) {
+  color: var(--muted);
+}
+.health-summary {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 6px;
+  min-width: 0;
+}
+.health-caption {
+  font-size: 12px;
+  color: var(--muted);
+}
+.container-row .health-caption {
+  font-size: 11px;
+}
+.health-status {
+  white-space: normal;
+}
+.health-fact {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  padding: 0 16px 16px;
+  font-size: 12px;
+}
+.health-fact dt {
+  color: var(--muted);
+}
+.health-fact dd {
+  margin: 0;
+  text-align: right;
+}
+.group-member-state .container-status,
+.container-row .container-status {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
 .positive {
   color: var(--positive);
 }
@@ -2114,7 +2171,7 @@ textarea {
   font-size: 12px;
   color: var(--muted);
 }
-.group-scope select {
+.group-scope .select-trigger {
   width: 100%;
   min-width: 0;
   height: 36px;
@@ -2127,11 +2184,6 @@ textarea {
   overflow-wrap: anywhere;
   grid-column: 1 / -1;
   color: var(--muted);
-}
-.group-scope > label:only-of-type ~ .scope-help {
-  grid-column: 2 / -1;
-  align-self: center;
-  padding-top: 18px;
 }
 .group-scope-actions {
   display: flex;
@@ -2252,6 +2304,142 @@ textarea {
 }
 .group-member-state {
   font-size: 12px;
+}
+.host-overview {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  margin: 20px 0;
+  overflow: hidden;
+}
+.host-overview-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: var(--raised);
+}
+.host-overview-heading > div {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.host-overview h2 {
+  font-size: 16px;
+}
+.host-overview-totals {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding: 16px 16px 8px;
+  gap: 16px;
+}
+.host-overview-totals dt {
+  font-size: 12px;
+  color: var(--muted);
+}
+.host-overview-totals dd {
+  font-size: 24px;
+  font-weight: 400;
+}
+.host-overview-note {
+  padding: 8px 16px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.host-members {
+  max-height: 520px;
+  overflow: auto;
+}
+.host-member {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(140px, 0.7fr);
+  gap: 16px;
+  padding: 14px 16px;
+  border-top: 1px solid var(--rule);
+}
+.host-member > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.host-member-name,
+.host-member-state,
+.host-member-coverage {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+.host-member h3 {
+  font-size: 13px;
+  font-weight: 500;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.host-member-state .container-status {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+.host-member small {
+  display: block;
+  font-size: 11px;
+}
+.host-member-coverage .text-button {
+  margin-top: 4px;
+  font-size: 12px;
+  text-align: left;
+}
+.host-overview-targets {
+  padding: 16px;
+  border-top: 1px solid var(--rule);
+}
+.host-overview-targets h3 {
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+.host-overview-targets > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.host-overview-targets button {
+  min-width: 0;
+  max-width: 100%;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.host-overview-targets small {
+  color: var(--muted);
+}
+.host-overview footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  justify-content: space-between;
+  border-top: 1px solid var(--rule);
+  color: var(--muted);
+}
+@media (max-width: 560px) {
+  .host-member {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 12px;
+    padding: 12px;
+  }
+  .host-member-coverage {
+    grid-column: 1 / -1;
+  }
+  .host-overview-targets {
+    padding: 12px;
+  }
+  .host-overview-targets button {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .host-member-coverage .text-button {
+    min-height: 36px;
+  }
 }
 .group-report footer {
   display: flex;
@@ -2819,10 +3007,10 @@ textarea {
   .language-switch {
     gap: 4px;
   }
-  .language-switch select {
+  .language-switch .select-trigger {
     min-height: 44px;
   }
-  .language-switch svg {
+  .language-switch > svg {
     display: none;
   }
   .modal-actions .primary {
@@ -2913,9 +3101,11 @@ textarea {
     justify-content: space-between;
     margin-top: 12px;
   }
-  .demo-bar select {
-    font-size: 13px;
+  .demo-bar .select-control {
     width: min(240px, 75%);
+  }
+  .demo-bar .select-trigger {
+    font-size: 13px;
     min-height: 44px;
     padding-left: 7px;
   }
@@ -2929,7 +3119,7 @@ textarea {
   .demo-controls > div {
     grid-template-columns: minmax(0, 1fr);
   }
-  .demo-controls select {
+  .demo-controls .select-trigger {
     min-height: 44px;
   }
   .inventory-stamp {
@@ -3115,14 +3305,10 @@ textarea {
   .group-scope {
     gap: 12px;
   }
-  .group-scope > label:only-of-type {
+  .group-scope > .scope-field:only-child {
     grid-column: 1 / -1;
   }
-  .group-scope > label:only-of-type ~ .scope-help {
-    grid-column: 1 / -1;
-    padding-top: 0;
-  }
-  .group-scope select,
+  .group-scope .select-trigger,
   .group-scope-actions .secondary,
   .group-scope-actions .icon-button {
     min-height: 44px;

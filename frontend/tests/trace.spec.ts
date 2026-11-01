@@ -1,3 +1,4 @@
+import { chooseOption } from './helpers/select';
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import { demoContainer, demoSystemStatus } from '../src/demo';
@@ -116,7 +117,7 @@ for (const failure of [
     ]);
     await expect(page.getByRole('alert')).toHaveText(failure.english);
     await page.getByRole('textbox').fill('Keep this follow-up');
-    await page.getByRole('combobox', { name: 'Language' }).selectOption('ru');
+    await chooseOption(page.getByRole('combobox', { name: 'Language' }), 'ru');
     await expect(page.getByRole('alert')).toHaveText(failure.russian);
     await expect(page.getByRole('textbox')).toHaveValue('Keep this follow-up');
     const trace = page.locator('.diagnostic-trace');
@@ -173,7 +174,7 @@ test('keeps a demo trace open across completion, supports keyboard selection and
     await expect(trace.locator('pre')).toBeVisible();
   }
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
-  await page.getByRole('combobox', { name: 'Language' }).selectOption('ru');
+  await chooseOption(page.getByRole('combobox', { name: 'Language' }), 'ru');
   await expect(trace).toHaveAttribute('open', '');
   await expect(trace.getByRole('heading', { name: 'Формирование ответа' })).toBeVisible();
   await expect(trace.locator('.trace-step[aria-pressed=true]')).toContainText('Формирование ответа');

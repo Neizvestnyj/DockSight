@@ -6,6 +6,51 @@ This file records notable changes to DockSight. The format follows
 
 Dates below record each version's merge into `master` in Europe/Moscow. Version links show the corresponding changes.
 
+## [0.6.0] - 2026-11-01
+
+### Added
+
+- Apache-2.0 license for the public repository and third-party notices in frontend builds.
+- Docker healthcheck status appears separately from process state in container facts, diagnostic cards, inventory,
+  and Compose members. Running unhealthy containers receive bounded diagnostic log collection even without restarts;
+  missing health observations remain unknown, and probe commands and output are not exposed.
+  Russian health badges use compact labels with a healthcheck hint.
+- A selectable local Docker/model causal regression package covers clean shutdowns, OOM, unexplained exits, unhealthy
+  probes, and dependency follow-ups. Authored English/Russian narrative fixtures check known contradictions across
+  explanations and recommendations, including unsupported project-independence claims; unfamiliar claims need review.
+
+### Changed
+
+- Public setup documentation explains automatic host scope, evidence limits, and model uncertainty. English Demo
+  screenshots reflect the current interface; the diagnostic sequence documents evidence reuse and final context.
+  Local connection guidance covers working-directory configuration, occupied ports, and isolated Docker examples.
+- Selection menus share custom styling, keyboard navigation, typeahead, and explicit selected or disabled states.
+  Optional diagnostic-scope guidance appears beside a help button, available by hover, focus, or tap.
+- Container card headers show process state only, with healthchecks in separate facts. Stopped containers identify the
+  last reported check; exited states are neutral and nonzero exit codes are highlighted.
+- General incident questions return a bounded host overview across projects and ungrouped containers, with observed
+  state, log coverage, collection limits, and optional focused investigations. Named ambiguity still requires a target
+  choice. Additional log reads retain their evidence, and unavailable actions preserve collected observations.
+  Diagnostic documentation and sequence diagrams describe this flow; live regressions use mixed hosts and production
+  log limits.
+
+### Fixed
+
+- Docker log deadline regressions send valid multiplexed frames during slow delivery, avoiding platform-dependent
+  scan-limit failures in the timeout scenario.
+- Healthy Compose-group diagnoses offer model cards only when their required data was collected. Group-only evidence
+  supports group cards without unsupported individual-container cards. Final generation and repair share this
+  restriction. No-card replies preserve empty public card lists through provider schema conversion.
+- Host model projections limit repeated member detail. Final generation omits unvalidated prose drafts across scopes
+  and recaps bounded latest lifecycle facts. Causal guidance separates clean shutdowns and unknown stop reasons from
+  old errors; model explanations still require review.
+  Schema guidance keeps unresolved causes in unknowns instead of presenting them as established deeper causes.
+  Repeated successful reads reuse this turn's evidence references instead of repeating full observations; redundant
+  tool batches end exploration. Follow-ups carry earlier questions and summaries as labeled context, with fresh facts.
+  Ollama context-window exhaustion is distinguished from the response token limit, with localized guidance.
+- Docker log tails retain transport timeouts and abort at a fixed deadline. Stalled or slowly delivered responses release
+  worker capacity and cannot return partial logs as a successful read or prevent backend shutdown.
+
 ## [0.5.0] - 2026-10-31
 
 ### Fixed
@@ -147,6 +192,8 @@ Dates below record each version's merge into `master` in Europe/Moscow. Version 
 - Prepared actions are bound to the caller and exact target. Unknown mutation outcomes block conflicting actions;
   runtime mutations are never retried automatically.
 
+[0.6.0]: https://github.com/Neizvestnyj/DockSight/compare/093f3c7e0a90251cfe73aba503576bd2280cca12...feature/public-mvp-readiness
+[0.5.0]: https://github.com/Neizvestnyj/DockSight/compare/83c8fa477bfc63aa4c0d4f21f33bf676c0649e41...093f3c7e0a90251cfe73aba503576bd2280cca12
 [0.4.0]: https://github.com/Neizvestnyj/DockSight/compare/5ac9a9ed6db7ec57b6ae3848365fb24adfc25b32...83c8fa477bfc63aa4c0d4f21f33bf676c0649e41
 [0.3.0]: https://github.com/Neizvestnyj/DockSight/compare/bced0aeab5c9287e4dd4916e9b6631b5a017cdf9...5ac9a9ed6db7ec57b6ae3848365fb24adfc25b32
 [0.2.0]: https://github.com/Neizvestnyj/DockSight/compare/bc073208b7a7f7ec33f227ffa70c3fb895fd3680...bced0aeab5c9287e4dd4916e9b6631b5a017cdf9

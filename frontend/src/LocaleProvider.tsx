@@ -3,6 +3,7 @@ import { Languages } from 'lucide-react';
 import { LocaleContext } from './locale';
 import { useLocale } from './locale';
 import { resolveLocale, translate, type LocalePreference } from './messages';
+import { Select } from './Select';
 
 const storageKey = 'docksight.locale';
 
@@ -58,16 +59,17 @@ export function LanguageSwitch() {
     <label className="language-switch" htmlFor={id}>
       <Languages size={16} aria-hidden="true" />
       <span className="sr-only">{t('Language')}</span>
-      <select
+      <Select<LocalePreference>
         id={id}
-        aria-label={t('Language')}
+        label={t('Language')}
         value={preference}
-        onChange={(event) => setPreference(event.target.value as LocalePreference)}
-      >
-        <option value="system">{t('System')}</option>
-        <option value="en">English</option>
-        <option value="ru">Русский</option>
-      </select>
+        onChange={setPreference}
+        options={[
+          { value: 'system', label: t('System') },
+          { value: 'en', label: 'English' },
+          { value: 'ru', label: 'Русский' },
+        ]}
+      />
     </label>
   );
 }

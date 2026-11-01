@@ -68,6 +68,14 @@ def test_empty_evidence_is_allowed_only_for_uncertain_diagnosis() -> None:
         )
 
 
+def test_no_model_widget_proposals_normalize_to_an_empty_card_list() -> None:
+    proposal = DiagnosisProposal.model_validate(
+        {"summary": "No individual observations collected", "evidence_ids": [], "uncertain": True, "widgets": None}
+    )
+    assert proposal.widgets == []
+    assert proposal.model_dump()["widgets"] == []
+
+
 @pytest.mark.parametrize(
     "payload", [{"action": None, "action_reason": "Restart"}, {"action": "restart", "action_reason": "x" * 241}]
 )

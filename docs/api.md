@@ -9,8 +9,8 @@ and `/openapi.json` are public.
 |--------|------------------------------------------------|--------------------------------------------------------|
 | GET    | `/hosts`                                       | Configured host IDs and display names                  |
 | GET    | `/system/status?host=local`                    | Safe configuration and independent availability checks |
-| GET    | `/model-providers`                            | Configured providers and the default model             |
-| GET    | `/model-providers/{provider}/models`          | Lazy, bounded model catalog and freshness              |
+| GET    | `/model-providers`                             | Configured providers and the default model             |
+| GET    | `/model-providers/{provider}/models`           | Lazy, bounded model catalog and freshness              |
 | GET    | `/hosts/{host}/containers`                     | Up to 200 inspected containers                         |
 | GET    | `/hosts/{host}/containers/{id}`                | Sanitized snapshot                                     |
 | GET    | `/hosts/{host}/containers/{id}/logs?lines=200` | Bounded timestamped logs                               |
@@ -27,10 +27,18 @@ bodies are limited to 16 KiB. Host IDs resolve through server configuration; cal
 the byte limit, logs retain the newest complete lines after redaction, discarding an incomplete leading fragment.
 They remain in Docker output order. A finite tail scan is limited to 8 MiB and the Docker timeout; exceeding the scan
 limit returns `log_read_limit` instead of a middle excerpt presented as the latest output.
+A timed-out tail returns `runtime_timeout` without partial log output. Its connection is aborted to release Docker
+worker capacity, including when a response keeps delivering bytes slowly.
 Diagnostic JSON-budget clipping can shorten the beginning of the oldest retained message and sets `truncated=true`.
 
 Container and stack GET requests pass through HTTP routes, `RuntimeQueries`, and the Docker adapter. The Docker adapter
 applies field allowlists and redaction before returning owned values; the HTTP adapter serializes them as JSON.
+
+Container snapshots and Compose container members include `health`: `starting`, `healthy`, `unhealthy`, or `null`.
+This is separate from process `state`; a running process can be unhealthy. Missing observations and Docker's `none`
+status map to `null`, which does not establish health. Probe commands, output, and healthcheck history are excluded.
+Swarm service summaries do not infer container health from running replica counts and retain `health=null`.
+See Docker's [healthcheck semantics](https://docs.docker.com/reference/dockerfile/#healthcheck).
 
 `GET /hosts` reads configured host metadata without contacting Docker. Diagnostic requests use the model loop below.
 
@@ -135,8 +143,10 @@ cannot POST this request or attach its bearer header.
 Follow-up questions send the same `session_id` to retain bounded earlier questions and validated answer summaries.
 Each turn collects fresh observations; existing cards keep their original values. Starting a new investigation clears
 the client session and draft. Explicit group-scope changes start a separate session.
+Prior questions and summaries reach the model as a labeled context document, not replayed assistant conclusions.
+They preserve references for follow-ups but do not establish current runtime state or cross-service causality.
 
-For a query such as "Why did this container exit?", the successful path is:
+For a broad question such as "What happened?", the successful path is:
 
 ![Successful diagnostic request and Docker evidence collection](diagrams/diagnostic-overview.png)
 
@@ -152,14 +162,30 @@ server-issued reference IDs; a proposal is the model's suggested response.
 Each requested tool emits its own progress events. Model and tool budgets bound exploration; finalization allows one
 schema or evidence repair attempt. Container status cards prepare allowed actions through an internal `Actions.prepare`
 call. Executing those actions requires the separate confirmation flow below.
+Within a turn, a repeated successful read with the same validated arguments and target scope returns
+`{"already_collected":true,"evidence_ids":["e1"]}` instead of repeating the payload or calling Docker again.
+Exact observed container names and full IDs share that read. Failed reads are not reused, and a narrowed scope cannot
+reuse a wider result. A batch containing only reused reads ends exploration; tool-call/result pairs remain intact.
+This bounds redundant context, not total model tokens. New turns collect new observations; actions still revalidate Docker.
 
 Final and repair JSON schemas constrain every `evidence_ids` array to IDs collected in the current turn. A compact
 current-turn catalog identifies their observation kind and exact container; quoted log messages are not reference IDs.
+The schemas limit widget types to typed data available for assembly. Group-only evidence offers `compose_stack`;
+individual status and environment cards require snapshots, and log cards require collected logs with a snapshot.
+When no card type has supporting data, the model returns `widgets:null`, normalized to an empty public widget array.
+Group and host reports remain server-owned.
 Server validation still rejects unknown references or references that cannot support the requested card.
 This validates reference integrity and card data, not the semantic correctness of a model's causal explanation.
+Final generation omits the last prose-only exploration draft and recaps at most eight latest per-resource lifecycle
+snapshots, with an explicit truncation flag. It retains conversation context, tool-call/result pairs, and the current
+evidence catalog; the final request repeats the redacted current question before the causal guidance.
+Prompt guidance separates clean exits, confirmed OOM, unexplained exit 137, unhealthy probes, and historical request
+errors. The opt-in [causal regression package](../CONTRIBUTING.md#live-docker-and-local-model-end-to-end-suite)
+checks these boundaries in English/Russian responses; it does not guarantee arbitrary model claims are correct.
 
 Container status, log, and environment cards each reference exactly one container. A question about several containers
-uses separate cards, with at most eight cards per response. Repair feedback includes the validation failure, valid
+uses separate cards. A model proposal contains at most eight cards; server assembly retains collected facts and may
+return up to sixteen cards. Repair feedback includes the validation failure, valid
 evidence IDs grouped by exact container, and available log/stack references. Schema errors omit submitted values and
 replace unknown field names with a fixed marker.
 
@@ -214,6 +240,51 @@ HTTP 400/422 rejections use `model_not_supported` for request or capability mism
 streaming starts. Provider response bodies are never included. The client localizes these two diagnostic codes in
 English/Russian and retains unknown server messages verbatim. Metadata checks do not verify generation access.
 
+Native Ollama replies that fill the configured context window before the output budget use `model_context_limit`.
+Output-budget exhaustion uses `model_truncated`; when usage is unavailable, truncation retains that generic code.
+The client distinguishes these failures in English/Russian. Increasing the output limit alone cannot enlarge the
+context window shared by the prompt and response.
+
+## Host overview
+
+Bare English/Russian incident questions such as "What happened?" or "Что случилось?" collect a bounded overview of the
+selected host before model exploration. They do not require choosing a Compose project or Swarm stack. The model can
+also request the read-only `inspect_host` tool for other broad questions. Explicit container or group scope cannot be
+expanded into a host overview.
+
+`answer.ready.answer.host_overview` is a nullable, server-owned report. Its `evidence_id` references a `host` observation
+with `container_id: null`. Counts describe up to 200 distinct observed local containers, across Compose projects and
+containers without an observed group. Remote Swarm replicas are not counted. `total`, `running`, and `attention` come
+from Docker observations; running counts describe processes, independently of healthchecks.
+
+The report displays up to 32 members, prioritizing OOM, unhealthy, dead, restarting, and nonzero exits before weaker
+signals. `attention` marks candidates for review, not proven failures; an exit with code zero may be expected.
+Automatic log collection reads at most four displayed candidates, with at most 200 lines and 4 KiB per container.
+`logs` distinguishes collected, failed, and skipped reads; skipped candidates use `host_log_limit`. The model may request
+additional read-only evidence within the existing turn budgets. Later attempts update coverage for displayed members;
+reads outside the preview retain their evidence without expanding the preview. Missing logs never mean that a container
+was checked.
+
+`truncated` signals an inventory, member, group-choice, or metadata limit. Overview metadata is bounded to 32 KiB and
+the remaining turn evidence budget; clipping preserves counts for the capped inventory. The model receives at most
+eight prioritized member rows to limit repeated inventory detail; the public report retains up to 32. Model tool
+results are bounded to 64 KiB and mark omitted member detail or observations with `projection_truncated`.
+Host finalization retains collected evidence and omits the preceding unvalidated prose-only draft from its input.
+Up to 32 canonical `targets` remain available for
+optional narrowing, prioritizing groups of displayed members. A missing member group does not prove standalone ownership.
+`discovery_code` preserves optional Swarm discovery failures without discarding local container observations.
+
+The report and collected evidence remain available even when the model omits widgets. Assembly fills missing factual
+cards within the sixteen-card response limit. Once a host overview is selected, the model cannot replace it with a
+group-selection request. The client can start a separate investigation of
+an observed group or exact container; the server revalidates that target and collects fresh observations. Earlier
+answers and the next-question draft remain intact. Host overview collection performs no Docker mutation.
+
+Container status cards retain historical observations when optional action preparation fails. `actions_code` carries
+the typed failure, `actions` is empty, and no recommendation is returned. Unexpected preparation errors still fail
+assembly. A removed or changed member therefore cannot erase other collected host observations through a typed
+preparation failure.
+
 ## Group targets and cause assessment
 
 Before model exploration, exact project/stack names in the question are resolved against Docker metadata. A matching
@@ -231,8 +302,7 @@ snapshot so missing logs do not erase available container facts.
 Collected status and log facts retain their cards even when the model omits them, using the same assembly policy as
 collected problem members in a group report.
 Ambiguous names produce `clarification.required` rather than a diagnosis. The report identifies the canonical group.
-Bare English/Russian incident questions such as "What happened?" or "Что случилось?" also require a scope choice when
-discovery finds several groups. Discovery returns the observed Compose/Swarm options before model or individual log reads.
+Discovery returns the observed alternatives before model or individual log reads for deterministically ambiguous names.
 An explicitly selected group continues the original question with bounded evidence from that group only.
 The client's history keeps clarification and its selected-target request as one question, while the HTTP requests retain
 distinct request/turn IDs. The displayed trace belongs to the active diagnosis attempt.
@@ -271,6 +341,10 @@ and logs for at most four local problem containers, at most 200 configured lines
 container. Collected payloads
 and evidence references reach the model together. Failed and omitted reads remain distinct. Tool calls keep their normal
 progress and trace events. Group collection never prepares or executes a group-wide mutation.
+
+Running members with `health=unhealthy` are included in that problem-log budget even without OOM or restarts.
+`starting` alone is not a failure signal. Healthcheck failures establish a symptom, not its underlying cause.
+Missing local inventory keeps unhealthy members visible with explicit uncollected log coverage.
 
 Stack summaries add `members` and `truncated`. Compose members are containers with state and exit code. Swarm members
 are services, grouped by `com.docker.stack.namespace`; totals count desired/running task replicas. Standalone services

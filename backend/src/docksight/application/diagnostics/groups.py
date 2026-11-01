@@ -5,15 +5,14 @@ from typing import Final, cast
 from pydantic import TypeAdapter
 
 from docksight.application.diagnostics.context import EvidenceContext
-from docksight.application.diagnostics.logs import fit_logs, log_data
+from docksight.application.diagnostics.logs import collect_logs, needs_logs
 from docksight.application.ports.runtime import RuntimeReadPort
 from docksight.application.views.schemas import GroupInspection, GroupLogResult, GroupTarget
 from docksight.domain.diagnostics import JsonObject, JsonValue
 from docksight.domain.errors import DockSightError
-from docksight.domain.runtime import ContainerSnapshot, StackSummary
+from docksight.domain.runtime import StackSummary
 
 _STACKS: Final = TypeAdapter(tuple[StackSummary, ...])
-_SNAPSHOT: Final = TypeAdapter(ContainerSnapshot)
 MAX_GROUP_LOGS: Final = 4
 
 
@@ -96,13 +95,13 @@ async def _collect_local(
         report.logs = _missing_logs(report.summary, (), exc.code)
         return
     local = [row for row in rows if row.id in report.summary.container_ids]
-    problems = [row for row in local if row.state != "running" or row.oom_killed or row.restart_count > 0]
+    problems = [row for row in local if needs_logs(row)]
     for index, snapshot in enumerate(problems):
         result = GroupLogResult(
             container_id=snapshot.id, name=snapshot.name, state="not_collected", code="group_log_limit"
         )
         if index < MAX_GROUP_LOGS:
-            result = await _read_logs(runtime, context, snapshot, log_lines, log_bytes)
+            result = await collect_logs(runtime, context, snapshot, log_lines, log_bytes)
         report.logs.append(result)
     report.logs.extend(_missing_logs(report.summary, tuple(row.id for row in local), "not_in_local_inventory"))
 
@@ -112,25 +111,5 @@ def _missing_logs(summary: StackSummary, local_ids: tuple[str, ...], code: str) 
     return [
         GroupLogResult(container_id=row.id, name=row.name, state="not_collected", code=code)
         for row in summary.members
-        if row.kind == "container" and row.state != "running" and row.id not in local_ids
+        if row.kind == "container" and (row.state != "running" or row.health == "unhealthy") and row.id not in local_ids
     ]
-
-
-async def _read_logs(
-    runtime: RuntimeReadPort, context: EvidenceContext, snapshot: ContainerSnapshot, log_lines: int, log_bytes: int
-) -> GroupLogResult:
-    """Record exact-resource sources and report a failed read without replacing observed facts."""
-    result = GroupLogResult(container_id=snapshot.id, name=snapshot.name, state="failed")
-    try:
-        context.record(
-            "container", snapshot.host, cast(JsonObject, _SNAPSHOT.dump_python(snapshot, mode="json")), snapshot
-        )
-        batch = await runtime.logs(snapshot.host, snapshot.id, min(log_lines, 200), min(log_bytes, 4096))
-        batch = fit_logs(batch, min(context.remaining_bytes, 8192))
-        ref = context.record("logs", snapshot.host, log_data(batch), snapshot, batch)
-    except DockSightError as exc:
-        result.code = exc.code
-        return result
-    result.state = "collected"
-    result.evidence_id = ref.id
-    return result

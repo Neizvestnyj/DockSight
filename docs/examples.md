@@ -22,6 +22,10 @@ For your own Docker environment, choose **Connect API**, enter the backend token
 Select a container to read its state, metrics, and logs without using the model. Choose **Diagnose** or ask a question
 to start model-assisted investigation. Follow-ups stay scoped to the same host.
 
+Ask "What happened?" without selecting a resource to get a bounded host overview across projects and containers without
+an observed group. Review collection limits and missing logs, then choose **Investigate container** or an observed group
+for a separate, focused investigation. A question naming an ambiguous resource still asks which target you mean.
+
 Restart and stop require separate confirmation of a server-prepared action. After execution, refresh the container
 overview for current observations; earlier diagnostic cards retain their original evidence.
 
@@ -35,6 +39,17 @@ these commands from the repository root:
 docker compose -f examples/compose.yaml up -d
 uv run --project backend python examples/demo.py diagnose
 ```
+
+The Compose project is `docksight-demo`. Use a new project name if it already exists, and name the same project in the
+question; reusing its volume skips the first-start failure. For example:
+
+```sh
+docker compose -p docksight-example -f examples/compose.yaml up -d
+uv run --project backend python examples/demo.py diagnose "Why did the worker in Compose project docksight-example exit?"
+```
+
+Use the same `-p docksight-example` option for subsequent Compose inspection and cleanup commands.
+For a backend on another port, put `--url http://127.0.0.1:18080` before `diagnose`, `execute`, or `state`.
 
 Review the diagnosis, evidence, and `actions` in the returned card. Copy a prepared restart action ID and confirm it:
 
@@ -53,6 +68,8 @@ Reset only this demo stack and its volume with:
 ```sh
 docker compose -f examples/compose.yaml down -v
 ```
+
+This removes the example's retry marker too. Keep the project name consistent and remove only the example you created.
 
 ## HTTP integration
 

@@ -1,4 +1,3 @@
-from collections.abc import Iterator
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -66,20 +65,19 @@ async def test_failed_restart_translates_sdk_errors_without_retrying(
 
 
 @pytest.mark.parametrize(("max_bytes", "truncated"), [(64, True), (256, False)])
-async def test_logs_redact_environment_secrets_bound_output_and_close_stream(max_bytes: int, truncated: bool) -> None:
+async def test_logs_redact_environment_secrets_and_bound_output(max_bytes: int, truncated: bool) -> None:
     runtime = DockerRuntime((HostConfig(id="local"),), Redactor(()))
     sdk = MagicMock()
     sdk.api.inspect_container.return_value = {"Config": {"Env": ["DB_PASSWORD=secret-value"]}}
-    stream = sdk.api.logs.return_value
-
-    def log_chunks() -> Iterator[bytes]:
-        """Include the actual final event beyond the output byte budget."""
-        yield b"2026-01-01T00:00:00Z connected secret-value\n"
-        yield b"x" * 64 + b"\n"
-        yield b"2026-01-01T00:00:01Z database system is shut down\n"
-
-    stream.__iter__.return_value = log_chunks()
-    with patch("docksight.adapters.outbound.docker.runtime.connect", return_value=sdk):
+    chunks = (
+        b"2026-01-01T00:00:00Z connected secret-value\n"
+        + b"x" * 64
+        + b"\n2026-01-01T00:00:01Z database system is shut down\n"
+    )
+    with (
+        patch("docksight.adapters.outbound.docker.runtime.connect", return_value=sdk),
+        patch("docksight.adapters.outbound.docker.runtime.read_logs", return_value=chunks),
+    ):
         result = await runtime.logs("local", "a" * 64, lines=3, max_bytes=max_bytes)
     assert result.truncated is truncated
     assert result.entries[-1].message == "database system is shut down"
@@ -87,32 +85,6 @@ async def test_logs_redact_environment_secrets_bound_output_and_close_stream(max
     if not truncated:
         assert result.entries[0].message == "connected [REDACTED]"
     assert len(result.entries) == (1 if truncated else 3)
-    sdk.api.logs.assert_called_once_with("a" * 64, tail=3, timestamps=True, stream=True, follow=False)
-    stream.close.assert_called_once()
-    sdk.close.assert_called_once()
-    await runtime.close()
-
-
-async def test_log_scan_limit_fails_explicitly_and_closes_the_stream_without_returning_a_middle_excerpt() -> None:
-    runtime = DockerRuntime((HostConfig(id="local"),), Redactor())
-    sdk = MagicMock()
-    sdk.api.inspect_container.return_value = {"Config": {}}
-    stream = sdk.api.logs.return_value
-
-    def oversized_chunks() -> Iterator[bytes]:
-        """Reject reads after the separate hard scan limit has been reached."""
-        yield b"x" * 129
-        raise AssertionError("Read exceeded hard log scan limit")
-
-    stream.__iter__.return_value = oversized_chunks()
-    with (
-        patch("docksight.adapters.outbound.docker.runtime.connect", return_value=sdk),
-        patch("docksight.adapters.outbound.docker.runtime.MAX_LOG_SCAN_BYTES", 128),
-        pytest.raises(DockSightError) as error,
-    ):
-        await runtime.logs("local", "a" * 64, lines=200, max_bytes=64)
-    assert error.value.code == "log_read_limit"
-    stream.close.assert_called_once()
     sdk.close.assert_called_once()
     await runtime.close()
 
@@ -125,15 +97,21 @@ async def test_compose_groups_retain_each_member_state() -> None:
 
         async def containers(self, host: str) -> tuple[ContainerSnapshot, ...]:
             """Return two failed members and an unrelated container."""
-            item = replace(snapshot(), compose_project="infra")
-            return item, replace(item, id="b" * 64, name="api"), replace(item, id="c" * 64, compose_project=None)
+            item = replace(snapshot(), compose_project="infra", state="running", health="unhealthy", exit_code=0)
+            return (
+                item,
+                replace(item, id="b" * 64, name="api", state="exited", health=None, exit_code=1),
+                replace(item, id="c" * 64, compose_project=None),
+            )
 
     runtime = InventoryRuntime((HostConfig(id="local"),), Redactor(()))
     groups = await runtime.stacks("local", "compose")
     assert len(groups) == 1
     assert groups[0].name == "infra"
     assert groups[0].total == 2
-    assert [row.state for row in groups[0].members] == ["exited", "exited"]
+    assert groups[0].running == 1
+    assert [row.state for row in groups[0].members] == ["running", "exited"]
+    assert [row.health for row in groups[0].members] == ["unhealthy", None]
     assert groups[0].members[1].exit_code == 1
 
 

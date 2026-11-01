@@ -183,9 +183,15 @@ suite; missing models fail preflight. Docker pulls missing pinned fixture images
 Ollama aliases marked as remote/cloud models are rejected before fixture setup or generation.
 The workloads cover a refused database connection and invalid Grafana alerting configuration alongside healthy nginx,
 an actual memory-limited OOM kill, a crash loop, truncated logs, and an exit 137 without an OOM kill.
+Additional cases stop an owned Python process through Docker SIGTERM, observe a running HTTP server with an unhealthy
+503 probe, and retain old request errors while a process remains running. PostgreSQL-style histories are synthetic;
+these workloads do not host a database engine. Exit 137 without OOM is an explicit process exit, not an injected SIGKILL.
 
-Select a smaller matrix with repeated `--e2e-case` options: `compose-explicit`, `compose-chat`, `compose-typo`,
-`compose-spaced`, `compose-cyrillic`, `compose-ambiguous`, `oom`, `crash-loop`, `truncated-logs`, or `unknown-exit`.
+Select a smaller matrix with repeated `--e2e-case` options: `compose-healthy`, `compose-explicit`, `compose-chat`,
+`compose-typo`, `compose-spaced`, `compose-cyrillic`, `compose-ambiguous`, `oom`, `crash-loop`, `truncated-logs`,
+`unknown-exit`, `clean-shutdown`, `unhealthy`, or `running-history`.
+`compose-healthy` asks about a healthy group with no precollected individual snapshots or problem logs; its group report
+must remain usable without unsupported container cards.
 Both English and Russian run by default; repeat `--e2e-language en`
 or `--e2e-language ru` to restrict the matrix. Assertions check runtime facts, exact resource identities, card coverage,
 observed log content, and evidence references rather than exact model prose. A script-based language check covers each
@@ -193,6 +199,39 @@ summary, cause, unresolved detail, and action recommendation independently, excl
 inline/fenced code, resource identifiers, and common fixture terms such as PostgreSQL and Telegram.
 This detects English/Russian mismatches;
 it does not grade translation quality or model reasoning.
+
+Run the causal regression package in both languages:
+
+```sh
+uv run --project backend pytest backend/tests/integration/live_e2e --no-cov --live-e2e --e2e-model qwen3.5:9b --e2e-suite causal -vv -s
+```
+
+Packages and repeated `--e2e-case` selections combine without duplicate runs. The `causal` package includes these
+single-container cases and the noisy/shutdown follow-ups below:
+
+| Case | Observed fixture facts | Narrative boundary |
+|------|------------------------|--------------------|
+| `clean-shutdown` | Real SIGTERM, exit 0, orderly stop after old request errors | Stop initiator and reason remain unknown |
+| `unknown-exit` | Exit 137, `OOMKilled=false` | Neither OOM nor SIGKILL is established |
+| `oom` | Memory limit enforced, exit 137, `OOMKilled=true` | Recognize the observed OOM kill |
+| `unhealthy` | Running process, Docker health `unhealthy`, HTTP 503 | Failed probes do not mean process termination |
+| `running-history` | Running process after synthetic SQL errors | Request errors do not establish a crash or health |
+
+These single-container cases and shutdown follow-ups use production log budgets. The noisy follow-up keeps smaller
+budgets to exercise truncation and final-line retention. Checks inspect summary, immediate/deeper cause, unknowns, and
+action reasons, using authored EN/RU fixtures with negation, hypotheses, and quoted collected logs. They are bounded
+clause heuristics for one target, not a universal factuality judge; unfamiliar phrasing and causal claims still need
+manual review of saved responses. Runtime schema validation does not apply this test-only heuristic.
+Temporal ordering alone does not assert a cause: "exited after errors" is allowed when the stop reason remains unknown;
+"exited because of errors" requires supporting evidence. Keep both acceptance and rejection examples when calibrating
+new phrasing so unrelated negation or omitted synonyms do not mask a genuine contradiction.
+The unhealthy fixture also rejects authored database/dependency outage claims and guaranteed restart cures;
+its observed 503 response establishes neither. Exact collected resource identifiers cannot hide those assertions.
+Follow-ups also reject categorical "unrelated"/"not related" claims: different project names and failure modes do not
+establish independence. Qualified hypotheses remain allowed; this check covers those authored EN/RU phrase families.
+Live runs evaluate the selected model as well as the integration. A valid schema and factual cards do not ensure that
+the explanation preserves an unresolved stop reason, especially in follow-ups across projects. Retain failed response
+artifacts and review them when choosing a model; do not weaken causal expectations to obtain a passing run.
 
 Group cases also create an independently failing peer Compose project. Spaced and Cyrillic questions must resolve to the
 target without including that peer. The ambiguous case gives both projects the same human-readable prefix: the first
@@ -203,8 +242,15 @@ an explicitly named dependency container whose name equals its Compose project. 
 checks fresh dependency cards and actual log content, and retains the first turn in the ignored report. It reuses the
 existing failure workload; it does not simulate a database engine or execute product actions.
 
-`--e2e-case compose-unscoped` asks "What happened?" in English/Russian with two observed projects. It requires clarification
-before model calls or individual log reads, then selects one project and checks all its failure cards and observed names.
+`compose-follow-up-noisy` uses a running dependency with long SQL-style history; `compose-follow-up-shutdown` uses the
+actual SIGTERM/exit-0 dependency. Both exercise explicit container and mixed container/project clarification paths.
+The shutdown case also follows up on its single-member Compose group. They require fresh scoped cards and actual final
+log lines; causal checks reject old request errors being presented as the reason for stopping.
+
+`--e2e-case compose-unscoped` asks "What happened?" in English/Russian with 21 containers across two observed projects
+and an ungrouped failure: 16 running processes, four failed exits, and one normal exit. It uses production log limits.
+It requires a host overview without a project chooser, then checks counts, exact member identities, process and health
+state, bounded log coverage, factual cards, and their references against Docker. Browser runs also require the overview.
 
 To include real browser flows, install frontend dependencies and Chrome, build the client, and add `--e2e-browser`:
 

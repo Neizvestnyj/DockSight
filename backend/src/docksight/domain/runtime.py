@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Literal
 
 type ContainerState = Literal["created", "running", "paused", "restarting", "removing", "exited", "dead"]
+type ContainerHealth = Literal["starting", "healthy", "unhealthy"]
 
 
 @dataclass(frozen=True)
@@ -39,6 +40,7 @@ class ContainerSnapshot:
     metrics: ResourceMetrics = ResourceMetrics()
     environment: tuple[tuple[str, str], ...] = ()
     compose_project: str | None = None
+    health: ContainerHealth | None = None
 
     @property
     def fingerprint(self) -> str:
@@ -73,6 +75,7 @@ class StackMember:
     total: int
     running: int
     exit_code: int | None = None
+    health: ContainerHealth | None = None
 
 
 @dataclass(frozen=True)

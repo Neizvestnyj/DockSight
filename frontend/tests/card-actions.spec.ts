@@ -1,3 +1,4 @@
+import { chooseOption } from './helpers/select';
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import { demoAnswer, demoContainer, demoSystemStatus } from '../src/demo';
@@ -17,7 +18,7 @@ test('ordinary operations stay in Actions with keyboard dismissal and confirmati
   page,
 }, info) => {
   await page.goto('/');
-  await page.getByRole('combobox', { name: 'Scenario' }).selectOption('running');
+  await chooseOption(page.getByRole('combobox', { name: 'Scenario' }), 'running');
   const card = page.getByRole('group', { name: 'Container status', exact: true });
   const trigger = card.locator('.card-actions-menu summary');
   expect((await trigger.boundingBox())!.height).toBeGreaterThanOrEqual(

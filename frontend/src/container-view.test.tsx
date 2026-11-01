@@ -1,3 +1,4 @@
+import { chooseOption } from '../test-utils/select';
 import '@testing-library/jest-dom/vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -132,7 +133,7 @@ describe('read-only container viewing', () => {
     render(<App />);
     fireEvent.click(await screen.findByTitle('payments-api'));
     expect(pending?.aborted).toBe(false);
-    fireEvent.change(screen.getByLabelText('Configured host'), { target: { value: 'demo-empty' } });
+    chooseOption(screen.getByLabelText('Configured host'), 'demo-empty');
     expect(pending?.aborted).toBe(true);
     expect(screen.queryByRole('region', { name: 'Container facts' })).not.toBeInTheDocument();
     expect(await screen.findByText('No containers on this host.')).toBeInTheDocument();

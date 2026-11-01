@@ -1,3 +1,4 @@
+import { chooseOption } from './helpers/select';
 import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { demoContainer, demoSystemStatus } from '../src/demo';
@@ -204,7 +205,7 @@ test('keeps demo status checks localized and preserves an investigation and its 
   await page.getByRole('button', { name: 'Review stop' }).click();
   const action = await page.getByRole('dialog').locator('.confirmation-facts code').last().innerText();
   await page.keyboard.press('Escape');
-  await page.getByRole('combobox', { name: 'Language' }).selectOption('ru');
+  await chooseOption(page.getByRole('combobox', { name: 'Language' }), 'ru');
   await page.getByRole('button', { name: /^Состояние системы/ }).focus();
   await page.keyboard.press('Enter');
   const dialog = page.getByRole('dialog', { name: 'Состояние системы' });

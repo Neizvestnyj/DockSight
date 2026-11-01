@@ -3,7 +3,7 @@ import { useLocale } from './locale';
 import { useId, useState } from 'react';
 import { ArrowUpRight, ChevronDown, FileText, Layers, LockKeyhole, Terminal, Box } from 'lucide-react';
 import type { Action, Evidence, Widget } from './contracts';
-import { Status } from './ui';
+import { HealthFact, Status } from './ui';
 import { bytes, utc } from './format';
 import { EnvironmentContent, LogContent } from './RuntimeContent';
 import { CardActions } from './CardActions';
@@ -119,10 +119,17 @@ export function WidgetCard({
           <p className="image-name">
             <code>{widget.snapshot.image}</code>
           </p>
+          <HealthFact state={widget.snapshot.state} health={widget.snapshot.health} />
           <dl className="fact-strip">
             <div>
               <dt>{t('Exit code')}</dt>
-              <dd>{widget.snapshot.exit_code}</dd>
+              <dd
+                className={
+                  widget.snapshot.state === 'exited' && widget.snapshot.exit_code !== 0 ? 'negative' : undefined
+                }
+              >
+                {widget.snapshot.exit_code}
+              </dd>
             </div>
             <div>
               <dt>{t('OOM killed')}</dt>
@@ -167,6 +174,11 @@ export function WidgetCard({
                 </button>
               )}
             </div>
+          )}
+          {widget.actions_code && (
+            <p className="section-note warning-text">
+              {t('Actions unavailable')} · <code>{widget.actions_code}</code>
+            </p>
           )}
           <footer className="widget-foot">
             <time dateTime={widget.snapshot.observed_at}>{utc(widget.snapshot.observed_at)}</time>
@@ -245,6 +257,7 @@ export function EvidenceInspector({ evidence, resourceName }: { evidence?: Evide
     logs: 'Docker logs',
     stats: 'Docker stats',
     stack: 'Docker stack inventory',
+    host: 'Docker host inventory',
     env: 'Allowlisted environment',
   } as const;
   return (

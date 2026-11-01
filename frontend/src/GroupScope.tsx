@@ -1,6 +1,8 @@
 import { MessageSquarePlus, RefreshCw } from 'lucide-react';
 import { useLocale } from './locale';
 import type { useGroups, GroupKind } from './useGroups';
+import { Select } from './Select';
+import { Hint } from './Hint';
 
 /** Offer optional explicit scope beside the investigation, leaving named-group chat automatic. */
 export function GroupScope({
@@ -15,30 +17,40 @@ export function GroupScope({
   const { t } = useLocale();
   return (
     <section className="group-scope" aria-label={t('Investigation scope')}>
-      <label>
-        {t('Investigation scope')}
-        <select value={scope.kind} onChange={(event) => scope.changeKind(event.target.value as GroupKind)}>
-          <option value="all">{t('Automatic')}</option>
-          <option value="compose">{t('Compose projects')}</option>
-          <option value="swarm">{t('Swarm stacks')}</option>
-        </select>
-      </label>
+      <div className="scope-field">
+        <div className="scope-caption">
+          <span>{t('Investigation scope')}</span>
+          <Hint label={t('About investigation scope')}>
+            {t(
+              'Leave Automatic to investigate the host. Name a project, stack, or container in your question to narrow the scope.',
+            )}
+          </Hint>
+        </div>
+        <Select<GroupKind>
+          label={t('Investigation scope')}
+          value={scope.kind}
+          onChange={scope.changeKind}
+          options={[
+            { value: 'all', label: t('Automatic') },
+            { value: 'compose', label: t('Compose projects') },
+            { value: 'swarm', label: t('Swarm stacks') },
+          ]}
+        />
+      </div>
       {scope.kind !== 'all' && (
         <>
           <label>
             {t('Group')}
-            <select
+            <Select
+              label={t('Group')}
               value={scope.group?.name ?? ''}
               disabled={scope.loading || scope.error}
-              onChange={(event) => scope.choose(event.target.value)}
-            >
-              <option value="">{t(scope.loading ? 'Reading groups…' : 'Choose a group')}</option>
-              {scope.groups.map((row) => (
-                <option key={row.name} value={row.name}>
-                  {row.name}
-                </option>
-              ))}
-            </select>
+              onChange={scope.choose}
+              options={[
+                { value: '', label: t(scope.loading ? 'Reading groups…' : 'Choose a group') },
+                ...scope.groups.map((row) => ({ value: row.name, label: row.name })),
+              ]}
+            />
           </label>
           <div className="group-scope-actions">
             <button
@@ -72,9 +84,6 @@ export function GroupScope({
           {scope.group?.truncated && <p className="warning-text">{t('Group inventory may be incomplete.')}</p>}
         </>
       )}
-      <p className="scope-help">
-        {t('Optional. Name a project or stack in your question; DockSight selects it automatically.')}
-      </p>
     </section>
   );
 }

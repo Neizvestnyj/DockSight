@@ -1,4 +1,6 @@
 import json
+from dataclasses import replace
+from unittest.mock import patch
 
 import pytest
 
@@ -134,3 +136,87 @@ async def test_exhausted_evidence_budget_rejects_logs_without_overspending() -> 
         )
     assert error.value.code == "evidence_limit"
     assert context.used_bytes <= 65536
+
+
+@pytest.mark.parametrize("reference", ["backend-1", "1" * 64])
+async def test_repeated_read_reuses_observations_across_exact_name_and_id(reference: str) -> None:
+    runtime = DiscoveryRuntime()
+    context = EvidenceContext()
+    tools = DiagnosticTools(runtime, context, "local")
+    first = await tools.execute(ToolCall("first", "get_container_logs", {"container_id": "backend-1"}))
+    runtime.log_batch = LogBatch((LogEntry("A later observation belongs to a new turn."),))
+    with patch.object(runtime, "containers", side_effect=AssertionError("Repeated read requested fresh inventory")):
+        repeated = await tools.execute(ToolCall("again", "get_container_logs", {"container_id": reference}))
+    assert repeated == {"already_collected": True, "evidence_ids": ["e1", "e2"]}
+    assert first["data"] != repeated.get("data")
+    assert runtime.reads == ["1" * 64]
+    assert len(context.evidence) == 2
+    fresh = await DiagnosticTools(runtime, EvidenceContext(), "local").execute(
+        ToolCall("new-turn", "get_container_logs", {"container_id": "backend-1"})
+    )
+    assert "A later observation" in json.dumps(fresh)
+    assert runtime.reads == ["1" * 64, "1" * 64]
+
+
+async def test_repeated_group_read_returns_only_its_existing_evidence_references() -> None:
+    runtime = DiscoveryRuntime()
+    context = EvidenceContext()
+    tools = DiagnosticTools(runtime, context, "local")
+    target = {"kind": "compose", "name": "vintoria-infra"}
+    first = await tools.execute(ToolCall("first", "inspect_group", target))
+    size = len(context.evidence)
+    second = await tools.execute(ToolCall("second", "inspect_group", target))
+    assert second == {"already_collected": True, "evidence_ids": [f"e{i}" for i in range(1, size + 1)]}
+    assert "observations" in first
+    assert len(context.evidence) == size
+    assert len(json.dumps(second)) < len(json.dumps(first)) // 2
+    assert runtime.reads == ["1" * 64, "2" * 64]
+
+
+async def test_narrowed_scope_does_not_reuse_an_unscoped_inventory_or_outside_read() -> None:
+    context = EvidenceContext()
+    tools = DiagnosticTools(DiscoveryRuntime(), context, "local")
+    await tools.execute(ToolCall("outside", "get_container_logs", {"container_id": "3" * 64}))
+    await tools.execute(ToolCall("all", "list_containers", {}))
+    await tools.execute(ToolCall("group", "inspect_group", {"kind": "compose", "name": "vintoria-infra"}))
+    scoped = await tools.execute(ToolCall("scoped", "list_containers", {}))
+    assert "already_collected" not in scoped
+    assert "unrelated-1" not in json.dumps(scoped)
+    with pytest.raises(DockSightError) as failure:
+        await tools.execute(ToolCall("outside-again", "get_container_logs", {"container_id": "3" * 64}))
+    assert failure.value.code == "resource_outside_group"
+
+
+async def test_distinct_tools_and_arguments_collect_distinct_observations() -> None:
+    context = EvidenceContext()
+    tools = DiagnosticTools(DiscoveryRuntime(), context, "local")
+    for tool, container in [
+        ("inspect_container", "1" * 64),
+        ("get_container_logs", "1" * 64),
+        ("get_container_logs", "2" * 64),
+    ]:
+        result = await tools.execute(ToolCall(tool + container, tool, {"container_id": container}))
+        assert "already_collected" not in result
+    assert len(context.evidence) == 5
+
+
+async def test_failed_read_can_be_corrected_without_reusing_its_error() -> None:
+    class RecoveringRuntime(FakeRuntime):
+        """Fail one external log read before a later successful observation."""
+
+        async def logs(self, host: str, container_id: str, lines: int, max_bytes: int) -> LogBatch:
+            """Use the existing fixture state to report temporary log unavailability."""
+            if self.item.state == "exited":
+                raise DockSightError("logs_unavailable", "Logs are temporarily unavailable", 503)
+            return self.log_batch
+
+    runtime = RecoveringRuntime()
+    tools = DiagnosticTools(runtime, EvidenceContext(), "local")
+    call = ToolCall("logs", "get_container_logs", {"container_id": "worker"})
+    with pytest.raises(DockSightError, match="temporarily"):
+        await tools.execute(call)
+    runtime.item = replace(runtime.item, state="running")
+    assert "data" in await tools.execute(call)
+    with pytest.raises(DockSightError) as invalid:
+        await tools.execute(ToolCall("invalid", "get_container_logs", {"container_id": "worker", "host": "other"}))
+    assert invalid.value.code == "invalid_tool_arguments"

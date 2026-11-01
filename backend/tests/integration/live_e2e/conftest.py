@@ -6,7 +6,14 @@ from uuid import uuid4
 import httpx
 import pytest
 
-from tests.integration.live_e2e.cases import CASES, FOLLOW_UP_CASES, FOLLOW_UP_SHUTDOWN_CASE, Case
+from tests.integration.live_e2e.cases import (
+    CASES,
+    FOLLOW_UP_CASES,
+    FOLLOW_UP_SHUTDOWN_CASE,
+    SUITES,
+    Case,
+    selected_scenarios,
+)
 from tests.integration.live_e2e.lab import ROOT, ComposeLab
 from tests.integration.live_e2e.server import live_api, local_model_url, require_local_models
 
@@ -19,6 +26,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     group.addoption("--e2e-model-url", default="http://127.0.0.1:11434", help="Loopback Ollama endpoint")
     group.addoption("--e2e-language", action="append", choices=["en", "ru"], help="Select a language; default both")
     group.addoption("--e2e-browser", action="store_true", help="Also run real Chrome group diagnostics")
+    group.addoption("--e2e-suite", action="append", choices=list(SUITES), help="Select a scenario package; repeat")
     group.addoption(
         "--e2e-case",
         action="append",
@@ -38,7 +46,7 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
     }:
         return
     names = metafunc.config.getoption("e2e_model") or ["disabled"]
-    selected = metafunc.config.getoption("e2e_case")
+    selected = selected_scenarios(metafunc.config.getoption("e2e_case"), metafunc.config.getoption("e2e_suite"))
     cases = _cases_for(function, selected)
     metafunc.parametrize("model_name", names)
     metafunc.parametrize("case", cases, ids=lambda row: row.name)

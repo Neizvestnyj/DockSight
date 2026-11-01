@@ -7,6 +7,7 @@ x-worker: &worker
     com.docksight.e2e: ${DOCKSIGHT_E2E_OWNER:?Set a unique run owner}
   environment:
     APP_ENV: live-e2e
+    DOCKSIGHT_E2E_DENSE_LOGS: ${DOCKSIGHT_E2E_DENSE_LOGS:-0}
   mem_limit: 64m
   memswap_limit: 64m
   cpus: 0.5
@@ -62,6 +63,20 @@ services:
   unknown:
     <<: *worker
     command: [unknown]
+  clean-shutdown:
+    <<: *worker
+    command: [clean-shutdown]
+  database-current:
+    <<: *worker
+    command: [database-current]
+  unhealthy:
+    <<: *worker
+    command: [unhealthy]
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=1)"]
+      interval: 1s
+      timeout: 2s
+      retries: 2
 
 networks:
   fixture:

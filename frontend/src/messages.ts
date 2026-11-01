@@ -7,6 +7,42 @@ export type MessageValues = Record<string, string | number>;
 
 /** Keep product copy separate from verbatim Docker, model, and server content. */
 const russian = {
+  'About investigation scope': 'Об области диагностики',
+  'Leave Automatic to investigate the host. Name a project, stack, or container in your question to narrow the scope.':
+    'Оставьте «Автоматически», чтобы проверить хост. Укажите проект, стек или контейнер в вопросе, чтобы сузить область.',
+  'Host overview': 'Обзор хоста',
+  'Docker host inventory': 'Список контейнеров хоста Docker',
+  'Observed containers': 'Наблюдаемые контейнеры',
+  'Needs review': 'Требуют внимания',
+  'Local Docker containers only. Remote Swarm replicas are not included.':
+    'Только локальные контейнеры Docker. Реплики Swarm на других узлах не учитываются.',
+  'Observation limits reached. More containers or group choices may exist.':
+    'Достигнуты лимиты обзора. Могут существовать другие контейнеры или группы.',
+  'Group discovery is incomplete. Local container observations are retained.':
+    'Список групп неполон. Наблюдения локальных контейнеров сохранены.',
+  'No observed group': 'Группа не определена',
+  'Investigate container': 'Исследовать контейнер',
+  'No containers in this observation.': 'В этом наблюдении нет контейнеров.',
+  'Container preview omitted by collection limits.': 'Список контейнеров опущен из-за лимитов сбора.',
+  'Actions unavailable': 'Действия недоступны',
+  'Narrow to an observed group': 'Исследовать найденную группу',
+  'Starts a new investigation. Your draft is preserved.': 'Начнётся новое расследование. Черновик будет сохранён.',
+  'Automatic log reads are limited to four local containers.':
+    'Автоматический сбор логов ограничен четырьмя локальными контейнерами.',
+  'Investigate this container ({id}). What happened, and what evidence supports it?':
+    'Проверь этот контейнер ({id}). Что произошло и какие наблюдения это подтверждают?',
+  'Inspecting host observations': 'Проверка наблюдений хоста',
+  'Health: healthy': 'В норме',
+  'Health: unhealthy': 'Сбой',
+  'Health: starting': 'Проверяется',
+  'Health: not reported': 'Нет данных',
+  'Docker healthcheck': 'Проверка здоровья Docker',
+  Healthcheck: 'Проверка здоровья',
+  'Last healthcheck': 'Последняя проверка',
+  'The model context window is full. Narrow the question or increase the configured context size.':
+    'Контекстное окно модели заполнено. Уточните вопрос или увеличьте размер контекста в настройках.',
+  'The model response reached its output limit. Ask for a shorter answer or increase the output limit.':
+    'Ответ модели достиг лимита вывода. Запросите более короткий ответ или увеличьте лимит в настройках.',
   Retry: 'Повторить',
   'Choose model': 'Выбрать модель',
   'Model selection is available after this answer finishes.': 'Модель можно сменить после завершения ответа.',
@@ -47,8 +83,6 @@ const russian = {
   Scope: 'Область',
   'Observation sources': 'Источники наблюдений по ресурсам',
   'Observation ID': 'ID наблюдения',
-  'Optional. Name a project or stack in your question; DockSight selects it automatically.':
-    'Выбор необязателен. Укажите проект или стек в вопросе — DockSight определит группу автоматически.',
   'All containers': 'Все контейнеры',
   'Compose projects': 'Проекты Compose',
   'Swarm stacks': 'Стеки Swarm',
@@ -533,9 +567,13 @@ export const diagnosticErrors: Readonly<Partial<Record<string, MessageKey>>> = {
   model_unavailable:
     'The configured model was not found or is unavailable to this API key. Check the model name and your access.',
   model_not_supported: 'Model request rejected; verify model capabilities and configuration',
+  model_context_limit: 'The model context window is full. Narrow the question or increase the configured context size.',
+  model_truncated:
+    'The model response reached its output limit. Ask for a shorter answer or increase the output limit.',
 };
 
 export const diagnosticOperations: Record<string, MessageKey> = {
+  inspect_host: 'Inspecting host observations',
   resolve_target: 'Resolving diagnostic scope',
   inspect_group: 'Inspecting group members',
   request_group_selection: 'Requesting group selection',
@@ -554,6 +592,10 @@ export const diagnosticOperations: Record<string, MessageKey> = {
 export type Translator = (key: MessageKey, values?: MessageValues) => string;
 
 const englishOverrides: Partial<Record<MessageKey, string | Plurals>> = {
+  'Health: healthy': 'Healthy',
+  'Health: unhealthy': 'Unhealthy',
+  'Health: starting': 'Starting',
+  'Health: not reported': 'Not reported',
   awaiting_selection: 'Awaiting resource selection',
   actionRunning: 'running',
   '{count} lines returned': { one: '{count} line returned', other: '{count} lines returned' },

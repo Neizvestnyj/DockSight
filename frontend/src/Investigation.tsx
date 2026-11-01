@@ -23,6 +23,7 @@ import { EvidenceTrail } from './EvidenceTrail';
 import { containerWidgetGroups, evidenceResource, widgetSource } from './evidence';
 import { ContainerEvidence } from './ContainerEvidence';
 import { GroupClarification } from './GroupClarification';
+import { HostOverview } from './HostOverview';
 
 interface Props {
   investigation: ReturnType<typeof useInvestigation>;
@@ -90,6 +91,20 @@ export function Investigation({
     setView(null);
     void run(query, false, target);
     setDraft('');
+  }
+
+  /** Start an explicit scope-specific turn while retaining the operator's unrelated draft and history. */
+  function narrow(target: DiagnosticTarget) {
+    if (blocked || running) return;
+    const query =
+      target.kind === 'container'
+        ? t('Investigate this container ({id}). What happened, and what evidence supports it?', { id: target.id })
+        : t('Investigate the {kind} group {name}. Check every member and explain the failures.', {
+            kind: target.kind === 'compose' ? 'Compose' : 'Swarm',
+            name: target.name,
+          });
+    setView(null);
+    void run(query, true, target);
   }
 
   return (
@@ -294,6 +309,15 @@ export function Investigation({
               demo={demo}
             />
             {answer?.group && <GroupReport report={answer.group} evidence={answer.evidence} inspect={inspect} />}
+            {answer?.host_overview && (
+              <HostOverview
+                report={answer.host_overview}
+                evidence={answer.evidence}
+                inspect={inspect}
+                narrow={narrow}
+                disabled={running || blocked}
+              />
+            )}
             {answer && (
               <AnswerGrid
                 key={`answer-${turn.id}`}

@@ -5,7 +5,7 @@ import type { MessageKey } from './messages';
 import { bytes, utc } from './format';
 import { useLocale } from './locale';
 import { EnvironmentContent, LogContent } from './RuntimeContent';
-import { Status } from './ui';
+import { HealthFact, Status } from './ui';
 import { useContainerRead, type RuntimeRead } from './useContainerRead';
 
 interface Props {
@@ -112,10 +112,13 @@ export function ContainerView({
                   <Status state={state.state} />
                   <code>{state.image}</code>
                 </div>
+                <HealthFact state={state.state} health={state.health} />
                 <dl className="fact-strip runtime-lifecycle">
                   <div>
                     <dt>{t('Exit code')}</dt>
-                    <dd>{state.exit_code}</dd>
+                    <dd className={state.state === 'exited' && state.exit_code !== 0 ? 'negative' : undefined}>
+                      {state.exit_code}
+                    </dd>
                   </div>
                   <div>
                     <dt>{t('OOM killed')}</dt>

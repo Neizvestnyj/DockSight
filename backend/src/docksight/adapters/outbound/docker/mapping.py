@@ -6,6 +6,7 @@ from typing import Any, cast
 from docksight.application.redaction import Redactor, secret_name
 from docksight.domain.errors import DockSightError
 from docksight.domain.runtime import (
+    ContainerHealth,
     ContainerSnapshot,
     ContainerState,
     LogBatch,
@@ -59,7 +60,22 @@ def map_container(
         observed_at=datetime.now(UTC),
         environment=environment,
         compose_project=clean.text(labels.get("com.docker.compose.project", "")) or None,
+        health=_health(state.get("Health")),
     )
+
+
+def _health(raw: object) -> ContainerHealth | None:
+    """Allowlist the observed health status without exposing probe commands or output."""
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise DockSightError("invalid_runtime_data", "Invalid container health data", 502)
+    status = cast(dict[str, object], raw).get("Status")
+    if status == "none":
+        return None
+    if status not in ("starting", "healthy", "unhealthy"):
+        raise DockSightError("invalid_runtime_data", "Unknown container health status", 502)
+    return status
 
 
 def _cpu_percent(raw: Mapping[str, Any]) -> float | None:

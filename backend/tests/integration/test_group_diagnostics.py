@@ -1,20 +1,28 @@
 import json
+from collections.abc import Sequence
 from dataclasses import replace
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 from httpx import Response
 
-from docksight.application.ports.models import ModelReply, ToolCall
+from docksight.application.ports.models import ModelMessage, ModelReply, ToolCall
 from docksight.bootstrap import Settings, build_components
 from docksight.main import create_app
 from tests.fakes import DiscoveryRuntime, FakeRuntime, ScriptedModel
 
 
-def test_unscoped_question_collects_no_logs_until_the_operator_selects_a_project() -> None:
+@pytest.mark.parametrize("query", ["What happened?", "Что случилось?"])
+def test_unscoped_question_collects_host_overview_then_narrows_to_an_explicit_project(query: str) -> None:
     runtime = DiscoveryRuntime()
+    runtime.rows = (*runtime.rows, replace(runtime.item, id="4" * 64, name="standalone", compose_project=None))
     model = ScriptedModel(
         [
+            ModelReply("Ready"),
+            ModelReply(
+                json.dumps({"summary": "Host needs inspection", "uncertain": True, "evidence_ids": [], "widgets": []})
+            ),
             ModelReply("Ready"),
             ModelReply(
                 json.dumps({"summary": "Two members failed", "uncertain": True, "evidence_ids": [], "widgets": []})
@@ -24,25 +32,44 @@ def test_unscoped_question_collects_no_logs_until_the_operator_selects_a_project
     settings = Settings(api_token="unscoped-integration-token-24", _env_file=None)
     components = build_components(settings, reader=runtime, writer=runtime, model=model)
     headers = {"Authorization": "Bearer unscoped-integration-token-24"}
-    body = {"host": "local", "query": "Что случилось?"}
+    body = {"host": "local", "query": query}
     with TestClient(create_app(settings, components)) as api:
         first = api.post("/api/v1/chat/turns", headers=headers, json=body)
         events = [json.loads(line[6:]) for line in first.text.splitlines() if line.startswith("data: ")]
         assert events[-1]["type"] == "turn.completed"
-        selection = next(event["selection"] for event in events if event["type"] == "clarification.required")
-        assert {row["name"] for row in selection["candidates"]} == {"other-project", "vintoria-infra"}
-        assert not any(event["type"] == "answer.ready" for event in events)
-        assert not runtime.reads
-        assert not model.requests
+        assert not any(event["type"] == "clarification.required" for event in events)
+        overview_answer = next(event["answer"] for event in events if event["type"] == "answer.ready")
+        _check_discovered_host_overview(overview_answer)
+        assert len(runtime.reads) == 4
+        runtime.reads.clear()
+        runtime.rows = (replace(runtime.rows[0], restart_count=5), *runtime.rows[1:])
         second = api.post(
-            "/api/v1/chat/turns", headers=headers, json={**body, "group": {"kind": "compose", "name": "vintoria-infra"}}
+            "/api/v1/chat/turns",
+            headers=headers,
+            json={
+                **body,
+                "session_id": events[0]["session_id"],
+                "group": {"kind": "compose", "name": "vintoria-infra"},
+            },
         )
     completed = [json.loads(line[6:]) for line in second.text.splitlines() if line.startswith("data: ")]
     assert completed[-1]["type"] == "turn.completed"
     answer = next(event["answer"] for event in completed if event["type"] == "answer.ready")
+    assert answer["host_overview"] is None
     assert answer["group"]["summary"]["name"] == "vintoria-infra"
     assert len(answer["widgets"]) == 4
+    status = next(row for row in answer["widgets"] if row["widget_type"] == "container_status")
+    assert status["snapshot"]["restart_count"] == 5
     assert set(runtime.reads) == {"1" * 64, "2" * 64}
+
+
+def _check_discovered_host_overview(answer: dict[str, Any]) -> None:
+    """Require both observed projects and the standalone fixture in the initial host report."""
+    overview = answer["host_overview"]
+    assert answer["group"] is None
+    assert (overview["host"], overview["total"], overview["running"], overview["attention"]) == ("local", 4, 0, 4)
+    assert {row["container_id"] for row in overview["members"]} == {str(index) * 64 for index in range(1, 5)}
+    assert {row["name"] for row in overview["targets"]} == {"other-project", "vintoria-infra"}
 
 
 @pytest.mark.parametrize("clarify", [False, True])
@@ -99,13 +126,20 @@ def test_group_follow_up_keeps_history_and_reads_a_container_with_a_colliding_pr
     assert answer["group"] is None
     assert answer["widgets"][0]["snapshot"]["id"] == "3" * 64
     assert answer["widgets"][1]["container_id"] == "3" * 64
-    assert [(row.role, row.content) for row in model.requests[2][0] if row.role != "system"][:2] == [
-        ("user", first_query),
-        ("assistant", summary),
-    ]
+    _check_prior_context(model.requests[2][0], first_query, summary)
     assert len(original["widgets"]) == 4
     assert original["group"]["summary"]["name"] == "vintoria-infra"
     assert runtime.reads == ["1" * 64, "2" * 64, "3" * 64]
+
+
+def _check_prior_context(messages: Sequence[ModelMessage], query: str, summary: str) -> None:
+    """Retain earlier operator references and validated summaries in an explicit context document."""
+    history = next(row for row in messages if "previous_turns" in row.content)
+    assert history.role == "user"
+    assert json.loads(history.content.split("\n", 1)[1])["previous_turns"] == [
+        {"role": "user", "content": query},
+        {"role": "assistant", "content": summary},
+    ]
 
 
 def _check_mixed_clarification(response: Response) -> None:

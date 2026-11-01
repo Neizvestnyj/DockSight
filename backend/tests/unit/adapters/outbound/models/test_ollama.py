@@ -111,3 +111,24 @@ async def test_malformed_json_shapes_raise_typed_provider_error(payload: object)
         with pytest.raises(DockSightError) as error:
             await OllamaModel(client, "test").complete([ModelMessage("user", "Hello")])
         assert error.value.code == "invalid_model_response"
+
+
+@pytest.mark.parametrize(
+    ("input_tokens", "output_tokens", "expected"),
+    [(15865, 519, "model_context_limit"), (12000, 4096, "model_truncated")],
+)
+async def test_context_exhaustion_is_distinct_from_the_configured_output_limit(
+    input_tokens: int, output_tokens: int, expected: str
+) -> None:
+    response = {
+        "message": {"content": '{"summary":"Incomplete'},
+        "done_reason": "length",
+        "prompt_eval_count": input_tokens,
+        "eval_count": output_tokens,
+    }
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda _: httpx.Response(200, json=response)), base_url="http://ollama"
+    ) as client:
+        with pytest.raises(DockSightError) as error:
+            await OllamaModel(client, "test-model").complete([ModelMessage("user", "Inspect host")])
+    assert error.value.code == expected

@@ -5,6 +5,7 @@ import { Modal } from './ui';
 import { providerNames, type ModelSelection, type ProviderId } from './model-contracts';
 import type { CheckState } from './contracts';
 import type { useModelCatalog } from './useModelCatalog';
+import { Select } from './Select';
 
 type Catalogs = ReturnType<typeof useModelCatalog>;
 
@@ -95,20 +96,19 @@ export function ModelPicker({
         <>
           <label className="field model-provider-field">
             {t('Provider')}
-            <select
+            <Select<ProviderId>
+              label={t('Provider')}
               value={provider}
-              onChange={(event) => {
-                setProvider(event.target.value as ProviderId);
+              onChange={(next) => {
+                setProvider(next);
                 setSearch('');
               }}
-            >
-              {providers.providers.map((row) => (
-                <option key={row.id} value={row.id} disabled={!row.configured}>
-                  {row.name}
-                  {!row.configured ? ` · ${t('Not configured')}` : ''}
-                </option>
-              ))}
-            </select>
+              options={providers.providers.map((row) => ({
+                value: row.id,
+                label: `${row.name}${!row.configured ? ` · ${t('Not configured')}` : ''}`,
+                disabled: !row.configured,
+              }))}
+            />
           </label>
           <div className="model-search-row">
             <label className="model-search">

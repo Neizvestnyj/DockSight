@@ -1,3 +1,4 @@
+import { chooseOption } from './helpers/select';
 import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { demoAnswer, demoContainer, demoSystemStatus } from '../src/demo';
@@ -22,6 +23,72 @@ async function connectApi(page: Page) {
   await page.getByRole('button', { name: 'Connect', exact: true }).click();
   await expect(page.locator('.composer-foot')).toContainText('test-host');
 }
+
+test('keeps reported health separate from lifecycle state across inventory and refreshed facts', async ({
+  page,
+}, info) => {
+  const snapshot = { ...demoContainer(2, 'test-host', '2026-10-27T12:00:00Z'), state: 'running' as const };
+  let health: 'healthy' | 'unhealthy' | 'starting' | null = 'unhealthy';
+  let state: 'running' | 'exited' = 'running';
+  let exit_code = 0;
+  await page.route('**/api/v1/**', (route) => {
+    const request = route.request();
+    expect(request.method()).toBe('GET');
+    const url = new URL(request.url());
+    if (url.pathname.endsWith('/system/status'))
+      return route.fulfill({ json: demoSystemStatus(url.searchParams.get('host')) });
+    if (url.pathname.endsWith('/hosts')) return route.fulfill({ json: [{ id: snapshot.host, name: 'Test host' }] });
+    if (url.pathname.endsWith('/containers'))
+      return route.fulfill({ json: [{ ...snapshot, health, state, exit_code }] });
+    if (url.pathname.endsWith('/stats')) return route.fulfill({ json: snapshot.metrics });
+    if (url.pathname.endsWith('/logs')) return route.fulfill({ json: { entries: [], truncated: false } });
+    return route.fulfill({ json: { ...snapshot, health, state, exit_code } });
+  });
+  await page.goto('/');
+  await connectApi(page);
+  if ((page.viewportSize()?.width ?? 1440) <= 1100)
+    await page.getByRole('button', { name: 'Open host and containers' }).click();
+  const row = page.getByTitle(snapshot.name, { exact: true }).filter({ visible: true });
+  await expect(row.getByText('Unhealthy')).toBeVisible();
+  expect(await row.getByText('running', { exact: true }).evaluate((node) => getComputedStyle(node).color)).not.toBe(
+    await row.getByText('Unhealthy').evaluate((node) => getComputedStyle(node).color),
+  );
+  await row.click();
+  const facts = page.getByRole('region', { name: 'Container facts', exact: true });
+  await expect(facts.locator('.runtime-state')).not.toContainText('Unhealthy');
+  await expect(facts.locator('.health-fact')).toContainText('Healthcheck');
+  await expect(facts.locator('.health-fact')).toContainText('Unhealthy');
+  await expect(facts.getByText('running', { exact: true })).toBeVisible();
+  await page.screenshot({ path: `test-results/${info.project.name}-container-health.png`, fullPage: true });
+  for (const [next, label] of [
+    ['healthy', 'Healthy'],
+    ['starting', 'Starting'],
+    [null, 'Not reported'],
+  ] as const) {
+    health = next;
+    await facts.getByRole('button', { name: 'Refresh data' }).click();
+    await expect(facts.locator('.health-fact').getByText(label)).toBeVisible();
+  }
+  state = 'exited';
+  health = 'unhealthy';
+  exit_code = 1;
+  await facts.getByRole('button', { name: 'Refresh data' }).click();
+  await expect(facts.locator('.runtime-state').getByText('exited', { exact: true })).toHaveClass(/neutral/);
+  await expect(facts.locator('.health-fact')).toContainText('Last healthcheck');
+  await expect(facts.locator('.health-fact').getByText('Unhealthy')).toHaveClass(/negative/);
+  await chooseOption(page.getByRole('combobox', { name: 'Language' }), 'ru');
+  const russianFacts = page.getByRole('region', { name: 'Факты о контейнере', exact: true });
+  await expect(russianFacts.locator('.runtime-state')).toContainText('завершён');
+  await expect(russianFacts.locator('.runtime-state')).not.toContainText('Сбой');
+  await expect(russianFacts.locator('.health-fact')).toContainText('Последняя проверка');
+  await expect(russianFacts.locator('.health-fact').getByText('Сбой', { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  await page.screenshot({ path: `test-results/${info.project.name}-container-health-ru.png`, fullPage: true });
+  await russianFacts.getByRole('region', { name: 'Состояние контейнера', exact: true }).screenshot({
+    path: `test-results/${info.project.name}-container-health-card-ru.png`,
+  });
+});
 
 test('reads and refreshes facts without LLM calls, then diagnoses in a separate session', async ({ page }) => {
   const snapshot = demoContainer(0, 'test-host', '2026-10-20T09:00:00Z');
@@ -172,7 +239,7 @@ test('keeps large untrusted observations bounded and retains successful data aft
 
 test('keeps demo reads localized and keyboard accessible without translating log text', async ({ page }, info) => {
   await page.goto('/');
-  await page.getByRole('combobox', { name: 'Language' }).selectOption('ru');
+  await chooseOption(page.getByRole('combobox', { name: 'Language' }), 'ru');
   await chooseContainer(page, 'payments-api', true);
   const facts = page.getByRole('region', { name: 'Факты о контейнере', exact: true });
   await expect(facts.getByRole('heading', { name: 'payments-api' })).toBeFocused();

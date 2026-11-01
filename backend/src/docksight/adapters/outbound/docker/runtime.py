@@ -1,6 +1,6 @@
 import asyncio
-from collections.abc import Callable, Iterator
-from contextlib import closing
+from collections.abc import Callable
+from time import monotonic
 from typing import Any, Final, Literal, Protocol, cast
 
 from docker.errors import DockerException, NotFound
@@ -9,6 +9,7 @@ from requests import RequestException
 
 from docksight.adapters.outbound.docker.groups import SwarmAPI, compose_stacks, swarm_stacks
 from docksight.adapters.outbound.docker.hosts import HostConfig, connect
+from docksight.adapters.outbound.docker.logs import LogAPI, read_logs
 from docksight.adapters.outbound.docker.mapping import map_container, map_metrics, parse_logs
 from docksight.application.redaction import Redactor
 from docksight.domain.errors import DockSightError
@@ -23,19 +24,7 @@ from docksight.domain.runtime import (
 MAX_LOG_SCAN_BYTES: Final = 8 * 1024 * 1024
 
 
-class LogStream(Protocol):
-    """Describe a closeable stream of Docker log bytes."""
-
-    def __iter__(self) -> Iterator[bytes]:
-        """Yield log chunks while the underlying SDK response remains open."""
-        ...
-
-    def close(self) -> None:
-        """Release the underlying streaming response."""
-        ...
-
-
-class DockerAPI(SwarmAPI, Protocol):
+class DockerAPI(SwarmAPI, LogAPI, Protocol):
     """Describe the low-level SDK surface whose upstream stubs are incomplete."""
 
     def ping(self) -> bool:
@@ -48,10 +37,6 @@ class DockerAPI(SwarmAPI, Protocol):
 
     def containers(self, *, all: bool, limit: int) -> list[dict[str, Any]]:
         """List containers within the requested inventory limit."""
-        ...
-
-    def logs(self, container: str, *, tail: int, timestamps: bool, stream: bool, follow: bool) -> LogStream:
-        """Open a bounded-tail log stream without following new output."""
         ...
 
     def stats(self, container: str, *, stream: bool) -> dict[str, Any]:
@@ -124,7 +109,8 @@ class DockerRuntime:
 
                 task.add_done_callback(finished)
 
-                return await asyncio.shield(task)
+                await asyncio.wait((task,))
+                return task.result()
         except TimeoutError as exc:
             raise DockSightError("runtime_timeout", "Docker operation timed out", 504) from exc
 
@@ -159,6 +145,7 @@ class DockerRuntime:
 
     async def logs(self, host: str, container_id: str, lines: int, max_bytes: int) -> LogBatch:
         """Read finite logs with container-specific secret redaction."""
+        deadline = monotonic() + self._timeout
 
         def read(client: DockerAPI) -> LogBatch:
             """Consume a finite Docker tail within a hard scan limit, then sanitize before clipping output."""
@@ -166,19 +153,10 @@ class DockerRuntime:
             config: dict[str, Any] = raw.get("Config") or {}
             environment: list[str] = config.get("Env") or []
             redactor = self._redactor.with_environment(environment)
-            stream = client.logs(container_id, tail=lines, timestamps=True, stream=True, follow=False)
-            chunks = bytearray()
-            with closing(stream):
-                for chunk in stream:
-                    if len(chunks) + len(chunk) > MAX_LOG_SCAN_BYTES:
-                        raise DockSightError(
-                            "log_read_limit",
-                            "Docker log tail exceeded the bounded read limit; latest output is unknown",
-                            502,
-                        )
-                    chunks.extend(chunk)
-
-            return parse_logs(bytes(chunks), redactor, max_bytes, lines)
+            chunks = read_logs(
+                client, container_id, bool(config.get("Tty", False)), lines, deadline, MAX_LOG_SCAN_BYTES
+            )
+            return parse_logs(chunks, redactor, max_bytes, lines)
 
         return await self._call(host, read)
 

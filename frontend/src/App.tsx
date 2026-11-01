@@ -5,6 +5,7 @@ import { ArrowRight, ChevronDown, ChevronRight, FlaskConical, Menu, MessageSquar
 import type { Container, Host, Transport } from './contracts';
 import { DemoClient, demoAnswer, demoHosts, scenarios, type ScenarioId } from './demo';
 import { DemoControls } from './DemoControls';
+import { Select } from './Select';
 import { isMessageKey } from './messages';
 import { Connection } from './Connection';
 import { Investigation } from './Investigation';
@@ -436,18 +437,14 @@ function Workspace({
             {!viewingContainer && (
               <label>
                 {t('Scenario')}
-                <select
-                  aria-label={t('Demo scenario')}
+                <Select<ScenarioId>
+                  label={t('Demo scenario')}
                   value={scenario}
-                  onChange={(event) => chooseScenario(event.target.value as ScenarioId)}
+                  onChange={chooseScenario}
+                  onReselect={chooseScenario}
                   disabled={investigation.running}
-                >
-                  {scenarios.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {t(item.name)}
-                    </option>
-                  ))}
-                </select>
+                  options={scenarios.map((item) => ({ value: item.id, label: t(item.name) }))}
+                />
               </label>
             )}
           </div>
