@@ -36,6 +36,8 @@ Dates below record each version's merge into `master` in Europe/Moscow. Version 
 
 ### Fixed
 
+- Docker log deadline regressions send valid multiplexed frames during slow delivery, avoiding platform-dependent
+  scan-limit failures in the timeout scenario.
 - Healthy Compose-group diagnoses offer model cards only when their required data was collected. Group-only evidence
   supports group cards without unsupported individual-container cards. Final generation and repair share this
   restriction. No-card replies preserve empty public card lists through provider schema conversion.

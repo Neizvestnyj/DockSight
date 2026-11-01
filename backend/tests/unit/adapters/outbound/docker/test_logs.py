@@ -52,6 +52,10 @@ class LogServer:
             return b"".join(rows)
         return b"".join(struct.pack(">BxxxI", stream, len(row)) + row for stream, row in enumerate(rows, 1))
 
+    def trickle_chunk(self) -> bytes:
+        """Keep slow delivery valid for the selected Docker log transport."""
+        return b"x" if self.tty else struct.pack(">BxxxI", 1, 1) + b"x"
+
 
 @pytest.fixture
 def log_server() -> Iterator[LogServer]:
@@ -96,7 +100,7 @@ def log_server() -> Iterator[LogServer]:
                     return
                 while not state.release.wait(0.02):
                     if state.mode == "trickle":
-                        self.wfile.write(b"x")
+                        self.wfile.write(state.trickle_chunk())
                         self.wfile.flush()
             except (ConnectionError, OSError):
                 return
