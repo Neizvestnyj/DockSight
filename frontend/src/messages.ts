@@ -7,6 +7,9 @@ export type MessageValues = Record<string, string | number>;
 
 /** Keep product copy separate from verbatim Docker, model, and server content. */
 const russian = {
+  'About investigation scope': 'Об области диагностики',
+  'Leave Automatic to investigate the host. Name a project, stack, or container in your question to narrow the scope.':
+    'Оставьте «Автоматически», чтобы проверить хост. Укажите проект, стек или контейнер в вопросе, чтобы сузить область.',
   'Host overview': 'Обзор хоста',
   'Docker host inventory': 'Список контейнеров хоста Docker',
   'Observed containers': 'Наблюдаемые контейнеры',
@@ -80,8 +83,6 @@ const russian = {
   Scope: 'Область',
   'Observation sources': 'Источники наблюдений по ресурсам',
   'Observation ID': 'ID наблюдения',
-  'Optional. Name a project or stack in your question; DockSight selects it automatically.':
-    'Выбор необязателен. Укажите проект или стек в вопросе — DockSight определит группу автоматически.',
   'All containers': 'Все контейнеры',
   'Compose projects': 'Проекты Compose',
   'Swarm stacks': 'Стеки Swarm',

@@ -1,3 +1,4 @@
+import { chooseOption } from '../test-utils/select';
 import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -108,7 +109,7 @@ describe('host overview presentation and narrowing', () => {
       });
     };
     render(<Workspace client={client} />);
-    fireEvent.change(screen.getByRole('combobox', { name: 'Language' }), { target: { value: 'ru' } });
+    chooseOption(screen.getByRole('combobox', { name: 'Language' }), 'ru');
     fireEvent.click(screen.getByRole('button', { name: 'Исследовать' }));
     expect(await screen.findByText(new RegExp(message))).toBeVisible();
   });
@@ -150,7 +151,7 @@ describe('host overview presentation and narrowing', () => {
     fireEvent.click(within(overview).getByRole('button', { name: 'Source' }));
     expect(screen.getByRole('region', { name: 'Evidence observation' })).toHaveTextContent('Docker host inventory');
     expect(screen.getByRole('region', { name: 'Evidence observation' })).toHaveFocus();
-    fireEvent.change(screen.getByRole('combobox', { name: 'Language' }), { target: { value: 'ru' } });
+    chooseOption(screen.getByRole('combobox', { name: 'Language' }), 'ru');
     expect(screen.getByRole('region', { name: 'Обзор хоста' })).toHaveTextContent('Сбой');
     expect(screen.getByRole('heading', { name: 'checkout-api' })).toBeVisible();
   });

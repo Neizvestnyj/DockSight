@@ -1,3 +1,4 @@
+import { chooseOption } from './helpers/select';
 import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { demoAnswer, demoContainer, demoSystemStatus } from '../src/demo';
@@ -75,7 +76,7 @@ test('keeps reported health separate from lifecycle state across inventory and r
   await expect(facts.locator('.runtime-state').getByText('exited', { exact: true })).toHaveClass(/neutral/);
   await expect(facts.locator('.health-fact')).toContainText('Last healthcheck');
   await expect(facts.locator('.health-fact').getByText('Unhealthy')).toHaveClass(/negative/);
-  await page.getByRole('combobox', { name: 'Language' }).selectOption('ru');
+  await chooseOption(page.getByRole('combobox', { name: 'Language' }), 'ru');
   const russianFacts = page.getByRole('region', { name: 'Факты о контейнере', exact: true });
   await expect(russianFacts.locator('.runtime-state')).toContainText('завершён');
   await expect(russianFacts.locator('.runtime-state')).not.toContainText('Сбой');
@@ -238,7 +239,7 @@ test('keeps large untrusted observations bounded and retains successful data aft
 
 test('keeps demo reads localized and keyboard accessible without translating log text', async ({ page }, info) => {
   await page.goto('/');
-  await page.getByRole('combobox', { name: 'Language' }).selectOption('ru');
+  await chooseOption(page.getByRole('combobox', { name: 'Language' }), 'ru');
   await chooseContainer(page, 'payments-api', true);
   const facts = page.getByRole('region', { name: 'Факты о контейнере', exact: true });
   await expect(facts.getByRole('heading', { name: 'payments-api' })).toBeFocused();

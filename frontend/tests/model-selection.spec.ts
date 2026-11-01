@@ -1,3 +1,4 @@
+import { chooseOption } from './helpers/select';
 import { expect, test } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 
@@ -15,11 +16,17 @@ test('switches simulated models without losing the investigation, draft or prepa
   await trigger.click();
   const picker = page.getByRole('dialog', { name: 'Choose model' });
   await expect(picker).toContainText('Demo models · no provider requests');
-  await expect(picker.getByRole('option', { name: 'OpenAI · Not configured', exact: true })).toHaveJSProperty(
-    'disabled',
-    true,
+  const provider = picker.getByRole('combobox', { name: 'Provider' });
+  await provider.click();
+  await expect(picker.getByRole('option', { name: 'OpenAI · Not configured', exact: true })).toHaveAttribute(
+    'aria-disabled',
+    'true',
   );
-  await picker.getByRole('combobox', { name: 'Provider' }).selectOption('gemini');
+  await provider.press('End');
+  await expect(picker.locator('[role="option"][data-active="true"]')).toContainText('Gemini');
+  await provider.press('Escape');
+  await expect(provider).toContainText('Ollama');
+  await chooseOption(picker.getByRole('combobox', { name: 'Provider' }), 'gemini');
   await picker.getByRole('searchbox', { name: 'Search models' }).fill('not-a-model');
   await expect(picker).toContainText('No matching models.');
   await picker.getByRole('searchbox', { name: 'Search models' }).fill('');
@@ -34,7 +41,7 @@ test('switches simulated models without losing the investigation, draft or prepa
   await page.getByRole('button', { name: 'Review stop' }).click();
   expect(await page.getByRole('dialog').locator('.confirmation-facts code').last().innerText()).toBe(action);
   await page.keyboard.press('Escape');
-  await page.getByRole('combobox', { name: 'Language' }).selectOption('ru');
+  await chooseOption(page.getByRole('combobox', { name: 'Language' }), 'ru');
   await page.getByRole('button', { name: /Выбрать модель/ }).click();
   await expect(page.getByRole('dialog', { name: 'Выбрать модель' })).toContainText('gemini-demo');
   await page.keyboard.press('Escape');
@@ -46,7 +53,7 @@ test('disables selection during a diagnostic turn and resets it after page reloa
   await page.goto('/');
   const trigger = page.getByRole('button', { name: /Choose model/ });
   await trigger.click();
-  await page.getByRole('dialog').getByRole('combobox', { name: 'Provider' }).selectOption('gemini');
+  await chooseOption(page.getByRole('dialog').getByRole('combobox', { name: 'Provider' }), 'gemini');
   await page.getByRole('button', { name: 'gemini-demo' }).click();
   await page.getByRole('textbox').fill('Inspect payments-api');
   await page.getByRole('button', { name: 'Investigate', exact: true }).click();

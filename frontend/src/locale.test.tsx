@@ -1,3 +1,4 @@
+import { chooseOption } from '../test-utils/select';
 import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -45,7 +46,7 @@ describe('language preference', () => {
     );
     expect(screen.getByText('ru: Диагностика контейнера')).toBeInTheDocument();
     expect(document.documentElement.lang).toBe('ru');
-    fireEvent.change(screen.getByRole('combobox', { name: 'Язык' }), { target: { value: 'en' } });
+    chooseOption(screen.getByRole('combobox', { name: 'Язык' }), 'en');
     expect(localStorage.getItem('docksight.locale')).toBe('en');
     view.unmount();
     render(
@@ -54,7 +55,7 @@ describe('language preference', () => {
       </LocaleProvider>,
     );
     expect(screen.getByText('en: Container investigation')).toBeInTheDocument();
-    fireEvent.change(screen.getByRole('combobox', { name: 'Language' }), { target: { value: 'system' } });
+    chooseOption(screen.getByRole('combobox', { name: 'Language' }), 'system');
     await waitFor(() => expect(document.documentElement.lang).toBe('ru'));
   });
 
@@ -68,7 +69,7 @@ describe('language preference', () => {
     languages.mockReturnValue(['ru-RU']);
     fireEvent(window, new Event('languagechange'));
     expect(screen.getByText('ru: Диагностика контейнера')).toBeInTheDocument();
-    fireEvent.change(screen.getByRole('combobox', { name: 'Язык' }), { target: { value: 'en' } });
+    chooseOption(screen.getByRole('combobox', { name: 'Язык' }), 'en');
     fireEvent(window, new Event('languagechange'));
     expect(screen.getByText('en: Container investigation')).toBeInTheDocument();
   });
@@ -81,7 +82,7 @@ describe('language preference', () => {
         <Probe />
       </LocaleProvider>,
     );
-    expect(screen.getByRole('combobox', { name: 'Язык' })).toHaveValue('system');
+    expect(screen.getByRole('combobox', { name: 'Язык' })).toHaveTextContent('Системный');
     expect(screen.getByText('ru: Диагностика контейнера')).toBeInTheDocument();
   });
 
@@ -97,7 +98,7 @@ describe('language preference', () => {
         <Probe />
       </LocaleProvider>,
     );
-    fireEvent.change(screen.getByRole('combobox', { name: 'Language' }), { target: { value: 'ru' } });
+    chooseOption(screen.getByRole('combobox', { name: 'Language' }), 'ru');
     expect(screen.getByText('ru: Диагностика контейнера')).toBeInTheDocument();
   });
 
@@ -114,7 +115,7 @@ describe('language preference', () => {
   it('localizes demo copy without replacing evidence or the current action', async () => {
     render(<App />);
     const log = 'ValueError: invalid application configuration';
-    fireEvent.change(screen.getByRole('combobox', { name: 'Language' }), { target: { value: 'ru' } });
+    chooseOption(screen.getByRole('combobox', { name: 'Language' }), 'ru');
     expect(screen.getByRole('heading', { name: 'Диагностика контейнера' })).toBeInTheDocument();
     expect(screen.getByText(log, { exact: true })).toBeInTheDocument();
     expect(screen.getByText('production', { exact: true })).toBeInTheDocument();
@@ -126,8 +127,8 @@ describe('language preference', () => {
 
   it('localizes the OOM example and identifies the simulated host without fabricating log lines', async () => {
     render(<App />);
-    fireEvent.change(screen.getByRole('combobox', { name: 'Language' }), { target: { value: 'ru' } });
-    fireEvent.change(screen.getByLabelText('Демо-сценарий'), { target: { value: 'oom' } });
+    chooseOption(screen.getByRole('combobox', { name: 'Language' }), 'ru');
+    chooseOption(screen.getByLabelText('Демо-сценарий'), 'oom');
     expect(screen.getByRole('heading', { name: 'Почему report-worker завершился с кодом 137?' })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Объяснение модели' })).toHaveTextContent(
       'Docker сообщает, что report-worker был завершён из-за нехватки памяти (OOM)',

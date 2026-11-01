@@ -1,3 +1,5 @@
+@import './controls.css';
+
 :root {
   font-family: 'IBM Plex Sans', system-ui, sans-serif;
   color: var(--text);
@@ -611,7 +613,7 @@ textarea {
   color: var(--muted);
   margin: 0 4px 8px;
 }
-.host-switch select {
+.host-switch .select-trigger {
   width: 100%;
   background: var(--ground);
   font-size: 13px;
@@ -890,7 +892,7 @@ textarea {
   margin-top: 0;
   font-size: 13px;
 }
-.model-provider-field select {
+.model-provider-field .select-trigger {
   width: 100%;
 }
 .model-search-row {
@@ -1138,7 +1140,7 @@ textarea {
   gap: 6px;
   color: var(--muted);
 }
-.language-switch select {
+.language-switch .select-trigger {
   width: auto;
   flex-shrink: 0;
   font-size: 12px;
@@ -1188,7 +1190,7 @@ textarea {
 .demo-bar label {
   flex-shrink: 0;
 }
-.demo-bar select {
+.demo-bar .select-trigger {
   background: var(--surface);
   font-size: 12px;
   min-height: 28px;
@@ -1215,7 +1217,7 @@ textarea {
   flex-direction: column;
   gap: 6px;
 }
-.demo-controls select {
+.demo-controls .select-trigger {
   font-size: 13px;
 }
 .demo-controls label > span {
@@ -2169,7 +2171,7 @@ textarea {
   font-size: 12px;
   color: var(--muted);
 }
-.group-scope select {
+.group-scope .select-trigger {
   width: 100%;
   min-width: 0;
   height: 36px;
@@ -2182,11 +2184,6 @@ textarea {
   overflow-wrap: anywhere;
   grid-column: 1 / -1;
   color: var(--muted);
-}
-.group-scope > label:only-of-type ~ .scope-help {
-  grid-column: 2 / -1;
-  align-self: center;
-  padding-top: 18px;
 }
 .group-scope-actions {
   display: flex;
@@ -3010,10 +3007,10 @@ textarea {
   .language-switch {
     gap: 4px;
   }
-  .language-switch select {
+  .language-switch .select-trigger {
     min-height: 44px;
   }
-  .language-switch svg {
+  .language-switch > svg {
     display: none;
   }
   .modal-actions .primary {
@@ -3104,9 +3101,11 @@ textarea {
     justify-content: space-between;
     margin-top: 12px;
   }
-  .demo-bar select {
-    font-size: 13px;
+  .demo-bar .select-control {
     width: min(240px, 75%);
+  }
+  .demo-bar .select-trigger {
+    font-size: 13px;
     min-height: 44px;
     padding-left: 7px;
   }
@@ -3120,7 +3119,7 @@ textarea {
   .demo-controls > div {
     grid-template-columns: minmax(0, 1fr);
   }
-  .demo-controls select {
+  .demo-controls .select-trigger {
     min-height: 44px;
   }
   .inventory-stamp {
@@ -3306,14 +3305,10 @@ textarea {
   .group-scope {
     gap: 12px;
   }
-  .group-scope > label:only-of-type {
+  .group-scope > .scope-field:only-child {
     grid-column: 1 / -1;
   }
-  .group-scope > label:only-of-type ~ .scope-help {
-    grid-column: 1 / -1;
-    padding-top: 0;
-  }
-  .group-scope select,
+  .group-scope .select-trigger,
   .group-scope-actions .secondary,
   .group-scope-actions .icon-button {
     min-height: 44px;

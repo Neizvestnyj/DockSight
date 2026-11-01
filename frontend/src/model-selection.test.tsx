@@ -1,3 +1,4 @@
+import { chooseOption } from '../test-utils/select';
 import '@testing-library/jest-dom/vitest';
 import { act, cleanup, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -27,7 +28,7 @@ describe('model selection', () => {
     fireEvent.click(screen.getByRole('button', { name: /Choose model/ }));
     const picker = screen.getByRole('dialog', { name: 'Choose model' });
     await waitFor(() => expect(catalogs).toHaveBeenCalledTimes(1));
-    fireEvent.change(within(picker).getByRole('combobox', { name: 'Provider' }), { target: { value: 'gemini' } });
+    chooseOption(within(picker).getByRole('combobox', { name: 'Provider' }), 'gemini');
     fireEvent.click(await within(picker).findByRole('button', { name: /gemini-demo/ }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Choose model/ })).toHaveTextContent('gemini-demo');
@@ -46,14 +47,12 @@ describe('model selection', () => {
     render(<App />);
     fireEvent.click(screen.getByRole('button', { name: /Choose model/ }));
     const picker = screen.getByRole('dialog');
-    fireEvent.change(await within(picker).findByRole('combobox', { name: 'Provider' }), {
-      target: { value: 'gemini' },
-    });
+    chooseOption(await within(picker).findByRole('combobox', { name: 'Provider' }), 'gemini');
     fireEvent.click(await within(picker).findByRole('button', { name: /gemini-demo/ }));
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Inspect payments-api' } });
     await act(async () => fireEvent.click(screen.getByRole('button', { name: /^Investigate$/ })));
     expect(diagnose.mock.calls[0]?.[0].model_selection).toEqual({ provider: 'gemini', model: 'gemini-demo' });
-    fireEvent.change(screen.getByRole('combobox', { name: 'Configured host' }), { target: { value: 'demo-empty' } });
+    chooseOption(screen.getByRole('combobox', { name: 'Configured host' }), 'demo-empty');
     expect(screen.getByRole('button', { name: /Choose model/ })).toHaveTextContent('gemini-demo');
   });
 

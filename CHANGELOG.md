@@ -20,6 +20,8 @@ Dates below record each version's merge into `master` in Europe/Moscow. Version 
 
 ### Changed
 
+- Selection menus share custom styling, keyboard navigation, typeahead, and explicit selected or disabled states.
+  Optional diagnostic-scope guidance appears beside a help button, available by hover, focus, or tap.
 - Container card headers show process state only, with healthchecks in separate facts. Stopped containers identify the
   last reported check; exited states are neutral and nonzero exit codes are highlighted.
 - General incident questions return a bounded host overview across projects and ungrouped containers, with observed

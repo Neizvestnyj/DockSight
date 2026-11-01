@@ -1,3 +1,4 @@
+import { chooseOption } from './helpers/select';
 import { expect, test } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { demoAnswer, demoContainer, demoSystemStatus } from '../src/demo';
@@ -23,21 +24,21 @@ test('explains demo controls, localizes every built-in scenario, and keeps empty
     ['oom', 'Почему report-worker завершился с кодом 137?', 'нехватки памяти (OOM)'],
   ];
   for (const [scenario, query, summary] of examples) {
-    await page.getByLabel('Демо-сценарий').selectOption(scenario!);
+    await chooseOption(page.getByLabel('Демо-сценарий'), scenario!);
     await expect(page.getByRole('heading', { name: query, exact: true })).toBeVisible();
     await expect(page.getByRole('region', { name: 'Объяснение модели' })).toContainText(summary!);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   }
   await page.getByText('Проверить ошибки', { exact: true }).click();
   await expect(page.getByRole('checkbox', { name: '200 строк логов' })).toHaveCount(0);
-  await page.getByLabel('Имитация подключения', { exact: true }).selectOption('stream');
+  await chooseOption(page.getByLabel('Имитация подключения', { exact: true }), 'stream');
   await expect(page.getByText('Отправьте вопрос, чтобы увидеть ошибку после сбора данных.')).toBeVisible();
-  await page.getByLabel('После подтверждения действия', { exact: true }).selectOption('indeterminate');
+  await chooseOption(page.getByLabel('После подтверждения действия', { exact: true }), 'indeterminate');
   await expect(page.getByRole('group', { name: 'Логи контейнера', exact: true })).toContainText('Получено 0 строк');
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   await page.getByRole('heading', { name: 'Диагностика контейнера' }).scrollIntoViewIfNeeded();
   await page.screenshot({ path: `test-results/${info.project.name}-demo-clarity.png`, fullPage: true });
-  await page.getByLabel('Имитация подключения', { exact: true }).selectOption('none');
+  await chooseOption(page.getByLabel('Имитация подключения', { exact: true }), 'none');
   const typedQuery = 'Why did report-worker exit with code 137?';
   await page.getByRole('textbox', { name: 'Продолжить расследование' }).fill(typedQuery);
   await page.getByRole('button', { name: 'Исследовать', exact: true }).click();
@@ -100,7 +101,7 @@ test('detects Russian and preserves evidence, action IDs and draft while switchi
   await page.getByRole('button', { name: 'Проверить остановку' }).click();
   const actionId = await page.getByRole('dialog').locator('.confirmation-facts code').last().innerText();
   await page.keyboard.press('Escape');
-  await page.getByRole('combobox', { name: 'Язык' }).selectOption('en');
+  await chooseOption(page.getByRole('combobox', { name: 'Язык' }), 'en');
   await expect(page.getByRole('heading', { name: 'Container investigation' })).toBeVisible();
   await expect(page.getByRole('textbox', { name: 'Continue the investigation' })).toHaveValue(
     'Проверить зависимость без изменения логов',
@@ -117,8 +118,8 @@ test('detects Russian and preserves evidence, action IDs and draft while switchi
   await page.keyboard.press('Escape');
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Container investigation' })).toBeVisible();
-  await expect(page.getByRole('combobox', { name: 'Language' })).toHaveValue('en');
-  await page.getByRole('combobox', { name: 'Language' }).selectOption('system');
+  await expect(page.getByRole('combobox', { name: 'Language' })).toContainText('English');
+  await chooseOption(page.getByRole('combobox', { name: 'Language' }), 'system');
   await expect(page.getByRole('heading', { name: 'Диагностика контейнера' })).toBeVisible();
   await page.getByRole('button', { name: 'Открыть логи как доказательство' }).focus();
   await page.keyboard.press('Enter');

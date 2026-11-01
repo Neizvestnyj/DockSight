@@ -1,3 +1,4 @@
+import { chooseOption } from './helpers/select';
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import { hostAnswer } from './fixtures/host-overview';
@@ -76,7 +77,7 @@ for (const locale of ['en', 'ru'] as const) {
     await expect(page.getByRole('region', { name: 'Evidence observation' })).toBeFocused();
     await expect(page.getByRole('region', { name: 'Evidence observation' })).toContainText('Docker host inventory');
     await page.getByRole('textbox').fill('Keep this unrelated draft');
-    await page.getByRole('combobox', { name: 'Language' }).selectOption(locale);
+    await chooseOption(page.getByRole('combobox', { name: 'Language' }), locale);
     overview = page.getByRole('region', { name: locale === 'ru' ? 'Обзор хоста' : 'Host overview', exact: true });
     await expect(overview.getByText(locale === 'ru' ? 'Сбой' : 'Unhealthy')).toBeVisible();
     await expect(page.locator('.conclusion')).toContainText(answer.summary);

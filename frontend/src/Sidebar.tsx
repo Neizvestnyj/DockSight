@@ -1,4 +1,5 @@
 import { useLocale } from './locale';
+import { Select } from './Select';
 import { useId } from 'react';
 import {
   Activity,
@@ -84,22 +85,18 @@ export function Sidebar({
           <Server size={14} />
           {t('Configured host')}
         </label>
-        <select
+        <Select
           id={hostSelectId}
-          aria-label={t('Configured host')}
+          label={t('Configured host')}
           value={host}
-          onChange={(event) => {
-            changeHost(event.target.value);
-          }}
+          onChange={changeHost}
           disabled={hostLoading || !hosts.length}
-        >
-          {!hosts.length && <option value="">{t(hostLoading ? 'Loading hosts…' : 'No configured hosts')}</option>}
-          {hosts.map((row) => (
-            <option value={row.id} key={row.id}>
-              {row.name}
-            </option>
-          ))}
-        </select>
+          options={
+            hosts.length
+              ? hosts.map((row) => ({ value: row.id, label: row.name }))
+              : [{ value: '', label: t(hostLoading ? 'Loading hosts…' : 'No configured hosts') }]
+          }
+        />
         <span className="host-id">{host || t('Connect a backend to begin')}</span>
       </div>
       {hostError && (

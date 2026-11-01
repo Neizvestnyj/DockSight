@@ -1,3 +1,4 @@
+import { chooseOption } from './helpers/select';
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 import { DemoClient, demoAnswer, demoContainer, demoSystemStatus } from '../src/demo';
@@ -69,7 +70,7 @@ for (const groupName of ['vintoria-infra', `vintoria-infra-${'x'.repeat(113)}`])
     await expect(page.locator('.widget-container_status')).toHaveCount(0);
     await expect(page.getByRole('alert')).toHaveCount(0);
     await page.getByRole('textbox').fill('Keep this follow-up draft');
-    await page.getByRole('combobox', { name: 'Language' }).selectOption('ru');
+    await chooseOption(page.getByRole('combobox', { name: 'Language' }), 'ru');
     const localized = page.getByRole('region', { name: 'Уточнение группы' });
     await expect(localized).toBeVisible();
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
