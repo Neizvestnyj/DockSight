@@ -1,3 +1,4 @@
+import json
 import re
 from dataclasses import replace
 from typing import Final, Literal, cast
@@ -67,6 +68,21 @@ def tool_specs() -> tuple[ToolSpec, ...]:
     )
 
 
+def _evidence_ids(value: JsonValue) -> set[str]:
+    """Read reference metadata without treating untrusted observation data as references."""
+    if isinstance(value, list):
+        return set[str]().union(*(_evidence_ids(row) for row in value))
+    if not isinstance(value, dict):
+        return set()
+    result: set[str] = set()
+    for key, item in value.items():
+        if key in {"evidence_id", "container_evidence_id"} and isinstance(item, str):
+            result.add(item)
+        elif key != "data":
+            result.update(_evidence_ids(item))
+    return result
+
+
 class DiagnosticTools:
     """Validate model tool calls and record evidence on the selected host."""
 
@@ -96,6 +112,8 @@ class DiagnosticTools:
         self.context.container_id = container_id
         self.host_wide = False
         self.discovery_code: str | None = None
+        self._reads: dict[str, list[JsonValue]] = {}
+        self.reused_reads = 0
 
     async def execute(self, call: ToolCall) -> JsonObject:
         """Reject unknown tools or arguments before dispatching a bounded runtime read."""
@@ -107,12 +125,36 @@ class DiagnosticTools:
         except ValidationError as exc:
             raise DockSightError("invalid_tool_arguments", "Tool arguments do not match its schema", 422) from exc
         self._require_container_scope(args)
+        if isinstance(args, ContainerArgs):
+            args = ContainerArgs(container_id=await self._resource_id(args.container_id))
+        key = self._read_key(call.name, args)
+        if key in self._reads:
+            self.reused_reads += 1
+            return {"already_collected": True, "evidence_ids": self._reads[key]}
+        result = await self._dispatch(call.name, args)
+        if self.context.selection is None:
+            references = _evidence_ids(result)
+            self._reads[self._read_key(call.name, args)] = [ref for ref in self.context.evidence if ref in references]
+        return result
+
+    def _read_key(self, name: str, args: Contract) -> str:
+        """Keep reuse within the current target, including scopes selected by the read itself."""
+        group = self.context.group.summary if self.context.group else self.group
+        scope = {
+            "container": self.context.container_id,
+            "group": [group.kind, group.name] if group else None,
+            "host_overview": self.context.host_overview is not None or self.host_wide,
+        }
+        return json.dumps([name, args.model_dump(mode="json"), scope], sort_keys=True)
+
+    async def _dispatch(self, name: str, args: Contract) -> JsonObject:
+        """Collect a validated read once, retaining typed failures for the caller to handle."""
         if isinstance(args, GroupSelection):
             return self._selection(args)
         if isinstance(args, GroupTarget):
             return await self._group(args)
         if isinstance(args, NoArgs):
-            return await self._host() if call.name == "inspect_host" else await self._containers()
+            return await self._host() if name == "inspect_host" else await self._containers()
         if isinstance(args, StackArgs):
             stacks = await self.runtime.stacks(self.host, args.kind)
             item = self.context.record(
@@ -124,7 +166,7 @@ class DiagnosticTools:
 
             return {"evidence_id": item.id, "data": item.data}
         assert isinstance(args, ContainerArgs)
-        return await self._container(call.name, args.container_id)
+        return await self._container(name, args.container_id)
 
     def _require_container_scope(self, args: Contract) -> None:
         """Prevent model proposals from replacing an explicitly selected container with a previous group."""
@@ -248,6 +290,9 @@ class DiagnosticTools:
         """Accept full Docker IDs or discovered exact names, never arbitrary ID prefixes or evidence aliases."""
         if re.fullmatch(r"[a-f0-9]{64}", value):
             return self._bound_id(value)
+        observed = next((row for row in self.context.snapshots.values() if row.name == value), None)
+        if observed:
+            return self._bound_id(observed.id)
         rows = self.inventory if self.inventory is not None else await self.runtime.containers(self.host)
         target = next((row for row in rows if row.name == value), None)
         if target:

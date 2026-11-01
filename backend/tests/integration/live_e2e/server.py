@@ -121,8 +121,8 @@ def live_api(lab: ComposeLab, model: str, model_url: str, origins: tuple[str, ..
         env_allowlist=("APP_ENV",),
         model_timeout=90,
         turn_timeout=240,
-        log_lines=200 if lab.case.spelling == "unscoped" else 30,
-        log_bytes=65536 if lab.case.spelling == "unscoped" else 2048,
+        log_lines=lab.case.log_limits[0],
+        log_bytes=lab.case.log_limits[1],
         cors_origins=origins,
     )
     components = build_components(settings, reader=runtime, writer=runtime)

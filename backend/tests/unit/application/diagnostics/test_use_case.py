@@ -1,4 +1,5 @@
 import json
+from collections.abc import Sequence
 from dataclasses import replace
 from unittest.mock import AsyncMock, patch
 
@@ -6,7 +7,7 @@ import pytest
 
 from docksight.adapters.outbound.memory.sessions import MemorySessions
 from docksight.application.diagnostics.use_case import Diagnostics
-from docksight.application.ports.models import ModelReply, ToolCall
+from docksight.application.ports.models import ModelMessage, ModelReply, ToolCall
 from docksight.application.redaction import Redactor
 from docksight.application.views.schemas import GroupTarget
 from docksight.domain.errors import DockSightError
@@ -52,8 +53,15 @@ async def test_switching_model_preserves_session_history_and_trace() -> None:
     events = [event async for event in second.stream("alice", "local", "What next?", session_id)]
     assert events[-1]["type"] == "turn.completed"
     history = second_model.requests[0][0]
-    assert any(message.role == "user" and message.content == "Inspect" for message in history)
-    assert any(message.role == "assistant" and message.content == "Insufficient evidence" for message in history)
+    context = next(message for message in history if "previous_turns" in message.content)
+    assert context.role == "user"
+    assert json.loads(context.content.split("\n", 1)[1]) == {
+        "previous_turns": [
+            {"role": "user", "content": "Inspect"},
+            {"role": "assistant", "content": "Insufficient evidence"},
+        ]
+    }
+    assert not any(message.role == "assistant" and message.content == "Insufficient evidence" for message in history)
     assert next(event for event in first if event["type"] == "trace.started")["model"] == "one"
     assert next(event for event in events if event["type"] == "trace.started")["model"] == "two"
 
@@ -68,6 +76,116 @@ def proposal(evidence_id: str = "e1") -> str:
             "widgets": [{"widget_type": "container_status", "evidence_ids": [evidence_id], "action": None}],
         }
     )
+
+
+@pytest.mark.parametrize("scope", ["container", "group"])
+async def test_final_generation_uses_tool_observations_without_replaying_a_prose_only_draft(scope: str) -> None:
+    model = ScriptedModel(
+        [
+            ModelReply("The process crashed because of historical SQL errors."),
+            ModelReply('{"summary":"The cause is unknown","uncertain":true,"evidence_ids":["e1"],"widgets":[]}'),
+        ]
+    )
+    diagnostics = Diagnostics(DiscoveryRuntime(), model, MemorySessions(), Redactor())
+    events = [
+        event
+        async for event in diagnostics.stream(
+            "alice",
+            "local",
+            "Check the target",
+            group=GroupTarget(kind="compose", name="vintoria-infra") if scope == "group" else None,
+            container_id="1" * 64 if scope == "container" else None,
+        )
+    ]
+    assert events[-1]["type"] == "turn.completed"
+    messages, schema = model.requests[-1]
+    assert schema is not None
+    assert any(message.role == "tool" for message in messages)
+    assert any(message.role == "assistant" and message.tool_calls for message in messages)
+    assert not any("historical SQL errors" in message.content for message in messages)
+
+
+async def test_final_generation_repeats_the_current_question_without_its_credential() -> None:
+    query = "Check container worker; token=fixture-credential"
+    model = ScriptedModel([ModelReply("Ready"), ModelReply(proposal())])
+    events = [
+        event
+        async for event in Diagnostics(FakeRuntime(), model, MemorySessions(), Redactor()).stream(
+            "alice", "local", query, container_id="a" * 64
+        )
+    ]
+    assert events[-1]["type"] == "turn.completed"
+    assert "Check container worker; token=[REDACTED]" in model.requests[-1][0][-1].content
+    assert all("fixture-credential" not in message.content for messages, _ in model.requests for message in messages)
+
+
+@pytest.mark.parametrize("additional_read", [False, True])
+async def test_repeated_successful_batch_finalizes_but_a_new_read_continues_exploration(additional_read: bool) -> None:
+    target = GroupTarget(kind="compose", name="vintoria-infra")
+    calls = [ToolCall("repeat", "inspect_group", target.model_dump())]
+    if additional_read:
+        calls.append(ToolCall("new", "get_container_stats", {"container_id": "1" * 64}))
+    native = ({"type": "provider-replay", "id": "retained"},)
+    replies = [ModelReply("", tuple(calls), native=native)]
+    if additional_read:
+        replies.append(ModelReply("Ready"))
+    answer = '{"summary":"Unknown cause","uncertain":true,"evidence_ids":["e1"],"widgets":[]}'
+    model = ScriptedModel([*replies, ModelReply(answer)])
+    events = [
+        event
+        async for event in Diagnostics(DiscoveryRuntime(), model, MemorySessions(), Redactor()).stream(
+            "alice", "local", "Check the project", group=target
+        )
+    ]
+    assert events[-1]["type"] == "turn.completed"
+    assert len(model.requests) == (3 if additional_read else 2)
+    messages, final = model.requests[-1]
+    assert final
+    assert next(row for row in messages if row.native).native == native
+    results = {row.tool_call_id: json.loads(row.content) for row in messages if row.role == "tool"}
+    assert results["repeat"]["already_collected"] is True
+    assert "group" in results["selected-group"]
+    assert {call.id for row in messages for call in row.tool_calls} == set(results)
+    if additional_read:
+        assert "data" in results["new"]
+
+
+async def test_follow_up_keeps_prior_explanation_as_context_and_collects_the_new_target() -> None:
+    answer = '{"summary":"Earlier backend failure","uncertain":true,"evidence_ids":["e1"],"widgets":[]}'
+    model = ScriptedModel([ModelReply("Ready"), ModelReply(answer), ModelReply("Ready"), ModelReply(proposal())])
+    sessions = MemorySessions()
+    runtime = DiscoveryRuntime()
+    service = Diagnostics(runtime, model, sessions, Redactor())
+    first_query = "Inspect backend-1 token=fixture-secret"
+    first = [event async for event in service.stream("alice", "local", first_query, container_id="1" * 64)]
+    session_id = next(event["session_id"] for event in first if event["type"] == "turn.started")
+    query = "Is this related to the previous failure?"
+    second = [event async for event in service.stream("alice", "local", query, session_id, container_id="3" * 64)]
+    assert second[-1]["type"] == "turn.completed"
+    for messages, _ in model.requests[2:]:
+        _assert_follow_up_context(messages, query)
+        scope = next(json.loads(row.content) for row in messages if '"selected_container_id"' in row.content)
+        assert scope["selected_container_id"] == "3" * 64
+    assert runtime.reads == ["1" * 64, "3" * 64]
+    async with sessions.lease(session_id, "alice", "local") as session:
+        assert [row.content for row in session.history[:2]] == [
+            "Inspect backend-1 token=[REDACTED]",
+            "Earlier backend failure",
+        ]
+
+
+def _assert_follow_up_context(messages: Sequence[ModelMessage], query: str) -> None:
+    """Check that relative follow-ups retain redacted context without promoting earlier conclusions."""
+    context = next(message for message in messages if "previous_turns" in message.content)
+    assert context.role == "user"
+    previous = json.loads(context.content.split("\n", 1)[1])["previous_turns"]
+    assert previous == [
+        {"role": "user", "content": "Inspect backend-1 token=[REDACTED]"},
+        {"role": "assistant", "content": "Earlier backend failure"},
+    ]
+    assert any(row.role == "user" and row.content == query for row in messages)
+    assert all("fixture-secret" not in row.content for row in messages)
+    assert not any(row.role == "assistant" and row.content == "Earlier backend failure" for row in messages)
 
 
 async def test_selected_container_retains_its_status_when_prefetched_logs_are_unavailable() -> None:
@@ -491,7 +609,13 @@ async def test_model_cannot_switch_hosts_through_tool_arguments() -> None:
 
 
 async def test_exploration_and_repairs_share_the_model_budget() -> None:
-    replies = [ModelReply("", (ToolCall(f"c{i}", "list_containers", {}),)) for i in range(4)]
+    calls = [
+        ToolCall("inventory", "list_containers", {}),
+        ToolCall("inspect", "inspect_container", {"container_id": "worker"}),
+        ToolCall("logs", "get_container_logs", {"container_id": "worker"}),
+        ToolCall("stats", "get_container_stats", {"container_id": "worker"}),
+    ]
+    replies = [ModelReply("", (call,)) for call in calls]
     model = ScriptedModel([*replies, ModelReply("invalid"), ModelReply("invalid")])
     service = Diagnostics(FakeRuntime(), model, MemorySessions(), Redactor(), max_model_calls=6)
     events = [event async for event in service.stream("alice", "local", "Inspect")]

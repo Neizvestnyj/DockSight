@@ -135,13 +135,17 @@ class CauseAssessment(Contract):
         default=None,
         min_length=1,
         max_length=600,
-        description="A supported deeper cause in natural language, or null when not established.",
+        description=(
+            "Only a deeper cause established by collected evidence, otherwise null. "
+            "Put uncertainty and investigative questions in unknowns, never here."
+        ),
     )
     unknowns: list[Annotated[str, Field(min_length=1, max_length=240)]] = Field(
         default_factory=list,
         max_length=4,
         description=(
-            "Unresolved questions in natural language. Use an empty array when none remain; never the string []."
+            "Unresolved questions in natural language, without presupposing unobserved causes or events. "
+            "Use an empty array when none remain; never the string []."
         ),
     )
     evidence_ids: list[str] = Field(min_length=1, max_length=10)

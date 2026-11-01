@@ -63,6 +63,20 @@ services:
   unknown:
     <<: *worker
     command: [unknown]
+  clean-shutdown:
+    <<: *worker
+    command: [clean-shutdown]
+  database-current:
+    <<: *worker
+    command: [database-current]
+  unhealthy:
+    <<: *worker
+    command: [unhealthy]
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=1)"]
+      interval: 1s
+      timeout: 2s
+      retries: 2
 
 networks:
   fixture:

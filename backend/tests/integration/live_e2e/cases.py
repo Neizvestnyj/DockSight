@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from typing import Final, Literal
 
+from tests.integration.live_e2e.causal_checks import CausalProfile
+
 type Language = Literal["en", "ru"]
 
 
@@ -14,7 +16,14 @@ class Case:
     explicit: bool = False
     typo: bool = False
     spelling: Literal["exact", "spaced", "cyrillic", "ambiguous", "unscoped"] = "exact"
-    peer_service: Literal["backend", "database", "database-stopped"] = "backend"
+    peer_service: Literal["backend", "database", "database-stopped", "clean-shutdown"] = "backend"
+    causal_profile: CausalProfile | None = None
+    production_limits: bool = False
+
+    @property
+    def log_limits(self) -> tuple[int, int]:
+        """Use deployed budgets for representative cases and smaller budgets for intentional tail truncation."""
+        return (200, 65536) if self.production_limits or self.spelling == "unscoped" else (30, 2048)
 
     @property
     def needs_selection(self) -> bool:
@@ -53,10 +62,19 @@ class Case:
 
 FOLLOW_UP_CASE: Final = Case("compose-follow-up", ("backend", "grafana", "nginx"), group=True)
 FOLLOW_UP_NOISY_CASE: Final = Case(
-    "compose-follow-up-noisy", ("backend", "grafana", "nginx"), group=True, peer_service="database"
+    "compose-follow-up-noisy",
+    ("backend", "grafana", "nginx"),
+    group=True,
+    peer_service="database",
+    causal_profile="running_history",
 )
 FOLLOW_UP_SHUTDOWN_CASE: Final = Case(
-    "compose-follow-up-shutdown", ("backend", "grafana", "nginx"), group=True, peer_service="database-stopped"
+    "compose-follow-up-shutdown",
+    ("backend", "grafana", "nginx"),
+    group=True,
+    peer_service="clean-shutdown",
+    causal_profile="clean_shutdown",
+    production_limits=True,
 )
 FOLLOW_UP_CASES: Final = (FOLLOW_UP_CASE, FOLLOW_UP_NOISY_CASE, FOLLOW_UP_SHUTDOWN_CASE)
 
@@ -68,8 +86,30 @@ CASES: Final = (
     Case("compose-cyrillic", ("backend", "grafana", "nginx"), group=True, spelling="cyrillic"),
     Case("compose-ambiguous", ("backend", "grafana", "nginx"), group=True, spelling="ambiguous"),
     Case("compose-unscoped", ("backend", "grafana", "nginx", "database-stopped"), group=True, spelling="unscoped"),
-    Case("oom", ("oom",)),
+    Case("oom", ("oom",), causal_profile="oom", production_limits=True),
     Case("crash-loop", ("crash",)),
     Case("truncated-logs", ("logs",)),
-    Case("unknown-exit", ("unknown",)),
+    Case("unknown-exit", ("unknown",), causal_profile="unknown_exit", production_limits=True),
+    Case("clean-shutdown", ("clean-shutdown",), causal_profile="clean_shutdown", production_limits=True),
+    Case("unhealthy", ("unhealthy",), causal_profile="running_unhealthy", production_limits=True),
+    Case("running-history", ("database-current",), causal_profile="running_history", production_limits=True),
 )
+
+SUITES: Final = {
+    "causal": (
+        "oom",
+        "unknown-exit",
+        "clean-shutdown",
+        "unhealthy",
+        "running-history",
+        "compose-follow-up-noisy",
+        "compose-follow-up-shutdown",
+    ),
+}
+
+
+def selected_scenarios(names: list[str] | None, suites: list[str] | None) -> list[str] | None:
+    """Combine explicit scenarios with named packages without duplicating model calls or changing default selection."""
+    if not names and not suites:
+        return None
+    return list(dict.fromkeys([*(names or []), *(name for suite in suites or [] for name in SUITES[suite])]))

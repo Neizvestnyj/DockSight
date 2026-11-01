@@ -143,6 +143,8 @@ cannot POST this request or attach its bearer header.
 Follow-up questions send the same `session_id` to retain bounded earlier questions and validated answer summaries.
 Each turn collects fresh observations; existing cards keep their original values. Starting a new investigation clears
 the client session and draft. Explicit group-scope changes start a separate session.
+Prior questions and summaries reach the model as a labeled context document, not replayed assistant conclusions.
+They preserve references for follow-ups but do not establish current runtime state or cross-service causality.
 
 For a broad question such as "What happened?", the successful path is:
 
@@ -160,11 +162,22 @@ server-issued reference IDs; a proposal is the model's suggested response.
 Each requested tool emits its own progress events. Model and tool budgets bound exploration; finalization allows one
 schema or evidence repair attempt. Container status cards prepare allowed actions through an internal `Actions.prepare`
 call. Executing those actions requires the separate confirmation flow below.
+Within a turn, a repeated successful read with the same validated arguments and target scope returns
+`{"already_collected":true,"evidence_ids":["e1"]}` instead of repeating the payload or calling Docker again.
+Exact observed container names and full IDs share that read. Failed reads are not reused, and a narrowed scope cannot
+reuse a wider result. A batch containing only reused reads ends exploration; tool-call/result pairs remain intact.
+This bounds redundant context, not total model tokens. New turns collect new observations; actions still revalidate Docker.
 
 Final and repair JSON schemas constrain every `evidence_ids` array to IDs collected in the current turn. A compact
 current-turn catalog identifies their observation kind and exact container; quoted log messages are not reference IDs.
 Server validation still rejects unknown references or references that cannot support the requested card.
 This validates reference integrity and card data, not the semantic correctness of a model's causal explanation.
+Final generation omits the last prose-only exploration draft and recaps at most eight latest per-resource lifecycle
+snapshots, with an explicit truncation flag. It retains conversation context, tool-call/result pairs, and the current
+evidence catalog; the final request repeats the redacted current question before the causal guidance.
+Prompt guidance separates clean exits, confirmed OOM, unexplained exit 137, unhealthy probes, and historical request
+errors. The opt-in [causal regression package](../CONTRIBUTING.md#live-docker-and-local-model-end-to-end-suite)
+checks these boundaries in English/Russian responses; it does not guarantee arbitrary model claims are correct.
 
 Container status, log, and environment cards each reference exactly one container. A question about several containers
 uses separate cards. A model proposal contains at most eight cards; server assembly retains collected facts and may

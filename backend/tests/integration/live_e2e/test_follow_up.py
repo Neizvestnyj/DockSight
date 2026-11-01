@@ -7,6 +7,7 @@ import pytest
 
 from docksight.application.views.schemas import ContainerStatusCard, DiagnosisResponse, LogAnomalyCard
 from tests.integration.live_e2e.cases import Case, Language
+from tests.integration.live_e2e.causal_checks import check_causality
 from tests.integration.live_e2e.checks import check_answer, check_narrative, check_resource_scope
 from tests.integration.live_e2e.lab import ComposeLab
 from tests.integration.live_e2e.reports import record_run, report_path
@@ -104,6 +105,8 @@ def _check_follow_up(
     check_resource_scope(answer, {peer.id}, lab.peer_project)
     check_narrative(answer, language, (peer.id, peer.name, lab.project))
     _check_dependency_details(answer, lab)
+    if lab.case.causal_profile:
+        check_causality(answer, lab.case.causal_profile, relationship_unknown=True)
     return answer
 
 
@@ -121,20 +124,6 @@ def _check_dependency_details(answer: DiagnosisResponse, lab: ComposeLab) -> Non
     observed = peer.logs(tail=200).decode("utf-8", errors="replace")
     assert logs[0].logs.entries and all(entry.message in observed for entry in logs[0].logs.entries)
     assert logs[0].logs.entries[-1].message == observed.splitlines()[-1]
-
-
-def _check_shutdown_cause(answer: DiagnosisResponse) -> None:
-    """Require uncertainty about the stop initiator and reject transaction errors as the immediate stop cause."""
-    if answer.cause:
-        assert answer.cause.underlying is None
-        assert answer.cause.unknowns
-        immediate = answer.cause.immediate.casefold()
-        assert not any(
-            term in immediate
-            for term in ("foreign key", "unique constraint", "integrity", "внешн", "уникальн", "целостност")
-        )
-    else:
-        assert answer.uncertain
 
 
 def test_live_shutdown_group_follow_up(
@@ -156,8 +145,7 @@ def test_live_shutdown_group_follow_up(
         )
         payload = {"host": "e2e", "query": query, "session_id": first_events[0]["session_id"]}
         _read_turn(api, payload, events)
-        answer = _check_follow_up(events, lab, language, group=True)
-        _check_shutdown_cause(answer)
+        _check_follow_up(events, lab, language, group=True)
     finally:
         record_run(
             report_path(artifacts, model_name, case, language, "shutdown-group"),

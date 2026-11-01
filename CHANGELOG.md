@@ -14,6 +14,9 @@ Dates below record each version's merge into `master` in Europe/Moscow. Version 
   and Compose members. Running unhealthy containers receive bounded diagnostic log collection even without restarts;
   missing health observations remain unknown, and probe commands and output are not exposed.
   Russian health badges use compact labels with a healthcheck hint.
+- A selectable local Docker/model causal regression package covers clean shutdowns, OOM, unexplained exits, unhealthy
+  probes, and dependency follow-ups. Authored English/Russian narrative fixtures check known contradictions across
+  explanations and recommendations, including unsupported project-independence claims; unfamiliar claims need review.
 
 ### Changed
 
@@ -27,7 +30,12 @@ Dates below record each version's merge into `master` in Europe/Moscow. Version 
 
 ### Fixed
 
-- Host model projections limit repeated member detail and omit unvalidated drafts before final generation.
+- Host model projections limit repeated member detail. Final generation omits unvalidated prose drafts across scopes
+  and recaps bounded latest lifecycle facts. Causal guidance separates clean shutdowns and unknown stop reasons from
+  old errors; model explanations still require review.
+  Schema guidance keeps unresolved causes in unknowns instead of presenting them as established deeper causes.
+  Repeated successful reads reuse this turn's evidence references instead of repeating full observations; redundant
+  tool batches end exploration. Follow-ups carry earlier questions and summaries as labeled context, with fresh facts.
   Ollama context-window exhaustion is distinguished from the response token limit, with localized guidance.
 - Docker log tails retain transport timeouts and abort at a fixed deadline. Stalled or slowly delivered responses release
   worker capacity and cannot return partial logs as a successful read or prevent backend shutdown.

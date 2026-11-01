@@ -12,20 +12,14 @@ from docker.models.containers import Container
 
 from docksight.adapters.outbound.docker.hosts import HostConfig, connect
 from tests.integration.live_e2e.cases import FOLLOW_UP_CASES, Case
+from tests.integration.live_e2e.workloads import is_ready, validate_failures
 
 ROOT: Final = Path(__file__).resolve().parents[4]
 OWNER_LABEL: Final = "com.docksight.e2e"
-FAILURES: Final = {
-    "backend": (1, False, "DatabaseConnectionError"),
-    "grafana": (1, False, "could not find Chat Id"),
-    "oom": (137, True, "Starting a 256 MiB allocation"),
-    "unknown": (137, False, "Worker ended without recording"),
-    "database-stopped": (0, False, "database system is shut down"),
-}
 
 
 def require_owner(labels: dict[str, str], owner: str) -> None:
-    """Refuse cleanup when an observed resource is not owned by this exact run."""
+    """Refuse mutation or cleanup when an observed resource is not owned by this exact run."""
     if labels.get(OWNER_LABEL) != owner:
         raise RuntimeError("Refusing to remove a resource not owned by this live-e2e run")
 
@@ -101,6 +95,7 @@ class ComposeLab:
         expected_count = len(self.case.services) + (15 if scaled else 0)
         if services != set(self.case.services) or len(self.containers) != expected_count:
             raise RuntimeError("Compose did not create the exact requested service set")
+        self._prepare_shutdown(self.containers)
         self._wait_ready()
         if self.case.group:
             self._start_peer()
@@ -138,7 +133,9 @@ class ComposeLab:
         }
         if len(self.peers) != 1:
             raise RuntimeError("Compose did not create the exact peer service set")
-        self._wait_ready({service: next(iter(self.peers.values()))})
+        selected = {service: next(iter(self.peers.values()))}
+        self._prepare_shutdown(selected)
+        self._wait_ready(selected)
         if self.case in FOLLOW_UP_CASES:
             peer = next(iter(self.peers.values()))
             require_owner(peer.labels, self.owner)
@@ -181,6 +178,20 @@ class ComposeLab:
         """Read only resources carrying this run's unguessable ownership label, across its two namespaces."""
         return self.client.containers.list(all=True, filters={"label": f"{OWNER_LABEL}={self.owner}"})
 
+    def _prepare_shutdown(self, rows: dict[str, Container]) -> None:
+        """Deliver a real Docker stop only to the owned graceful workload after it has installed its handler."""
+        if "clean-shutdown" not in rows:
+            return
+        row = rows["clean-shutdown"]
+        require_owner(row.labels, self.owner)
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            if row.exec_run(["test", "-f", "/tmp/ready"]).exit_code == 0:
+                row.stop(timeout=5)
+                return
+            time.sleep(0.2)
+        raise RuntimeError("The graceful workload did not become ready for a real stop")
+
     def _wait_ready(self, selected: dict[str, Container] | None = None) -> None:
         """Bound startup waits and preserve real Docker evidence when a fixture cannot reach its required state."""
         deadline = time.monotonic() + 90
@@ -188,34 +199,12 @@ class ComposeLab:
         while time.monotonic() < deadline:
             for row in rows.values():
                 row.reload()
-            if all(self._ready(name, row) for name, row in rows.items()):
-                self._validate_failures()
+            if all(is_ready(name, row) for name, row in rows.items()):
+                validate_failures(rows)
                 return
             time.sleep(0.2)
         states = {name: row.attrs["State"]["Status"] for name, row in rows.items()}
         raise RuntimeError(f"Fixture readiness timed out: {states}")
-
-    def _validate_failures(self) -> None:
-        """Fail fixture setup when Docker or logs show a different failure than the scenario requires."""
-        for name, row in self.containers.items():
-            if name not in FAILURES:
-                continue
-            exit_code, oom, marker = FAILURES[name]
-            state = row.attrs["State"]
-            output = row.logs(tail=100).decode("utf-8", errors="replace")
-            if (state["ExitCode"], state["OOMKilled"]) != (exit_code, oom) or marker not in output:
-                raise RuntimeError(f"Unexpected fixture failure for {name}; required workload was not reproduced")
-
-    def _ready(self, name: str, row: Container) -> bool:
-        """Check Docker facts rather than assuming that detached startup means application readiness."""
-        state = row.attrs["State"]
-        if name in {"backend", "grafana", "oom", "unknown", "database-stopped"}:
-            return state["Status"] == "exited"
-        if name == "crash":
-            return row.attrs["RestartCount"] >= 2
-        if name in {"logs", "database"}:
-            return state["Status"] == "running" and row.exec_run(["test", "-f", "/tmp/ready"]).exit_code == 0
-        return state.get("Health", {}).get("Status") == "healthy"
 
     def facts(self) -> dict[str, Any]:
         """Record only selected runtime facts, never raw inspect documents or environment secrets."""
@@ -230,6 +219,7 @@ class ComposeLab:
                 "name": row.name,
                 "image": row.image.id,
                 "state": row.attrs["State"]["Status"],
+                "health": row.attrs["State"].get("Health", {}).get("Status"),
                 "exit_code": row.attrs["State"]["ExitCode"],
                 "oom_killed": row.attrs["State"]["OOMKilled"],
                 "restart_count": row.attrs["RestartCount"],

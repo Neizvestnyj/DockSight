@@ -10,7 +10,13 @@ from uuid import uuid4
 from pydantic import ValidationError
 
 from docksight.application.diagnostics.context import EvidenceContext
-from docksight.application.diagnostics.prompts import SYSTEM_PROMPT, final_prompt, group_catalog, repair_feedback
+from docksight.application.diagnostics.prompts import (
+    SYSTEM_PROMPT,
+    final_prompt,
+    group_catalog,
+    history_context,
+    repair_feedback,
+)
 from docksight.application.diagnostics.scope import resolve_target
 from docksight.application.diagnostics.tools import DiagnosticTools, tool_specs
 from docksight.application.diagnostics.trace import DiagnosticTrace, schema_issues
@@ -155,7 +161,7 @@ class Diagnostics:
         }
         messages = [
             ModelMessage("system", SYSTEM_PROMPT),
-            *session.history,
+            *history_context(session.history),
             ModelMessage("user", self.redactor.text(query)),
         ]
         context = EvidenceContext()
@@ -204,9 +210,9 @@ class Diagnostics:
         trace: DiagnosticTrace,
     ) -> AsyncGenerator[TurnEvent]:
         """Retain validated answers in history without recording unresolved clarification turns."""
-        if context.host_overview and messages[-1].role == "assistant" and not messages[-1].tool_calls:
+        if messages[-1].role == "assistant" and not messages[-1].tool_calls:
             messages = messages[:-1]
-        messages.append(ModelMessage("user", final_prompt(query, context)))
+        messages.append(ModelMessage("user", final_prompt(self.redactor.text(query), context)))
         async for event in self._finalize(messages, context, session.actor, deadline, trace):
             if event["type"] == "answer.ready":
                 session.history.extend(
@@ -296,10 +302,15 @@ class Diagnostics:
             messages.append(ModelMessage("assistant", reply.content, reply.tool_calls, native=reply.native))
             if self._exploration_complete(reply, tools, messages):
                 break
+            reused = tools.reused_reads
             async for event in self._tool_batch(reply.tool_calls, tools, messages, deadline, tool_calls, trace):
                 yield event
             tool_calls += len(reply.tool_calls)
-            if tools.context.selection or tool_calls >= self.max_tool_calls:
+            if (
+                tools.context.selection
+                or tool_calls >= self.max_tool_calls
+                or (reply.tool_calls and tools.reused_reads - reused == len(reply.tool_calls))
+            ):
                 break
 
     def _exploration_complete(self, reply: ModelReply, tools: DiagnosticTools, messages: list[ModelMessage]) -> bool:

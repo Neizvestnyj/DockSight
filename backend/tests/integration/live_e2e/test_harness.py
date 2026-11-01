@@ -26,7 +26,10 @@ def test_bare_host_case_does_not_request_the_choice_required_for_named_ambiguity
     assert cases["unscoped"].query("infra", "", "ru") == "Что случилось?"
 
 
-@pytest.mark.parametrize(("name", "limits"), [("compose-unscoped", (200, 65536)), ("compose-chat", (30, 2048))])
+@pytest.mark.parametrize(
+    ("name", "limits"),
+    [("compose-unscoped", (200, 65536)), ("compose-chat", (30, 2048)), ("clean-shutdown", (200, 65536))],
+)
 def test_dense_host_case_uses_production_log_limits_without_changing_other_cases(
     name: str, limits: tuple[int, int], monkeypatch: pytest.MonkeyPatch
 ) -> None:

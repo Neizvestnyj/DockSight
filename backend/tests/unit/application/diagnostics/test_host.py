@@ -177,7 +177,10 @@ async def test_host_tool_caps_inventory_preview_targets_and_log_reads() -> None:
     assert len(runtime.reads) <= 4
     assert context.used_bytes <= 65536
     assert len(json.dumps(result, ensure_ascii=False).encode()) <= 65536
-    assert await tools.execute(ToolCall("again", "inspect_host", {})) == result
+    assert await tools.execute(ToolCall("again", "inspect_host", {})) == {
+        "already_collected": True,
+        "evidence_ids": list(context.evidence),
+    }
     assert len(runtime.reads) <= 4
 
 

@@ -1,4 +1,5 @@
 import json
+from collections.abc import Sequence
 from dataclasses import replace
 from typing import Any
 
@@ -6,7 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 from httpx import Response
 
-from docksight.application.ports.models import ModelReply, ToolCall
+from docksight.application.ports.models import ModelMessage, ModelReply, ToolCall
 from docksight.bootstrap import Settings, build_components
 from docksight.main import create_app
 from tests.fakes import DiscoveryRuntime, FakeRuntime, ScriptedModel
@@ -125,13 +126,20 @@ def test_group_follow_up_keeps_history_and_reads_a_container_with_a_colliding_pr
     assert answer["group"] is None
     assert answer["widgets"][0]["snapshot"]["id"] == "3" * 64
     assert answer["widgets"][1]["container_id"] == "3" * 64
-    assert [(row.role, row.content) for row in model.requests[2][0] if row.role != "system"][:2] == [
-        ("user", first_query),
-        ("assistant", summary),
-    ]
+    _check_prior_context(model.requests[2][0], first_query, summary)
     assert len(original["widgets"]) == 4
     assert original["group"]["summary"]["name"] == "vintoria-infra"
     assert runtime.reads == ["1" * 64, "2" * 64, "3" * 64]
+
+
+def _check_prior_context(messages: Sequence[ModelMessage], query: str, summary: str) -> None:
+    """Retain earlier operator references and validated summaries in an explicit context document."""
+    history = next(row for row in messages if "previous_turns" in row.content)
+    assert history.role == "user"
+    assert json.loads(history.content.split("\n", 1)[1])["previous_turns"] == [
+        {"role": "user", "content": query},
+        {"role": "assistant", "content": summary},
+    ]
 
 
 def _check_mixed_clarification(response: Response) -> None:

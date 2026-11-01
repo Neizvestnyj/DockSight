@@ -1,5 +1,5 @@
 import re
-from typing import Any
+from typing import Any, Final
 
 from docksight.application.views.schemas import (
     ComposeStackCard,
@@ -10,8 +10,12 @@ from docksight.application.views.schemas import (
 )
 from docksight.domain.runtime import ContainerSnapshot
 from tests.integration.live_e2e.cases import Case
+from tests.integration.live_e2e.causal_checks import check_causality
 from tests.integration.live_e2e.host_checks import check_host
 from tests.integration.live_e2e.lab import ComposeLab
+
+# Covers the 800-line finite fixture and continuous probes within 90s setup plus a 240s turn.
+_SOURCE_LOG_LINES: Final = 1000
 
 
 def check_selection(events: list[dict[str, Any]], lab: ComposeLab) -> None:
@@ -97,6 +101,8 @@ def check_answer(events: list[dict[str, Any]], lab: ComposeLab, case: Case, lang
     check_narrative(answer, language, identifiers)
     _check_diagnostic_scope(answer, lab, case, ids)
     _check_logs(answer, lab)
+    if not case.group and case.causal_profile:
+        check_causality(answer, case.causal_profile)
     return answer
 
 
@@ -189,8 +195,19 @@ def _check_container(answer: DiagnosisResponse, lab: ComposeLab, case: Case) -> 
         assert snapshot.state == "running"
         assert any(row.logs.truncated for row in answer.widgets if isinstance(row, LogAnomalyCard))
     else:
-        _check_exited(snapshot, case)
+        _check_causal_snapshot(snapshot, case)
     _check_uncertainty(answer, case)
+
+
+def _check_causal_snapshot(snapshot: ContainerSnapshot, case: Case) -> None:
+    """Keep live process state and health facts independent from the semantic narrative assertions."""
+    if case.causal_profile in {"running_unhealthy", "running_history"}:
+        assert snapshot.state == "running" and snapshot.restart_count == 0 and not snapshot.oom_killed
+        assert snapshot.health == ("unhealthy" if case.causal_profile == "running_unhealthy" else None)
+    elif case.causal_profile == "clean_shutdown":
+        assert (snapshot.state, snapshot.exit_code, snapshot.oom_killed) == ("exited", 0, False)
+    else:
+        _check_exited(snapshot, case)
 
 
 def _check_exited(snapshot: ContainerSnapshot, case: Case) -> None:
@@ -217,8 +234,8 @@ def _check_logs(answer: DiagnosisResponse, lab: ComposeLab) -> None:
     assert cards, "The diagnosis omitted supported requested logs"
     for card in cards:
         assert card.host == "e2e" and card.container_id in containers
-        _check_log_source(card, answer, 200 if lab.case.spelling == "unscoped" else 30)
-        raw = containers[card.container_id].logs(tail=100).decode("utf-8", errors="replace")
+        _check_log_source(card, answer, lab.case.log_limits[0])
+        raw = containers[card.container_id].logs(tail=_SOURCE_LOG_LINES).decode("utf-8", errors="replace")
         assert all(entry.message in raw for entry in card.logs.entries), "Log card contains unobserved content"
 
 
