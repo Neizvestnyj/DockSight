@@ -224,6 +224,59 @@ async def test_capacity_preserves_existing_archive_and_draft(archive: Investigat
     assert (await archive.read("alice", identity)).workspace.draft == ""
 
 
+async def test_create_enforces_actor_bytes_without_partial_state(archive: InvestigationArchive) -> None:
+    """Two empty workspaces and their empty contexts require 176 UTF-8 bytes in total."""
+    assert isinstance(archive, MemoryInvestigations | SQLiteInvestigations)
+    archive.limits = StorageLimits(investigation_bytes=88, actor_bytes=175)
+    existing, rejected = str(uuid4()), str(uuid4())
+    initial = await archive.create("alice", existing, "local", NOW)
+    preferences = await archive.patch_actor_workspace(
+        "alice", ActorWorkspacePatch(expected_revision=0, last_investigation_id=existing, host="local"), NOW
+    )
+    with pytest.raises(HistoryError) as caught:
+        await archive.create("alice", rejected, "local", NOW)
+    assert caught.value.code == "history_capacity"
+    assert (await archive.list_owned("alice")).items[0].id == existing
+    assert len((await archive.list_owned("alice")).items) == 1
+    assert await archive.read("alice", existing) == initial
+    assert await archive.workspace("alice") == preferences
+    with pytest.raises(HistoryError) as missing:
+        await archive.read("alice", rejected)
+    assert missing.value.code == "history_not_found"
+
+
+@pytest.mark.parametrize(("investigation_bytes", "actor_bytes"), [(87, 1000), (1000, 87)])
+async def test_create_rejects_oversized_initial_state(
+    archive: InvestigationArchive, investigation_bytes: int, actor_bytes: int
+) -> None:
+    """The 86-byte workspace plus its two-byte model context must fit both byte quotas."""
+    assert isinstance(archive, MemoryInvestigations | SQLiteInvestigations)
+    archive.limits = StorageLimits(investigation_bytes=investigation_bytes, actor_bytes=actor_bytes)
+    preferences = await archive.workspace("alice")
+    identity = str(uuid4())
+    with pytest.raises(HistoryError) as caught:
+        await archive.create("alice", identity, "local", NOW)
+    assert caught.value.code == "history_capacity"
+    assert (await archive.list_owned("alice")).items == ()
+    assert await archive.workspace("alice") == preferences
+    with pytest.raises(HistoryError) as missing:
+        await archive.read("alice", identity)
+    assert missing.value.code == "history_not_found"
+
+
+async def test_create_accepts_exact_byte_fit_and_returns_duplicates_before_quotas(
+    archive: InvestigationArchive,
+) -> None:
+    assert isinstance(archive, MemoryInvestigations | SQLiteInvestigations)
+    archive.limits = StorageLimits(investigation_bytes=88, actor_bytes=176)
+    first, second = str(uuid4()), str(uuid4())
+    initial = await archive.create("alice", first, "local", NOW)
+    await archive.create("alice", second, "local", NOW)
+    assert {item.id for item in (await archive.list_owned("alice")).items} == {first, second}
+    archive.limits = StorageLimits(investigation_bytes=1, actor_bytes=1)
+    assert await archive.create("alice", first, "local", NOW) == initial
+
+
 async def test_running_archive_cannot_be_deleted(archive: InvestigationArchive) -> None:
     identity = str(uuid4())
     await archive.create("alice", identity, "local", NOW)

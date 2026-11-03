@@ -115,19 +115,19 @@ class SQLiteInvestigations:
             )
             if count >= self.limits.investigations_per_actor:
                 raise capacity()
-            session.add(
-                InvestigationRow(
-                    id=investigation_id,
-                    actor=actor,
-                    host=host,
-                    title="",
-                    created_at=timestamp,
-                    updated_at=timestamp,
-                    workspace=initial.workspace.model_dump_json(),
-                    context="[]",
-                    reserved_bytes=0,
-                )
+            row = InvestigationRow(
+                id=investigation_id,
+                actor=actor,
+                host=host,
+                title="",
+                created_at=timestamp,
+                updated_at=timestamp,
+                workspace=initial.workspace.model_dump_json(),
+                context="[]",
+                reserved_bytes=0,
             )
+            self._check_capacity(session, actor, row, initial.workspace)
+            session.add(row)
             return initial
 
         return await self.database.transaction(create, write=True)
@@ -233,7 +233,11 @@ class SQLiteInvestigations:
                 session.scalar(select(func.sum(TurnRow.snapshot_bytes)).where(TurnRow.investigation_id == row.id)) or 0
             )
             sizes[row.id] = len(row.workspace.encode()) + len(row.context.encode()) + row.reserved_bytes + snapshots
-        sizes[current.id] += len(workspace.model_dump_json().encode()) - len(current.workspace.encode())
+        if current.id not in sizes:
+            sizes[current.id] = len(current.context.encode()) + current.reserved_bytes
+        else:
+            sizes[current.id] -= len(current.workspace.encode())
+        sizes[current.id] += len(workspace.model_dump_json().encode())
         if sizes[current.id] > self.limits.investigation_bytes or sum(sizes.values()) > self.limits.actor_bytes:
             raise capacity()
 

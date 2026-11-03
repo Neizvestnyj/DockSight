@@ -15,6 +15,11 @@ Dates record merges into `master`. Version links show the corresponding changes.
   support establish local state storage. Backups reject source-file and source-sidecar destinations.
   The backend image prepares `/var/lib/docksight` for a durable directory mount.
 
+### Fixed
+
+- Creating a saved investigation enforces both byte quotas before saving its initial workspace and model context.
+  Rejected creation preserves existing archives and actor preferences.
+
 ### Changed
 
 - Keep temporary agent plans and review artifacts out of version control.

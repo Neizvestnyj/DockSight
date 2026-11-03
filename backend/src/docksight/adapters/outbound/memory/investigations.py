@@ -63,6 +63,7 @@ class MemoryInvestigations:
             raise capacity()
         utc_text(now)
         view = InvestigationView(id=investigation_id, host=host, created_at=now, updated_at=now)
+        self._check_capacity(actor, investigation_id, view.workspace)
         self._investigations[investigation_id] = view
         self._owners[investigation_id] = actor
         return view.model_copy(deep=True)
@@ -139,15 +140,20 @@ class MemoryInvestigations:
         return updated.model_copy(deep=True)
 
     def _check_capacity(self, actor: str, identity: str, workspace: InvestigationWorkspace) -> None:
-        """Preserve existing content when an explicit workspace update exceeds capacity."""
+        """Check existing content and seeded context before creating or replacing a workspace."""
         sizes = {
             key: len(view.workspace.model_dump_json().encode())
+            + len(b"[]")
             + sum(len(row.snapshot.encode()) for row in self._turns.values() if row.investigation_id == key)
             for key, view in self._investigations.items()
             if self._owners[key] == actor
         }
-        previous = len(self._investigations[identity].workspace.model_dump_json().encode())
-        sizes[identity] += len(workspace.model_dump_json().encode()) - previous
+        previous = self._investigations.get(identity)
+        if previous is None:
+            sizes[identity] = len(b"[]")
+        else:
+            sizes[identity] -= len(previous.workspace.model_dump_json().encode())
+        sizes[identity] += len(workspace.model_dump_json().encode())
         if sizes[identity] > self.limits.investigation_bytes or sum(sizes.values()) > self.limits.actor_bytes:
             raise capacity()
 
