@@ -141,10 +141,12 @@ class Actions:
         action = stored.action
         await self._mirror("action.claimed", action)
         try:
-            async with asyncio.timeout(self.timeout):
+            async with asyncio.timeout(self.timeout) as deadline:
                 current = await self.reader.inspect(action.host, action.container_id)
                 _validate_target(action, current)
                 stored = await self.store.mark_dispatch(action.id, stored.revision, self.clock())
+                if deadline.expired():
+                    raise TimeoutError
                 task = self._start_mutation(action)
                 await asyncio.shield(task)
             state, message = ActionState.SUCCEEDED, f"Container {action.operation} completed"

@@ -10,7 +10,7 @@ import pytest
 from docksight.adapters.outbound.memory.actions import MemoryActions
 from docksight.application.actions import Actions
 from docksight.application.investigations.errors import StorageError
-from docksight.application.ports.state import ActionClaim
+from docksight.application.ports.state import ActionClaim, StoredAction
 from docksight.application.views.schemas import ActionView
 from docksight.domain.actions import PreparedAction
 from docksight.domain.diagnostics import JsonObject
@@ -245,4 +245,28 @@ async def test_registration_and_failed_terminal_commit_keep_claim_protected(
     with pytest.raises(StorageError):
         await service.execute(action.id, "alice", "request-1", True)
     assert not runtime.mutations
+    await service.close()
+
+
+async def test_dispatch_marker_settling_after_deadline_does_not_send_docker() -> None:
+
+    class SettlingDispatch(MemoryActions):
+        """Reproduce the cancellation-settling contract of an accepted SQLite marker transaction."""
+
+        async def mark_dispatch(self, action_id: str, expected_revision: int, now: datetime) -> StoredAction:
+            """Return a committed marker after the workflow timeout cancellation has been consumed."""
+            stored = await super().mark_dispatch(action_id, expected_revision, now)
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                return stored
+
+    runtime = FakeRuntime()
+    store = SettlingDispatch()
+    service = Actions(runtime, runtime, store, FakeAudit(), timeout=0.01)
+    action = await service.prepare("alice", "local", runtime.item.id, "restart")
+    result = await service.execute(action.id, "alice", "request-1", True)
+    assert result.state == "indeterminate"
+    assert not runtime.mutations
+    assert (await store.inspect_block(action.id)).blocked
     await service.close()

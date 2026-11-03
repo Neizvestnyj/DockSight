@@ -1,6 +1,7 @@
 import asyncio
 import os
 import sys
+import threading
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -213,6 +214,48 @@ async def test_sqlite_claim_commit_handoff_survives_cancelled_observer_and_shutd
         await (closing if closing else service.close())
         assert (await service.get(action.id, "alice")).state == "succeeded"
         assert runtime.mutations == ["restart"]
+    finally:
+        release.set()
+        if caller is not None:
+            await asyncio.gather(caller, return_exceptions=True)
+        await service.close()
+        await database.close()
+
+
+async def test_real_sqlite_dispatch_commit_settles_timeout_without_sending_late_docker(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from docksight.adapters.outbound.persistence import actions as persistence
+
+    database = PersistentDatabase(tmp_path / "state.sqlite3", recoveries=[recover_actions])
+    await database.initialize_server()
+    store = SQLiteActions(database)
+    runtime = FakeRuntime()
+    service = Actions(runtime, runtime, store, FakeAudit(), timeout=0.02)
+    entered, release = threading.Event(), threading.Event()
+    original = persistence.append_audit
+
+    def paused_audit(
+        session: Session, event: str, action: PreparedAction, now: datetime, extra: JsonObject | None = None
+    ) -> None:
+        """Hold the accepted marker write until its awaiting workflow deadline has elapsed."""
+        original(session, event, action, now, extra)
+        if event == "action.dispatching":
+            entered.set()
+            assert release.wait(5)
+
+    monkeypatch.setattr(persistence, "append_audit", paused_audit)
+    caller = None
+    try:
+        action = await service.prepare("alice", "local", runtime.item.id, "restart")
+        caller = asyncio.create_task(service.execute(action.id, "alice", "request-1", True))
+        assert await asyncio.to_thread(entered.wait, 2)
+        await asyncio.sleep(0.05)
+        release.set()
+        assert (await caller).state == "indeterminate"
+        assert not runtime.mutations
+        assert (await store.inspect_block(action.id)).blocked
     finally:
         release.set()
         if caller is not None:
