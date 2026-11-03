@@ -25,6 +25,8 @@ actions. Models provide explanations and select from approved tools and widgets.
 - Do not publish, squash, or rewrite history unless the user requests that action.
 - Preserve unrelated edits and existing staging. Stage only the files owned by the current task. Never reset the index
   to prepare a commit.
+- Keep all Superpowers plans, design drafts, task briefs, ledgers, and review artifacts in Git-ignored directories.
+  Never stage or commit these files. Keep durable project decisions in the regular documentation.
 - Use English Conventional Commit headers, at most 72 characters. Check the header length before committing. Use the
   configured Git identity.
 

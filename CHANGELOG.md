@@ -17,7 +17,7 @@ Dates record merges into `master`. Version links show the corresponding changes.
 
 ### Changed
 
-- Documented the reviewed storage, browser-session, and recovery design for persistent investigations.
+- Keep temporary agent plans and review artifacts out of version control.
 - Architecture checks keep SQLAlchemy, Alembic, and file-locking libraries inside adapters.
 
 ## [0.7.0]
