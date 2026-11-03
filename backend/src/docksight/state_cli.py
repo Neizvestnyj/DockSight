@@ -1,8 +1,10 @@
 import argparse
 import asyncio
-import getpass
+import ctypes
 import json
+import os
 import sys
+from ctypes import wintypes
 from dataclasses import asdict
 from pathlib import Path
 from typing import Literal
@@ -14,7 +16,7 @@ from docksight.adapters.outbound.persistence.actions import SQLiteActions
 from docksight.adapters.outbound.persistence.database import PersistentDatabase
 from docksight.adapters.outbound.persistence.maintenance import StateMaintenance
 from docksight.application.ports.state import ReconcileTarget
-from docksight.domain.errors import DockSightError
+from docksight.domain.errors import DockSightError, ErrorKind
 
 
 class _StatePath(BaseSettings):
@@ -54,6 +56,37 @@ def _confirming(arguments: argparse.Namespace) -> bool:
     return bool(confirming)
 
 
+def _read_os_account() -> str:
+    """Read the executing Windows thread account or POSIX effective-UID account directly from the OS."""
+    if sys.platform == "win32":
+        lookup = ctypes.WinDLL("advapi32", use_last_error=True).GetUserNameW
+        lookup.argtypes = [wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD)]
+        lookup.restype = wintypes.BOOL
+        size = wintypes.DWORD(257)
+        account = ctypes.create_unicode_buffer(size.value)
+        if not lookup(account, ctypes.byref(size)):
+            raise ctypes.WinError()
+        return account.value
+    import pwd
+
+    return pwd.getpwuid(os.geteuid()).pw_name
+
+
+def _operator_identity() -> str:
+    """Fail reconciliation safely when the executing OS account cannot be resolved for audit."""
+    try:
+        account = _read_os_account()
+    except (OSError, KeyError) as error:
+        raise DockSightError(
+            "operator_identity_unavailable", "Executing OS account could not be resolved", ErrorKind.UNAVAILABLE
+        ) from error
+    if not account.strip() or len(account) > 256:
+        raise DockSightError(
+            "operator_identity_unavailable", "Executing OS account could not be resolved", ErrorKind.UNAVAILABLE
+        )
+    return account
+
+
 async def _reconcile(database: PersistentDatabase, arguments: argparse.Namespace) -> str:
     """Construct only configured Docker reads and the offline reconciliation use case."""
     from docksight.adapters.outbound.docker.hosts import load_hosts
@@ -88,7 +121,7 @@ async def _reconcile(database: PersistentDatabase, arguments: argparse.Namespace
             expected_revision=arguments.expected_revision,
             confirm_target=arguments.confirm_target,
             actor=arguments.actor,
-            operator=getpass.getuser(),
+            operator=_operator_identity(),
             reason=redactor.text(arguments.reason),
             acknowledge_unknown_outcome=arguments.acknowledge_unknown_outcome,
         )

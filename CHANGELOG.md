@@ -25,6 +25,8 @@ Dates record merges into `master`. Version links show the corresponding changes.
 - Creating a saved investigation enforces both byte quotas before saving its initial workspace and model context.
   Rejected creation preserves existing archives and actor preferences.
 - A dispatch-marker commit that settles after its action deadline cannot send a late Docker command.
+- Offline reconciliation audits the executing OS account independently of inherited username environment variables.
+  An unavailable OS identity leaves the target blocked and its audit unchanged.
 
 ### Changed
 

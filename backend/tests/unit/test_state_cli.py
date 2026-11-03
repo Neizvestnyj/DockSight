@@ -1,5 +1,8 @@
 import asyncio
+import ctypes
 import json
+import os
+import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
@@ -15,6 +18,28 @@ from docksight.application.investigations.errors import StorageError
 from docksight.domain.actions import ActionState, PreparedAction
 from docksight.domain.errors import DockSightError
 from tests.fakes import FakeRuntime
+
+
+class OfflineRuntime(FakeRuntime):
+    """Provide configured reads without constructing a live Docker connection."""
+
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        """Accept the composition arguments while preserving the complete runtime fake."""
+        super().__init__()
+
+    async def close(self) -> None:
+        """Complete the CLI runtime lifecycle without mutating any target."""
+
+
+def expected_os_operator() -> str:
+    """Read the executing account independently of inherited identity environment variables."""
+    if sys.platform == "win32":
+        import win32api
+
+        return win32api.GetUserName()
+    import pwd
+
+    return pwd.getpwuid(os.geteuid()).pw_name
 
 
 async def test_status_and_backup_need_no_credentials_or_provider_configuration(
@@ -51,25 +76,19 @@ async def test_maintenance_commands_fail_before_construction_when_backend_owns_l
         await database.close()
 
 
-async def test_cli_preview_and_confirm_reobserve_without_startup_recovery_or_mutation(
+async def test_cli_confirmation_audits_os_account_despite_poisoned_environment(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from docksight.adapters.outbound.docker import runtime as docker
 
-    class ReadRuntime(FakeRuntime):
-        """Provide only fresh configured reads for the offline CLI composition test."""
-
-        def __init__(self, *args: object, **kwargs: object) -> None:
-            """Accept adapter construction while counting observation and shutdown behavior."""
-            super().__init__()
-
-        async def close(self) -> None:
-            """Complete the runtime lifecycle without any mutation authority being used."""
-
+    actual_operator = expected_os_operator()
+    poisoned = "review-injected-operator"
+    for name in ("LOGNAME", "USER", "LNAME", "USERNAME"):
+        monkeypatch.setenv(name, poisoned)
     monkeypatch.setenv("DOCKSIGHT_API_TOKEN", "a-configured-operator-token-12345")
     monkeypatch.setenv("DOCKSIGHT_PROVIDER", "ollama")
-    monkeypatch.setattr(docker, "DockerRuntime", ReadRuntime)
+    monkeypatch.setattr(docker, "DockerRuntime", OfflineRuntime)
     database = PersistentDatabase(tmp_path / "state.sqlite3")
     await database.initialize_server()
     now = datetime.now(UTC)
@@ -109,6 +128,7 @@ async def test_cli_preview_and_confirm_reobserve_without_startup_recovery_or_mut
         )
     )
     assert not confirmed["blocked"]
+    assert poisoned not in json.dumps(confirmed)
     owner = PersistentDatabase(database.path)
     await owner.open_existing("reconcile")
     try:
@@ -121,6 +141,86 @@ async def test_cli_preview_and_confirm_reobserve_without_startup_recovery_or_mut
         )
         assert fields is not None
         assert "a-configured-operator-token-12345" not in fields
-        assert json.loads(fields)["operator"]
+        assert json.loads(fields)["operator"] == actual_operator
+        assert poisoned not in fields
+        actor = await owner.transaction(
+            lambda session: session.scalar(
+                select(ActionAuditRow.actor).where(ActionAuditRow.event == "action.reconciled")
+            )
+        )
+        assert actor == "operator"
+    finally:
+        await owner.close()
+
+
+async def test_unavailable_os_identity_preserves_block_and_authoritative_audit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from docksight.adapters.outbound.docker import runtime as docker
+
+    def unavailable(*args: object, **kwargs: object) -> str:
+        """Simulate an unavailable OS identity API without inventing an environment fallback."""
+        raise OSError("Identity API unavailable")
+
+    monkeypatch.setenv("DOCKSIGHT_API_TOKEN", "a-configured-operator-token-12345")
+    monkeypatch.setenv("DOCKSIGHT_PROVIDER", "ollama")
+    for name in ("LOGNAME", "USER", "LNAME", "USERNAME"):
+        monkeypatch.setenv(name, "review-injected-operator")
+    monkeypatch.setattr(docker, "DockerRuntime", OfflineRuntime)
+    if sys.platform == "win32":
+        monkeypatch.setattr(ctypes, "WinDLL", unavailable)
+    else:
+        import pwd
+
+        monkeypatch.setattr(pwd, "getpwuid", unavailable)
+    database = PersistentDatabase(tmp_path / "state.sqlite3")
+    await database.initialize_server()
+    now = datetime.now(UTC)
+    identity = str(uuid4())
+    store = SQLiteActions(database)
+    try:
+        await store.add(
+            PreparedAction(
+                identity, "operator", "local", "a" * 64, "restart", "fingerprint", now + timedelta(minutes=5)
+            ),
+            now,
+        )
+        claimed = await store.claim(identity, "operator", "request-1", True, now)
+        dispatched = await store.mark_dispatch(identity, claimed.stored.revision, now)
+        await store.complete(identity, dispatched.revision, ActionState.INDETERMINATE, "Unknown", now)
+        before = await store.inspect_block(identity)
+        events_before = await database.transaction(lambda session: list(session.scalars(select(ActionAuditRow.event))))
+    finally:
+        await database.close()
+    with pytest.raises(DockSightError) as caught:
+        await state_cli.run_command(
+            [
+                "--state-path",
+                str(database.path),
+                "reconcile",
+                "--action-id",
+                identity,
+                "--expected-revision",
+                str(before.revision),
+                "--confirm-target",
+                f"local/{'a' * 64}",
+                "--actor",
+                "operator",
+                "--reason",
+                "Verified old operation settled",
+                "--acknowledge-unknown-outcome",
+            ]
+        )
+    assert caught.value.code == "operator_identity_unavailable"
+    assert "review-injected-operator" not in caught.value.message
+    owner = PersistentDatabase(database.path)
+    await owner.open_existing("reconcile")
+    try:
+        assert await SQLiteActions(owner).inspect_block(identity) == before
+        assert (
+            await owner.transaction(lambda session: list(session.scalars(select(ActionAuditRow.event))))
+            == events_before
+        )
     finally:
         await owner.close()
