@@ -1,9 +1,10 @@
 [project]
 name = "docksight"
-version = "0.7.0"
+version = "0.8.0"
 description = "Docker diagnostics with typed UI responses and confirmed actions"
 requires-python = ">=3.12"
 dependencies = [
+  "alembic>=1.18,<2",
   "anyio>=4.8",
   "anthropic>=0.80",
   "docker[ssh]>=7.1",
@@ -11,12 +12,14 @@ dependencies = [
   "httpx>=0.28",
   "openai>=2.0",
   "paramiko>=3.5,<6",
+  "portalocker>=3.2,<4",
   "pydantic>=2.8,<3",
   "pydantic-settings>=2.8",
   "python-dotenv>=1.0",
   "pyyaml>=6.0",
   "pywin32>=308; sys_platform == 'win32'",
   "requests>=2.32,<3",
+  "sqlalchemy>=2.0.46,<2.1",
   "starlette>=0.40,<2",
   "uvicorn>=0.34",
 ]
@@ -99,13 +102,13 @@ include_external_packages = true
 name = "Domain remains independent"
 type = "forbidden"
 source_modules = ["docksight.domain"]
-forbidden_modules = ["docksight.application", "docksight.adapters", "docksight.bootstrap", "pydantic", "pydantic_settings", "fastapi", "docker", "httpx", "httpx2", "openai", "anthropic", "yaml", "anyio"]
+forbidden_modules = ["docksight.application", "docksight.adapters", "docksight.bootstrap", "pydantic", "pydantic_settings", "fastapi", "docker", "httpx", "httpx2", "openai", "anthropic", "yaml", "anyio", "sqlalchemy", "alembic", "portalocker"]
 
 [[tool.importlinter.contracts]]
 name = "Application owns its ports"
 type = "forbidden"
 source_modules = ["docksight.application"]
-forbidden_modules = ["docksight.adapters", "docksight.bootstrap", "fastapi", "docker", "httpx", "httpx2", "openai", "anthropic", "pydantic_settings", "yaml"]
+forbidden_modules = ["docksight.adapters", "docksight.bootstrap", "fastapi", "docker", "httpx", "httpx2", "openai", "anthropic", "pydantic_settings", "yaml", "sqlalchemy", "alembic", "portalocker"]
 
 [[tool.importlinter.contracts]]
 name = "Inbound and outbound adapters remain independent"

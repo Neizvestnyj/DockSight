@@ -44,7 +44,7 @@ def lint_project(project: Path) -> subprocess.CompletedProcess[str]:
     )
 
 
-@pytest.mark.parametrize("forbidden", ["httpx", "docksight.application"])
+@pytest.mark.parametrize("forbidden", ["httpx", "docksight.application", "sqlalchemy", "alembic", "portalocker"])
 def test_domain_contract_rejects_outward_imports(architecture_project: Path, forbidden: str) -> None:
     (architecture_project / "docksight/domain/rules.py").write_text(
         f"import {forbidden}\n", encoding="utf-8", newline="\n"
@@ -52,6 +52,16 @@ def test_domain_contract_rejects_outward_imports(architecture_project: Path, for
     result = lint_project(architecture_project)
     assert result.returncode == 1, result.stdout + result.stderr
     assert "Domain remains independent BROKEN" in result.stdout
+
+
+@pytest.mark.parametrize("forbidden", ["sqlalchemy", "alembic", "portalocker"])
+def test_application_contract_rejects_storage_libraries(architecture_project: Path, forbidden: str) -> None:
+    (architecture_project / "docksight/application/archive.py").write_text(
+        f"import {forbidden}\n", encoding="utf-8", newline="\n"
+    )
+    result = lint_project(architecture_project)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "Application owns its ports BROKEN" in result.stdout
 
 
 @pytest.mark.parametrize(("source", "target"), [("inbound", "outbound"), ("outbound", "inbound")])

@@ -27,3 +27,4 @@ frontend/playwright-report/
 *.tsbuildinfo
 frontend/lint-results.json
 .test-artifacts/
+.docksight/
