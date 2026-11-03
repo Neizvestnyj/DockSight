@@ -37,7 +37,8 @@ dev = [
   "interrogate>=1.7,<2",
   "pre-commit>=4.5,<5",
   "pyright>=1.1.400",
-  "pytest>=8.3",
+  # pytest-deadfixtures 3.1 uses fixture internals removed in pytest 9.2.
+  "pytest>=8.3,<9.2",
   "pytest-asyncio>=0.25",
   "pytest-cov>=7.1,<8",
   "pytest-deadfixtures>=3.1,<4",

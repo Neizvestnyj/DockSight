@@ -8,6 +8,7 @@ Dates record merges into `master`. Version links show the corresponding changes.
 
 ### Added
 
+- `make update-deps` upgrades backend and frontend runtime and dev dependencies within declared version ranges.
 - `DOCKSIGHT_API_TOKENS` defines named operators, each with its own bearer token. Diagnostic sessions and prepared
   actions belong to the operator whose token created them, and audit records name that operator.
   `DOCKSIGHT_API_TOKEN` keeps working as the `operator` identity.
@@ -23,11 +24,13 @@ Dates record merges into `master`. Version links show the corresponding changes.
 
 ### Fixed
 
+- Dependency updates keep pytest compatible with the unused-fixture check.
 - Browser checks wait for selection menus to finish rendering before reading their option target, avoiding
   timing-dependent failures immediately after opening a menu.
 
 ### Security
 
+- Frontend tooling uses minimatch `11.0.1` or newer within `11.x` to fix CVE-2026-118764.
 - The compatible provider no longer falls back to `OPENAI_API_KEY` or `DOCKSIGHT_OPENAI_API_KEY`, so an OpenAI key is
   never sent to a third-party or local endpoint. Use `DOCKSIGHT_MODEL_API_KEY` or `DOCKSIGHT_COMPATIBLE_API_KEY`.
 

@@ -24,6 +24,11 @@ install:
 	uv sync --project backend --locked
 	npm --prefix frontend ci
 
+$(eval $(call describe,update-deps      ,Upgrade backend and frontend dependencies))
+update-deps:
+	uv sync --project backend --upgrade --all-groups
+	npm --prefix frontend update --include=dev
+
 $(eval $(call describe,hooks            ,Install Git hooks))
 hooks:
 	uv run --project backend python scripts/git_hooks.py install

@@ -34,6 +34,7 @@ Run `make frontend` in another terminal. Backend configuration and credentials f
 
 | Command | Behavior |
 |---------|----------|
+| `make update-deps` | Upgrade backend and frontend runtime and dev dependencies within declared version ranges |
 | `make check` | Run backend and frontend static checks |
 | `make check-backend` / `make check-frontend` | Check one side only |
 | `make test` | Run backend tests and frontend unit tests |
@@ -44,6 +45,16 @@ Run `make frontend` in another terminal. Backend configuration and credentials f
 
 Targets run sequentially even with `make -j` to avoid concurrent frontend checks and builds.
 Docker and live-model tests remain separate opt-in commands described below.
+
+`make update-deps` updates both lockfiles and local environments. Review the diff, then run `make verify`.
+If a security fix requires a version outside the declared range, update that constraint first.
+
+Pytest stays below `9.2` while `pytest-deadfixtures` relies on removed fixture internals.
+Remove this limit when the plugin supports newer pytest versions.
+
+The frontend overrides minimatch to `^11.0.1` for
+[CVE-2026-118764](https://github.com/advisories/GHSA-g3hv-75wg-m249).
+Remove the override when ESLint and TypeScript ESLint require a fixed version.
 
 ## Making changes
 
