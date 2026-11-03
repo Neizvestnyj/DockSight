@@ -21,6 +21,11 @@ Dates record merges into `master`. Version links show the corresponding changes.
   response statuses without changing public error codes, messages, or diagnostic stream events.
 - Architecture checks enforce independent inbound and outbound adapters, with concrete wiring confined to bootstrap.
 
+### Fixed
+
+- Browser checks wait for selection menus to finish rendering before reading their option target, avoiding
+  timing-dependent failures immediately after opening a menu.
+
 ### Security
 
 - The compatible provider no longer falls back to `OPENAI_API_KEY` or `DOCKSIGHT_OPENAI_API_KEY`, so an OpenAI key is
