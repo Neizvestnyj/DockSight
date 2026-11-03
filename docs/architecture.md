@@ -6,11 +6,9 @@ See the [system overview](../README.md#how-it-works) for the diagnostic data flo
 
 ## Decision
 
-Use one hexagonal application, deployed as a monolith. Group related behavior inside its domain and application
-packages. Keep external technologies in adapters and construct dependencies in one composition root.
-
-A single hexagon keeps dependency boundaries explicit without repeating ports and wiring for each feature. Split a
-feature into its own context when its language, rules, or ownership require that separation.
+The backend is a monolith with one hexagonal boundary. Related behavior shares domain and application packages.
+Adapters contain external technologies. The composition root constructs dependencies.
+Split a feature into its own context when its language, rules, or ownership require it.
 
 ![Hexagonal backend with core-owned ports and technology adapters](diagrams/hexagonal-architecture.png)
 
@@ -19,48 +17,26 @@ run in the same process as the core.
 
 ## Dependencies
 
-Arrows show allowed source-code dependencies. Outbound adapters implement application-owned ports; `bootstrap.py`
+Arrows show allowed source-code dependencies. Outbound adapters implement application-owned ports. `bootstrap.py`
 selects the concrete implementations and injects them into use cases.
 Inbound and outbound adapters do not import each other, directly or indirectly. They interact through application-owned
-contracts; the composition root may import both to construct the application.
+contracts. The composition root may import both to construct the application.
 
 ![Allowed source-code dependencies and application-owned ports](diagrams/code-dependencies.png)
 
-`RuntimeQueries` serves Docker reads, `Diagnostics` coordinates model-assisted diagnosis, and `Actions` prepares and
-executes confirmed commands. `Diagnostics` uses `ViewAssembler` to build typed responses. Ports are interfaces owned by
-the application and implemented by outbound adapters.
-
-Scope discovery supplies observed Compose/Swarm identities to the existing model tool loop. Broad incident questions
-collect a bounded local-host overview across projects and ungrouped containers before model exploration. Counts, member
-state, coverage limits, and collected fact cards are server-owned and remain available independently of model widgets.
-The model cannot replace this overview with a group chooser. Optional narrowing starts a separate investigation with
-fresh observations of the selected group or exact container.
-
-Each turn owns a bounded evidence context and read-result memo. Repeated successful reads with the same arguments and
-scope return evidence references instead of duplicating observations; failures are not cached. A batch containing only
-reused reads ends model exploration. Final generation omits unvalidated prose drafts and includes a bounded recap of
-the latest collected lifecycle facts. Earlier questions and summaries are labeled context, not current observations.
-
-Schema and evidence-reference validation do not verify the truth of model explanations. Causal regression tests detect
-selected known contradictions; they are not a runtime factuality filter.
-
-Named ambiguity still requires clarification. The application validates choices against discovery and ends that turn
-without diagnosis or session history. Container/group name collisions include the observed container's exact identity.
-The client continues the same question and session with an explicit target, revalidated against fresh Docker data.
-
-`SystemStatus` checks a selected Docker host through `RuntimeReadPort.ping` and provider metadata through `ModelStatusPort`.
-It owns independent deadlines, public reason codes, and UTC check times. The metadata adapter owns provider-specific HTTP
-routes and credentials; the status use case never calls `ModelPort.complete` or changes diagnostic or action state.
-
-`ModelChoices` validates optional provider/model selections against server-owned catalogs. `CatalogCache` coalesces
-metadata work and owns freshness, failure cooldown, and cancellation. Provider-specific pagination and HTTP handling
-remain in the catalog adapter. The composition root lazily creates one reusable connection per configured provider;
-transient selected adapters share those clients. Selected `Diagnostics` instances share sessions, redaction, action
-assembly, and the existing concurrency semaphore, without changing another turn's model or trace identity.
+| Component | Responsibility |
+|-----------|----------------|
+| `RuntimeQueries` | Docker reads |
+| `Diagnostics` | Model calls, tools, and evidence collection |
+| `ViewAssembler` | Typed responses built from model proposals and collected facts |
+| `Actions` | Action preparation and confirmed execution |
+| `SystemStatus` | Docker and provider metadata checks |
+| `ModelChoices` | Provider/model selection against server-owned catalogs |
+| `CatalogCache` | Shared metadata fetches, freshness, failure cooldown, and cancellation |
 
 - `domain` uses the standard library only. It owns values and business rules.
 - `application` owns use cases, ports, tool orchestration, and output contracts. Pydantic may validate application DTOs
-  and widget proposals; it must not become a base class for domain entities.
+  and widget proposals. Domain entities do not inherit from Pydantic.
 - `adapters` translate HTTP, Docker, provider SDKs, storage, and logging into application contracts. Application code
   never imports adapters or settings.
 - `bootstrap.py` reads settings, selects adapters, injects dependencies, and manages resource lifetimes. `main.py`
@@ -69,6 +45,32 @@ assembly, and the existing concurrency semaphore, without changing another turn'
   duplicates each use-case method.
 - Outbound ports are application-owned `Protocol` types. Return owned values, not Docker SDK objects, HTTP responses, or
   provider message classes.
+
+### Diagnostic turns
+
+- Scope discovery supplies observed Compose/Swarm identities to the model tool loop.
+- Broad incident questions collect a bounded local-host overview before model exploration. Counts, member state,
+  collection limits, and fact cards belong to the server. A model cannot replace the overview with a group chooser.
+- Narrowing to a group or exact container starts a separate investigation with fresh observations.
+- Ambiguous names require a choice validated against discovery. That turn ends without a diagnosis or history entry.
+  Container/group collisions include the container's exact identity. The client continues the same question and session
+  with an explicit target, revalidated against fresh Docker data.
+- Each turn owns a bounded evidence context and read-result memo. Repeated successful reads with the same arguments and
+  scope return existing evidence references. Failures are not cached. A batch of only reused reads ends exploration.
+- Final generation omits unvalidated prose drafts and includes a bounded recap of the latest lifecycle facts.
+  Earlier questions and summaries are labeled as historical context.
+- Schema and evidence-reference validation do not verify explanations. Causal regression tests detect selected known
+  contradictions. They do not filter runtime responses.
+
+### Status and model connections
+
+`SystemStatus` uses `RuntimeReadPort.ping` and `ModelStatusPort`, with independent deadlines, public reason codes, and UTC
+check times. It never calls `ModelPort.complete` or changes diagnostic or action state.
+The metadata adapter owns provider-specific HTTP routes and credentials.
+
+The catalog adapter owns pagination and HTTP handling. Bootstrap creates one reusable connection per configured
+provider on demand. Selected adapters share those clients. `Diagnostics` instances share sessions, redaction, action
+assembly, and the concurrency semaphore. Each turn keeps its own model and trace identity.
 
 ## Layout
 
@@ -109,8 +111,7 @@ backend/src/docksight/
 - Use a consistent vocabulary: Host, ContainerSnapshot, EvidenceRef, DiagnosticTurn, PreparedAction, and ActionOutcome.
 - Use immutable values for identities, evidence references, action targets, and observations. Keep related values in the
   same cohesive file.
-- Treat runtime inventory as an external read model. A container snapshot is not an aggregate that pretends to control
-  the Docker daemon.
+- Treat runtime inventory as an external read model. Container snapshots do not control the Docker daemon.
 - `PreparedAction` owns its actor, target, operation, expiry, and legal state transitions. Its execution state is the
   consistency boundary. A store must atomically claim it before a runtime mutation can start.
 - Keep expiry, confirmation, and transition checks in domain behavior. The application supplies the current time and
@@ -124,38 +125,36 @@ backend/src/docksight/
 
 ![Prepared action states and permitted transitions](diagrams/action-lifecycle.png)
 
-`prepared` means awaiting confirmation; `running` means the execution request has been accepted. Expiry is recorded
+`prepared` awaits confirmation. `running` records acceptance of an execution request. Expiry is recorded
 when the first execution request arrives at or after the deadline. The same idempotency key reuses an existing
 execution or retained outcome without another transition. An `indeterminate` outcome blocks further commands for that
 target for the backend process lifetime. See the [execution sequence](api.md#actions).
 
-## Boundaries that matter
+## Runtime boundaries
 
 - `DockSightError` carries a safe public code, message, and transport-independent `ErrorKind`. The HTTP adapter maps
-  the category to a response status. The same public code can have different categories depending on context;
-  core rules and outbound adapters do not select client HTTP statuses.
+  the category to a response status. One public code may have different categories depending on context.
+  Core rules and outbound adapters do not select HTTP statuses.
 - Diagnostics receive a read-only runtime port. Actions receive the mutation port. Model tool registration includes no
   mutation method.
 - Collect allowlisted, sanitized evidence before model access. The model proposes evidence references, explanation text,
   and allowed widget types. The application validates references and builds cards from real snapshots.
-- Widget schemas and their registry belong to application output contracts; HTTP request/envelope schemas and SSE
+- Widget schemas and their registry belong to application output contracts. HTTP request/envelope schemas and SSE
   encoding belong to the inbound adapter. Neither belongs in `domain`. Schema conversion for a model provider belongs in
   that provider's outbound adapter.
-- Action preparation is also called directly by the diagnostic workflow when it needs to attach an allowed action to a
-  card. It does not call its own API.
-- Claim an action and deduplicate execution atomically; serialize mutations for the same host/container. Enforce those
+- Diagnostics call action preparation directly to attach permitted actions to cards.
+- Claim an action and deduplicate execution atomically. Serialize mutations for the same host/container. Enforce those
   guarantees in the state adapter, while keeping authorization and action rules in the core.
 - Cancel diagnostic work when its client disconnects. Once a mutation starts, track it to a known or indeterminate
   outcome even if its caller disconnects. A timed-out worker-thread call is not proof that Docker cancelled the action.
 - An indeterminate action blocks new mutations for that target for this process lifetime. Inspect Docker and reconcile
   its outcome before restarting the backend. In-memory state provides no guarantee across an abrupt process loss.
-- Inject a clock callable for time-based rules. Use small fake ports in core tests; Docker and model SDKs are
-  unnecessary for those tests.
+- Inject a clock callable for time-based rules. Core tests use small fake ports without Docker or model SDKs.
 
 ## Verification
 
 - Enforce import direction in CI with `import-linter`. Verify that application imports no adapters, FastAPI, Docker SDK,
-  HTTPX, provider SDKs, or settings; verify that domain imports no application, adapter, or third-party package.
+  HTTPX, provider SDKs, or settings. Verify that domain imports no application, adapter, or third-party package.
   An independence contract rejects direct and indirect imports between inbound and outbound adapters.
 - Test domain rules and use cases through fake ports. Test adapter mappings separately, then verify HTTP contracts and
   the real Docker example.
