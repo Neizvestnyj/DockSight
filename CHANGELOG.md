@@ -12,7 +12,8 @@ Dates record merges into `master`. Version links show the corresponding changes.
   Explicit deletion preserves submission receipts and action protection. Runtime wiring remains in memory until the
   recovery services are integrated.
 - Packaged forward migrations, exclusive process ownership, and stopped-server status and byte-preserving backup
-  support establish local state storage. The backend image prepares `/var/lib/docksight` for a durable directory mount.
+  support establish local state storage. Backups reject source-file and source-sidecar destinations.
+  The backend image prepares `/var/lib/docksight` for a durable directory mount.
 
 ### Changed
 

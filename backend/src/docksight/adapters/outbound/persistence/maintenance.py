@@ -52,7 +52,8 @@ class StateMaintenance:
         journal = Path(str(source) + "-journal")
         sources = (source, journal) if journal.exists() else (source,)
         targets = tuple(destination if item == source else Path(str(destination) + "-journal") for item in sources)
-        if any(target.exists() or target == item for item, target in zip(sources, targets, strict=True)):
+        protected = {source, journal, Path(str(source) + ".lock")}
+        if any(target.exists() or target in protected for target in targets):
             raise StorageError("storage_backup_exists", "Backup destination must not exist")
         try:
             for item, target in zip(sources, targets, strict=True):
