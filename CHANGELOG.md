@@ -14,6 +14,11 @@ Dates record merges into `master`. Version links show the corresponding changes.
 - Packaged forward migrations, exclusive process ownership, and stopped-server status and byte-preserving backup
   support establish local state storage. Backups reject source-file and source-sidecar destinations.
   The backend image prepares `/var/lib/docksight` for a durable directory mount.
+- Durable action claims, dispatch markers, outcomes, and audit retain idempotency and exact-target uncertainty guards
+  across restart. Cancelled callers retain an owned execution handoff.
+- Offline state commands inspect, back up, migrate, and explicitly reconcile blocked targets under the backend lock.
+  Reconciliation requires a fresh Docker observation and operator acknowledgement, preserves the unknown outcome,
+  and invalidates old preparations without resending Docker commands.
 
 ### Fixed
 

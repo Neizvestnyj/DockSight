@@ -2,9 +2,9 @@ import base64
 import hashlib
 import json
 from datetime import UTC, datetime
-from typing import cast
+from typing import Literal, cast
 
-from pydantic import BaseModel, ValidationError
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, ValidationError
 
 from docksight.application.investigations.contracts import (
     ActorWorkspace,
@@ -14,7 +14,47 @@ from docksight.application.investigations.contracts import (
     WorkspacePatch,
 )
 from docksight.application.investigations.errors import HistoryError, WorkspaceConflict
+from docksight.domain.actions import ActionState, Operation, PreparedAction
 from docksight.domain.errors import ErrorKind
+
+
+class ActionSnapshot(BaseModel):
+    """Validate a bounded versioned domain snapshot independently of indexed lifecycle fields."""
+
+    model_config = ConfigDict(extra="forbid", from_attributes=True)
+    schema_version: Literal[1] = 1
+    id: str = Field(min_length=1, max_length=36)
+    actor: str = Field(min_length=1, max_length=128)
+    host: str = Field(min_length=1, max_length=128)
+    container_id: str = Field(pattern=r"^[a-f0-9]{64}$")
+    operation: Operation
+    fingerprint: str = Field(min_length=1, max_length=256)
+    expires_at: AwareDatetime
+    state: ActionState
+    idempotency_key: str | None = Field(default=None, min_length=3, max_length=128)
+    message: str = Field(min_length=1, max_length=2000)
+
+
+def encode_action(action: PreparedAction) -> str:
+    """Reject invalid action values before writing the bounded versioned envelope."""
+    return ActionSnapshot.model_validate(action).model_dump_json()
+
+
+def decode_action(encoded: str) -> PreparedAction:
+    """Hydrate only a supported detached domain action without ORM references."""
+    value = decode_value(ActionSnapshot, encoded)
+    return PreparedAction(
+        value.id,
+        value.actor,
+        value.host,
+        value.container_id,
+        value.operation,
+        value.fingerprint,
+        value.expires_at,
+        value.state,
+        value.idempotency_key,
+        value.message,
+    )
 
 
 def utc_text(value: datetime) -> str:
