@@ -3,7 +3,7 @@ from collections.abc import Callable
 from docksight.application.model_catalog import CatalogCache, CatalogView, ModelSelection, ProvidersView
 from docksight.application.ports.models import ModelPort
 from docksight.application.ports.status import ModelStatusPort
-from docksight.domain.errors import DockSightError
+from docksight.domain.errors import DockSightError, ErrorKind
 
 
 class ModelChoices:
@@ -24,7 +24,7 @@ class ModelChoices:
         """Reject unknown or unconfigured providers without making external requests."""
         catalog = self.catalogs.get(provider)
         if catalog is None:
-            raise DockSightError("provider_not_configured", "Select a configured model provider", 422)
+            raise DockSightError("provider_not_configured", "Select a configured model provider", ErrorKind.VALIDATION)
         return catalog
 
     async def catalog(self, provider: str, refresh: bool = False) -> CatalogView:

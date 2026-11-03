@@ -13,7 +13,7 @@ The initial **Demo** workspace uses fictional hosts and local fixtures. It needs
 
 ![English Demo confirmation showing the host, exact container, prepared action, and separate confirmation](screenshots/action-confirmation.jpg)
 
-*This is a simulated action; confirming it in Demo never changes Docker resources.*
+*Simulated action. Confirmation in Demo does not change Docker resources.*
 
 Other scenarios cover OOM, failed dependencies, truncated logs, an unconfirmed exit, and a running container with zero CPU.
 Expand **Test error states** to explore connection, streaming, inventory, and action-result failures.
@@ -27,21 +27,20 @@ an observed group. Review collection limits and missing logs, then choose **Inve
 for a separate, focused investigation. A question naming an ambiguous resource still asks which target you mean.
 
 Restart and stop require separate confirmation of a server-prepared action. After execution, refresh the container
-overview for current observations; earlier diagnostic cards retain their original evidence.
+overview for current observations. Earlier diagnostic cards retain their original evidence.
 
 ## Docker example
 
-This example creates a worker that exits on its first start and runs after a confirmed restart. Its retry marker lives
-in a dedicated demo volume. Start the backend with access to the same Docker environment, configure a model, and run
-these commands from the repository root:
+The example worker exits on its first start and runs after a confirmed restart. A dedicated demo volume holds its retry
+marker. Start the backend with access to the same Docker environment and configure a model. From the repository root:
 
 ```sh
 docker compose -f examples/compose.yaml up -d
 uv run --project backend python examples/demo.py diagnose
 ```
 
-The Compose project is `docksight-demo`. Use a new project name if it already exists, and name the same project in the
-question; reusing its volume skips the first-start failure. For example:
+The default project name is `docksight-demo`. Reusing its volume skips the first-start failure.
+If that project already exists, use a new name in both commands:
 
 ```sh
 docker compose -p docksight-example -f examples/compose.yaml up -d
@@ -60,16 +59,16 @@ docker compose -f examples/compose.yaml ps -a
 ```
 
 Keep the same idempotency key for that execution. If a response is lost, read the action state before considering a
-repeat request; never automatically retry a Docker mutation. An `indeterminate` result requires checking Docker directly.
+repeat request. Never automatically retry a Docker mutation. An `indeterminate` result requires checking Docker directly.
 The [API reference](api.md#actions) describes expiry, execution outcomes, and revalidation.
 
-Reset only this demo stack and its volume with:
+Remove the demo stack, its volume, and the retry marker:
 
 ```sh
 docker compose -f examples/compose.yaml down -v
 ```
 
-This removes the example's retry marker too. Keep the project name consistent and remove only the example you created.
+Use the same project name as above. Remove only the example you created.
 
 ## HTTP integration
 

@@ -3,7 +3,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Literal
 
-from docksight.domain.errors import DockSightError
+from docksight.domain.errors import DockSightError, ErrorKind
 from docksight.domain.runtime import ContainerState
 
 type Operation = Literal["restart", "stop"]
@@ -50,21 +50,21 @@ class PreparedAction:
     def claim(self, actor: str, key: str, confirmed: bool, now: datetime) -> bool:
         """Validate ownership and confirmation before claiming one idempotent execution."""
         if actor != self.actor:
-            raise DockSightError("action_not_found", "Action not found", 404)
+            raise DockSightError("action_not_found", "Action not found", ErrorKind.NOT_FOUND)
         if not confirmed:
-            raise DockSightError("confirmation_required", "Explicit confirmation required", 409)
+            raise DockSightError("confirmation_required", "Explicit confirmation required", ErrorKind.CONFLICT)
         if not 3 <= len(key) <= 128:
-            raise DockSightError("invalid_idempotency_key", "Invalid idempotency key", 422)
+            raise DockSightError("invalid_idempotency_key", "Invalid idempotency key", ErrorKind.VALIDATION)
         if self.idempotency_key is not None:
             if self.idempotency_key != key:
-                raise DockSightError("action_conflict", "Action uses another idempotency key", 409)
+                raise DockSightError("action_conflict", "Action uses another idempotency key", ErrorKind.CONFLICT)
 
             return False
         if now >= self.expires_at:
             self.state = ActionState.EXPIRED
-            raise DockSightError("action_expired", "Action has expired", 409)
+            raise DockSightError("action_expired", "Action has expired", ErrorKind.CONFLICT)
         if self.state != ActionState.PREPARED:
-            raise DockSightError("action_conflict", "Action cannot be executed", 409)
+            raise DockSightError("action_conflict", "Action cannot be executed", ErrorKind.CONFLICT)
         self.idempotency_key = key
         self.state = ActionState.RUNNING
 
@@ -77,6 +77,6 @@ class PreparedAction:
             ActionState.FAILED,
             ActionState.INDETERMINATE,
         }:
-            raise DockSightError("invalid_transition", "Invalid action transition", 409)
+            raise DockSightError("invalid_transition", "Invalid action transition", ErrorKind.CONFLICT)
         self.state = state
         self.message = message

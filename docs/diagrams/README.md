@@ -15,7 +15,7 @@ and connectors. PNG previews are embedded in the project documentation.
 | 8    | Action lifecycle       | [action-lifecycle.png](action-lifecycle.png)             |
 
 Page IDs match preview filenames. After editing a page, re-export its PNG from the repository root. The installed
-draw.io CLI uses **1-based** `--page-index` values; check `--help` when using another version. For example:
+draw.io CLI uses **1-based** `--page-index` values. Check `--help` when using another version.
 
 ```powershell
 & "C:\Program Files\draw.io\draw.io.exe" --export --format png `

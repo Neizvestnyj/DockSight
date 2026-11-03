@@ -29,7 +29,7 @@ from docksight.application.views.assembler import ViewAssembler
 from docksight.application.views.registry import proposal_schema
 from docksight.application.views.schemas import DiagnosisProposal, GroupTarget
 from docksight.domain.diagnostics import JsonObject
-from docksight.domain.errors import DockSightError
+from docksight.domain.errors import DockSightError, ErrorKind
 
 
 async def _before_deadline[T](deadline: float, operation: Callable[[], Awaitable[T]]) -> T:
@@ -133,13 +133,13 @@ class Diagnostics:
     def _validate_turn(self, host: str, query: str, group: GroupTarget | None, container_id: str | None) -> None:
         """Reject invalid scope, query size, or exhausted capacity before leasing a session."""
         if host not in {item.id for item in self.runtime.hosts()}:
-            raise DockSightError("host_not_found", "Configured host not found", 404)
+            raise DockSightError("host_not_found", "Configured host not found", ErrorKind.NOT_FOUND)
         if not query.strip() or len(query) > 4000:
-            raise DockSightError("invalid_query", "Query must contain 1-4000 characters", 422)
+            raise DockSightError("invalid_query", "Query must contain 1-4000 characters", ErrorKind.VALIDATION)
         if self._slots.locked():
-            raise DockSightError("turn_capacity", "Diagnostic capacity reached; retry later", 503)
+            raise DockSightError("turn_capacity", "Diagnostic capacity reached; retry later", ErrorKind.UNAVAILABLE)
         if group is not None and container_id is not None:
-            raise DockSightError("invalid_target", "Choose either a group or an exact container", 422)
+            raise DockSightError("invalid_target", "Choose either a group or an exact container", ErrorKind.VALIDATION)
 
     async def _run_turn(
         self,
@@ -373,13 +373,13 @@ class Diagnostics:
         )
         yield {"type": "tool.completed", "turn_id": trace.turn_id, "tool": name, "ok": "error" not in result}
         if strict and isinstance(result.get("error"), str):
-            raise DockSightError(str(result["error"]), "Selected scope could not be inspected", 502)
+            raise DockSightError(str(result["error"]), "Selected scope could not be inspected", ErrorKind.DEPENDENCY)
 
     async def _tool_result(self, call: ToolCall, tools: DiagnosticTools, deadline: float, used: int) -> JsonObject:
         """Return a safe tool result while preserving the absolute turn deadline."""
         try:
             if used >= self.max_tool_calls:
-                raise DockSightError("tool_limit", "Tool budget exhausted", 409)
+                raise DockSightError("tool_limit", "Tool budget exhausted", ErrorKind.CONFLICT)
             return await _before_deadline(deadline, lambda: tools.execute(call))
         except DockSightError as exc:
             return {"error": exc.code, "message": exc.message}
@@ -403,7 +403,9 @@ class Diagnostics:
             yield trace.begin("validation", "validate_diagnosis")
             try:
                 if reply.tool_calls:
-                    raise DockSightError("invalid_model_response", "Final response must not call tools", 502)
+                    raise DockSightError(
+                        "invalid_model_response", "Final response must not call tools", ErrorKind.DEPENDENCY
+                    )
                 proposal = DiagnosisProposal.model_validate_json(reply.content)
                 _redact_narrative(proposal, self.redactor)
 
@@ -417,7 +419,7 @@ class Diagnostics:
                     raise DockSightError(
                         "invalid_diagnosis",
                         "Model could not produce a valid evidence-backed diagnosis",
-                        502,
+                        ErrorKind.DEPENDENCY,
                     ) from exc
                 messages.extend(
                     [

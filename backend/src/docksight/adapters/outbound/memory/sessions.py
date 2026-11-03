@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from docksight.application.ports.state import Session
-from docksight.domain.errors import DockSightError
+from docksight.domain.errors import DockSightError, ErrorKind
 
 
 @dataclass
@@ -39,14 +39,14 @@ class MemorySessions:
         self._expire(now)
         if session_id is None:
             if len(self._entries) >= self._capacity:
-                raise DockSightError("session_capacity", "Session capacity reached; retry later", 503)
+                raise DockSightError("session_capacity", "Session capacity reached; retry later", ErrorKind.UNAVAILABLE)
             session_id = str(uuid4())
             self._entries[session_id] = Entry(Session(session_id, actor, host), now)
         entry = self._entries.get(session_id)
         if entry is None or entry.session.actor != actor or entry.session.host != host:
-            raise DockSightError("session_not_found", "Session not found for this actor and host", 404)
+            raise DockSightError("session_not_found", "Session not found for this actor and host", ErrorKind.NOT_FOUND)
         if entry.active:
-            raise DockSightError("session_busy", "A turn is already running in this session", 409)
+            raise DockSightError("session_busy", "A turn is already running in this session", ErrorKind.CONFLICT)
         entry.active = True
         try:
             yield entry.session

@@ -1,11 +1,11 @@
 import { expect, type Locator } from '@playwright/test';
 
-/** Choose through the visible listbox, retaining stable fixture IDs across localized labels. */
+/** Wait for listbox rendering, retaining stable fixture IDs across localized labels. */
 export async function chooseOption(control: Locator, value: string) {
   const trigger = control.and(control.page().getByRole('combobox'));
   await trigger.click();
+  await expect(trigger).toHaveAttribute('aria-controls', /\S+/);
   const listId = await trigger.getAttribute('aria-controls');
-  expect(listId).toBeTruthy();
   const option = control
     .page()
     .locator(`[id=${JSON.stringify(listId)}]`)

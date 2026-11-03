@@ -1,21 +1,36 @@
 # Changelog
 
-This file records notable changes to DockSight. The format follows
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
-[Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-Dates below record each version's merge into `master`. Version links show the corresponding changes.
+Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+Versions: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+Dates record merges into `master`. Version links show the corresponding changes.
 
 ## [0.7.0]
 
 ### Added
 
+- `make update-deps` upgrades backend and frontend runtime and dev dependencies within declared version ranges.
 - `DOCKSIGHT_API_TOKENS` defines named operators, each with its own bearer token. Diagnostic sessions and prepared
   actions belong to the operator whose token created them, and audit records name that operator.
   `DOCKSIGHT_API_TOKEN` keeps working as the `operator` identity.
 
+### Changed
+
+- Shorter README, contributor guide, and technical references, with shared Markdown style rules.
+- Action-store regression coverage protects owner isolation, retention, concurrent claims, cancellation, and
+  indeterminate target blocks.
+- Backend failures carry transport-independent categories. The HTTP adapter translates them into the existing
+  response statuses without changing public error codes, messages, or diagnostic stream events.
+- Architecture checks enforce independent inbound and outbound adapters, with concrete wiring confined to bootstrap.
+
+### Fixed
+
+- Dependency updates keep pytest compatible with the unused-fixture check.
+- Browser checks wait for selection menus to finish rendering before reading their option target, avoiding
+  timing-dependent failures immediately after opening a menu.
+
 ### Security
 
+- Frontend tooling uses minimatch `11.0.1` or newer within `11.x` to fix CVE-2026-118764.
 - The compatible provider no longer falls back to `OPENAI_API_KEY` or `DOCKSIGHT_OPENAI_API_KEY`, so an OpenAI key is
   never sent to a third-party or local endpoint. Use `DOCKSIGHT_MODEL_API_KEY` or `DOCKSIGHT_COMPATIBLE_API_KEY`.
 
@@ -25,27 +40,25 @@ Dates below record each version's merge into `master`. Version links show the co
 
 - Apache-2.0 license for the public repository and third-party notices in frontend builds.
 - Docker healthcheck status appears separately from process state in container facts, diagnostic cards, inventory,
-  and Compose members. Running unhealthy containers receive bounded diagnostic log collection even without restarts;
-  missing health observations remain unknown, and probe commands and output are not exposed.
+  and Compose members. Running unhealthy containers receive bounded diagnostic logs even without restarts.
+  Missing health observations remain unknown. Probe commands and output are not exposed.
 - Local Docker/model regression scenarios cover clean shutdowns, OOM, unexplained exits, failing healthchecks, and
   dependency follow-ups. Checks flag selected contradictions in explanations and recommendations, including unsupported
-  claims that failures are unrelated; other claims still need review.
+  claims that failures are unrelated. Other claims still need review.
 
 ### Changed
 
-- Setup guides explain host scope, evidence limits, model uncertainty, provider settings, and local connection errors.
-  English Demo screenshots show the current interface; diagnostic diagrams describe evidence reuse and final context.
-  The README focuses on diagnosis and confirmed actions, with CI and license badges. Release links point to merged
-  commits, and contributor rules no longer embed a stale version.
+- Consolidated setup guides for host scope, evidence limits, providers, and connection errors, with current English Demo
+  screenshots and diagnostic diagrams. README now covers diagnosis and confirmed actions, with CI and license badges.
+  Release links point to merged commits. Contributor rules omit a stale version.
 - Selection menus share custom styling, keyboard navigation, typeahead, and explicit selected or disabled states.
   Optional diagnostic-scope guidance appears beside a help button, available by hover, focus, or tap.
 - Container card headers show process state only, with healthchecks in separate facts. Stopped containers identify the
-  last reported check; exited states are neutral and nonzero exit codes are highlighted.
+  last reported check. Exited states are neutral and nonzero exit codes are highlighted.
 - General incident questions return a bounded host overview across projects and ungrouped containers, with observed
   state, log coverage, collection limits, and optional focused investigations. Named ambiguity still requires a target
   choice. Additional log reads retain their evidence, and unavailable actions preserve collected observations.
-  Diagnostic documentation and sequence diagrams describe this flow; live regressions use mixed hosts and production
-  log limits.
+  Updated diagnostic diagrams and documentation. Live regressions use mixed hosts and production log limits.
 
 ### Fixed
 
@@ -56,10 +69,9 @@ Dates below record each version's merge into `master`. Version links show the co
   restriction. No-card replies preserve empty public card lists through provider schema conversion.
 - Host model projections limit repeated member detail. Final generation omits unvalidated prose drafts across scopes
   and recaps bounded latest lifecycle facts. Causal guidance separates clean shutdowns and unknown stop reasons from
-  old errors; model explanations still require review.
-  Schema guidance keeps unresolved causes in unknowns instead of presenting them as established deeper causes.
-  Repeated successful reads reuse this turn's evidence references instead of repeating full observations; redundant
-  tool batches end exploration. Follow-ups carry earlier questions and summaries as labeled context, with fresh facts.
+  old errors. Model explanations still require review. Schema guidance places unresolved causes in unknowns.
+  Repeated reads reuse current-turn evidence references. Redundant tool batches end exploration.
+  Follow-ups label earlier questions and summaries as historical context and collect fresh facts.
   Ollama context-window exhaustion is distinguished from the response token limit, with localized guidance.
 - Docker log tails retain transport timeouts and abort at a fixed deadline. Stalled or slowly delivered responses release
   worker capacity and cannot return partial logs as a successful read or prevent backend shutdown.
@@ -71,27 +83,27 @@ Dates below record each version's merge into `master`. Version links show the co
 - The Docker diagnosis/restart regression uses precollected container and log evidence and reports stream failures
   directly instead of failing with a missing-answer lookup.
 - Provider/model selection initializes on Python 3.12 and 3.13 by deferring type-only settings annotations.
-  Backend CI uses Node.js 24 actions and a fixed Ubuntu image; a compatibility failure leaves the other version running.
+  Backend CI uses Node.js 24 actions and a fixed Ubuntu image. A compatibility failure leaves the other version running.
 - Language selection fits its option labels without clipping.
 - Dialogs close on an outside click while preserving drafts and prepared actions. Clicks inside and text selection
   remain within the dialog without dismissing it.
 - Model generation distinguishes missing or inaccessible models from unsupported requests, with guidance
   to check the model name and API-key access. Provider response bodies remain private.
-- Bounded Docker log reads and diagnostic byte budgets retain the latest output instead of the start of a tail window.
-  Log viewers show the retained UTC date range and order; oversized scans fail explicitly rather than hiding final events.
-- Final and repair schemas restrict evidence references to the current turn instead of accepting arbitrary strings.
+- Bounded Docker logs and diagnostic byte budgets retain the latest output. Viewers show the retained UTC date range and
+  order. Oversized scans return an error.
+- Final and repair schemas restrict evidence references to the current turn.
   A noisy SQL-log follow-up covers exact-container evidence, card content, and response language.
 - Explicit container references preserve container scope when a Compose project has the same name,
   allowing dependency follow-ups to continue the existing conversation with fresh observations. Server tool scope keeps
   earlier group context from adding unrelated container cards to the new answer. Exact-target status and bounded logs are
-  collected before model exploration; missing model cards are filled from those facts, and unavailable logs retain status.
-- Untyped container/project name collisions ask which resource to investigate instead of failing with `ambiguous_target`.
-  The choice retains the original question and conversation; container reads use a freshly validated full Docker ID.
+  collected before model exploration. The server fills missing cards from those facts and retains status when logs fail.
+- Untyped container/project name collisions ask which resource to investigate. The choice retains the question and
+  conversation. Container reads use a freshly validated full Docker ID.
 - Diagnostics and New investigation open an empty conversation, clear the draft, and focus the question input.
 - Bare incident questions ask which observed Compose project or Swarm stack to diagnose when several are available,
   before collecting unrelated container logs. Named-group questions retain automatic scope resolution.
 - Choosing a clarification scope continues the original question in one history entry. The selected group stays visible
-  while the diagnosis runs; unrelated answers and the next question's draft are preserved.
+  while the diagnosis runs. Unrelated answers and the next question's draft are preserved.
 - Log-only answers keep the container name captured by Docker in panel headings and observation sources, even when the
   model omits the status card or its snapshot evidence.
 
@@ -99,11 +111,11 @@ Dates below record each version's merge into `master`. Version links show the co
 
 - Header provider/model selection with searchable catalogs, server-managed credentials, and temporary per-tab choices.
   Catalogs refresh on demand with bounded caching and retain previous choices on failure. Switching preserves the
-  investigation and prepared actions; requests without a selection keep the configured default model.
+  investigation and prepared actions. Requests without a selection use the configured default model.
 - A graceful-shutdown live scenario checks tail retention and detects unsupported attribution of process stops to SQL
   request errors. The causal check currently exposes a remaining local-model limitation.
 - Gemini provider with a default Google endpoint, environment-based API keys, metadata checks, and preserved tool-call
-  signatures for multi-step diagnostics. The status panel recognizes Gemini; configuration uses 3.5 Flash-Lite because
+  signatures for multi-step diagnostics. The status panel recognizes Gemini. Configuration uses 3.5 Flash-Lite because
   Google restricts 2.5 Flash-Lite generation for new users.
 - An opt-in two-turn live regression checks group-to-dependency follow-ups in the same session against isolated Docker
   workloads and local models, including a container/project name collision and original evidence retention.
@@ -123,7 +135,7 @@ Dates below record each version's merge into `master`. Version links show the co
 - Informal group names resolve against observed Compose/Swarm targets. Ambiguous requests offer a choice and continue
   the original question with the selected scope, preserving the follow-up draft.
 - Each container's state, logs, and environment appear together with links to original observations. Action controls are
-  more prominent; log, trace, and observation disclosures animate while respecting reduced motion.
+  more prominent. Log, trace, and observation disclosures animate while respecting reduced motion.
 - Backend hooks and CI enforce 90% combined line and branch coverage, with missing-line output and optional HTML reports.
   Live Docker/model checks are selected by integration risk and remain opt-in.
 - Numeric release versions stay aligned across backend metadata and the lockfile. Release notes use dated categories
@@ -132,21 +144,21 @@ Dates below record each version's merge into `master`. Version links show the co
 ### Fixed
 
 - Identical model card proposals no longer produce duplicate cards or prepare duplicate action controls.
-- Ollama structured responses use schema descriptions; validation rejects placeholder or reference-only causes, and
-  repair instructions preserve separate container cards and action constraints.
+- Ollama structured responses use schema descriptions. Validation rejects placeholder or reference-only causes.
+  Repair instructions preserve separate container cards and action constraints.
 
 ## [0.3.0] - 2026-10-29
 
 ### Added
 
 - Compose-project and Swarm-stack diagnostics with participant states, service replica counts, and explicit coverage gaps.
-  Failure logs cover up to four local problem containers; remote Swarm-node logs and group-wide mutations are unsupported.
+  Failure logs cover up to four local problem containers. Remote Swarm-node logs and group-wide mutations are unsupported.
 - Optional group selection and resource-grouped evidence sources with observation times and direct links from cards.
 
 ### Changed
 
 - Setup, configuration, examples, and contributor documentation are consolidated around refreshed English demo screenshots.
-- Local hooks reject commits and direct pushes to `master`; contribution rules require ongoing release notes.
+- Local hooks reject commits and direct pushes to `master`. Contribution rules require ongoing release notes.
 
 ### Fixed
 
@@ -154,7 +166,7 @@ Dates below record each version's merge into `master`. Version links show the co
   containers retain factual cards even when the model omits them.
 - Evidence IDs cannot be used as Docker resource IDs. Explanations distinguish immediate failures from unresolved causes
   and follow the question's language.
-- Returning through the logo preserves the active diagnosis; the question shortcut appears only when its input is offscreen.
+- Returning through the logo preserves the active diagnosis. The question shortcut appears only when its input is offscreen.
 
 ## [0.2.0] - 2026-10-28
 
@@ -199,10 +211,10 @@ Dates below record each version's merge into `master`. Version links show the co
 
 ### Security
 
-- Models receive read-only tools; tool arguments, resource scope, and evidence references are validated. Inspect fields
+- Models receive read-only tools. Tool arguments, resource scope, and evidence references are validated. Inspect fields
   and environment values are allowlisted, and logs are sanitized before model requests or application logging.
-- Prepared actions are bound to the caller and exact target. Unknown mutation outcomes block conflicting actions;
-  runtime mutations are never retried automatically.
+- Prepared actions are bound to the caller and exact target. Unknown mutation outcomes block conflicting actions.
+  Runtime mutations are never retried automatically.
 
 [0.7.0]: https://github.com/Neizvestnyj/DockSight/compare/3c69d1ac9d2316bf84582ec230c5290779967cf7...feature/security-fixes
 [0.6.0]: https://github.com/Neizvestnyj/DockSight/compare/093f3c7e0a90251cfe73aba503576bd2280cca12...3c69d1ac9d2316bf84582ec230c5290779967cf7

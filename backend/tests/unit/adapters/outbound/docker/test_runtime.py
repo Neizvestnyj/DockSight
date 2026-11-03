@@ -8,7 +8,7 @@ from requests import RequestException
 from docksight.adapters.outbound.docker.hosts import HostConfig
 from docksight.adapters.outbound.docker.runtime import DockerRuntime
 from docksight.application.redaction import Redactor
-from docksight.domain.errors import DockSightError
+from docksight.domain.errors import DockSightError, ErrorKind
 from docksight.domain.runtime import ContainerSnapshot
 from tests.fakes import snapshot
 
@@ -39,17 +39,17 @@ async def test_ping_rejects_unconfigured_hosts_and_false_engine_responses() -> N
 
 
 @pytest.mark.parametrize(
-    ("failure", "code", "status"),
+    ("failure", "code", "kind"),
     [
-        (NotFound("missing"), "container_not_found", 404),
-        (DockerException("disconnected"), "runtime_unavailable", 503),
-        (RequestException("connection lost"), "runtime_unavailable", 503),
-        (SSHException("connection lost"), "runtime_unavailable", 503),
-        (OSError("socket closed"), "runtime_unavailable", 503),
+        (NotFound("missing"), "container_not_found", ErrorKind.NOT_FOUND),
+        (DockerException("disconnected"), "runtime_unavailable", ErrorKind.UNAVAILABLE),
+        (RequestException("connection lost"), "runtime_unavailable", ErrorKind.UNAVAILABLE),
+        (SSHException("connection lost"), "runtime_unavailable", ErrorKind.UNAVAILABLE),
+        (OSError("socket closed"), "runtime_unavailable", ErrorKind.UNAVAILABLE),
     ],
 )
 async def test_failed_restart_translates_sdk_errors_without_retrying(
-    failure: Exception, code: str, status: int
+    failure: Exception, code: str, kind: ErrorKind
 ) -> None:
     runtime = DockerRuntime((HostConfig(id="local"),), Redactor(()))
     sdk = MagicMock()
@@ -57,7 +57,7 @@ async def test_failed_restart_translates_sdk_errors_without_retrying(
     with patch("docksight.adapters.outbound.docker.runtime.connect", return_value=sdk):
         with pytest.raises(DockSightError) as caught:
             await runtime.restart("local", "a" * 64)
-    assert (caught.value.code, caught.value.status) == (code, status)
+    assert (caught.value.code, caught.value.kind) == (code, kind)
     assert caught.value.__cause__ is failure
     sdk.api.restart.assert_called_once_with("a" * 64, timeout=10)
     sdk.close.assert_called_once()

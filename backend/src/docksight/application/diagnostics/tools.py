@@ -14,7 +14,7 @@ from docksight.application.ports.models import ToolCall, ToolSpec
 from docksight.application.ports.runtime import RuntimeReadPort
 from docksight.application.views.schemas import Contract, GroupSelection, GroupTarget, TargetSelection
 from docksight.domain.diagnostics import JsonObject, JsonValue
-from docksight.domain.errors import DockSightError
+from docksight.domain.errors import DockSightError, ErrorKind
 from docksight.domain.runtime import ContainerSnapshot, StackSummary
 
 
@@ -119,11 +119,13 @@ class DiagnosticTools:
         """Reject unknown tools or arguments before dispatching a bounded runtime read."""
         definition = _TOOLS.get(call.name)
         if definition is None:
-            raise DockSightError("unknown_tool", "Tool is not allowed", 422)
+            raise DockSightError("unknown_tool", "Tool is not allowed", ErrorKind.VALIDATION)
         try:
             args = definition[0].model_validate(call.arguments)
         except ValidationError as exc:
-            raise DockSightError("invalid_tool_arguments", "Tool arguments do not match its schema", 422) from exc
+            raise DockSightError(
+                "invalid_tool_arguments", "Tool arguments do not match its schema", ErrorKind.VALIDATION
+            ) from exc
         self._require_container_scope(args)
         if isinstance(args, ContainerArgs):
             args = ContainerArgs(container_id=await self._resource_id(args.container_id))
@@ -171,14 +173,20 @@ class DiagnosticTools:
     def _require_container_scope(self, args: Contract) -> None:
         """Prevent model proposals from replacing an explicitly selected container with a previous group."""
         if self.context.container_id and isinstance(args, (GroupTarget, GroupSelection, StackArgs)):
-            raise DockSightError("resource_outside_container", "Resource is outside the selected container", 422)
+            raise DockSightError(
+                "resource_outside_container", "Resource is outside the selected container", ErrorKind.VALIDATION
+            )
 
     def _selection(self, selection: GroupSelection) -> JsonObject:
         """Resolve model-proposed options back to server-discovered identities without reading container evidence."""
         if self.group or self.context.group or self.host_wide or self.context.host_overview:
-            raise DockSightError("scope_already_selected", "A diagnostic scope is already selected for this turn", 409)
+            raise DockSightError(
+                "scope_already_selected", "A diagnostic scope is already selected for this turn", ErrorKind.CONFLICT
+            )
         if any(row not in self.candidates for row in selection.candidates):
-            raise DockSightError("invalid_group_candidate", "Selection requires an observed group on this host", 422)
+            raise DockSightError(
+                "invalid_group_candidate", "Selection requires an observed group on this host", ErrorKind.VALIDATION
+            )
         self.context.selection = TargetSelection(
             candidates=[row for row in self.candidates if row in selection.candidates]
         )
@@ -215,9 +223,13 @@ class DiagnosticTools:
     async def _host(self) -> JsonObject:
         """Keep a host-wide report independent of group and container target selection."""
         if self.context.container_id:
-            raise DockSightError("resource_outside_container", "Host overview is outside the selected container", 422)
+            raise DockSightError(
+                "resource_outside_container", "Host overview is outside the selected container", ErrorKind.VALIDATION
+            )
         if self.group or self.context.group:
-            raise DockSightError("resource_outside_group", "Host overview is outside the selected group", 422)
+            raise DockSightError(
+                "resource_outside_group", "Host overview is outside the selected group", ErrorKind.VALIDATION
+            )
         if self.context.host_overview:
             return host_result(self.context)
         return await inspect_host(
@@ -234,13 +246,19 @@ class DiagnosticTools:
     async def _group(self, target: GroupTarget) -> JsonObject:
         """Bind model-discovered groups and reuse an already collected report within this turn."""
         if self.context.host_overview or self.host_wide:
-            raise DockSightError("scope_already_selected", "Narrow this host overview in a separate turn", 409)
+            raise DockSightError(
+                "scope_already_selected", "Narrow this host overview in a separate turn", ErrorKind.CONFLICT
+            )
         if self.group and target != self.group:
-            raise DockSightError("resource_outside_group", "Resource is outside the selected group", 422)
+            raise DockSightError(
+                "resource_outside_group", "Resource is outside the selected group", ErrorKind.VALIDATION
+            )
         if self.context.group:
             current = self.context.group.summary
             if (target.kind, target.name) != (current.kind, current.name):
-                raise DockSightError("resource_outside_group", "Resource is outside the selected group", 422)
+                raise DockSightError(
+                    "resource_outside_group", "Resource is outside the selected group", ErrorKind.VALIDATION
+                )
             return group_result(self.context)
         alternatives = group_alternatives(target, self.candidates, self.query)
         if self.group is None and alternatives:
@@ -252,7 +270,9 @@ class DiagnosticTools:
         exact_id = await self._resource_id(container_id)
         snapshot = await self.runtime.inspect(self.host, exact_id)
         if self.context.group and snapshot.id not in self.context.group.summary.container_ids:
-            raise DockSightError("resource_outside_group", "Resource is outside the selected group", 422)
+            raise DockSightError(
+                "resource_outside_group", "Resource is outside the selected group", ErrorKind.VALIDATION
+            )
         data = cast(JsonObject, _SNAPSHOT.dump_python(snapshot, mode="json"))
         if tool == "get_container_stats":
             snapshot = replace(snapshot, metrics=await self.runtime.stats(self.host, snapshot.id))
@@ -298,11 +318,15 @@ class DiagnosticTools:
         if target:
             return self._bound_id(target.id)
         raise DockSightError(
-            "invalid_resource_reference", "Use data.id or the exact container name, not evidence_id", 422
+            "invalid_resource_reference",
+            "Use data.id or the exact container name, not evidence_id",
+            ErrorKind.VALIDATION,
         )
 
     def _bound_id(self, container_id: str) -> str:
         """Validate exact container scope before a model-selected runtime read can occur."""
         if self.context.container_id and container_id != self.context.container_id:
-            raise DockSightError("resource_outside_container", "Resource is outside the selected container", 422)
+            raise DockSightError(
+                "resource_outside_container", "Resource is outside the selected container", ErrorKind.VALIDATION
+            )
         return container_id

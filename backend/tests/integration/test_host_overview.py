@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 
 from docksight.application.ports.models import ModelReply, ToolCall
 from docksight.bootstrap import Settings, build_components
-from docksight.domain.errors import DockSightError
+from docksight.domain.errors import DockSightError, ErrorKind
 from docksight.domain.runtime import ContainerSnapshot
 from docksight.main import create_app
 from tests.fakes import DiscoveryRuntime, ScriptedModel
@@ -29,7 +29,7 @@ class UnavailableActionRuntime(DiscoveryRuntime):
     async def inspect(self, host: str, container_id: str) -> ContainerSnapshot:
         """Fail action preparation for one member after its inventory and logs have already been collected."""
         if container_id == "2" * 64:
-            raise DockSightError(self.code, "Action preparation is unavailable", 404)
+            raise DockSightError(self.code, "Action preparation is unavailable", ErrorKind.NOT_FOUND)
         return await super().inspect(host, container_id)
 
 

@@ -8,7 +8,7 @@ from docksight.application.diagnostics.context import EvidenceContext
 from docksight.application.diagnostics.tools import DiagnosticTools
 from docksight.application.ports.models import ToolCall
 from docksight.application.views.schemas import GroupTarget
-from docksight.domain.errors import DockSightError
+from docksight.domain.errors import DockSightError, ErrorKind
 from docksight.domain.runtime import LogBatch, LogEntry
 from tests.fakes import DiscoveryRuntime, FakeRuntime
 
@@ -207,7 +207,7 @@ async def test_failed_read_can_be_corrected_without_reusing_its_error() -> None:
         async def logs(self, host: str, container_id: str, lines: int, max_bytes: int) -> LogBatch:
             """Use the existing fixture state to report temporary log unavailability."""
             if self.item.state == "exited":
-                raise DockSightError("logs_unavailable", "Logs are temporarily unavailable", 503)
+                raise DockSightError("logs_unavailable", "Logs are temporarily unavailable", ErrorKind.UNAVAILABLE)
             return self.log_batch
 
     runtime = RecoveringRuntime()

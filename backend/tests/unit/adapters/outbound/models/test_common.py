@@ -3,25 +3,26 @@ import pytest
 from docksight.adapters.outbound.models.common import provider_error, strict_schema
 from docksight.application.diagnostics.context import EvidenceContext
 from docksight.application.views.registry import proposal_schema
+from docksight.domain.errors import ErrorKind
 
 
 @pytest.mark.parametrize(
-    "status,code,http_status",
+    "status,code,kind",
     [
-        (400, "model_not_supported", 422),
-        (404, "model_unavailable", 422),
-        (422, "model_not_supported", 422),
-        (401, "provider_authentication", 502),
-        (403, "provider_authentication", 502),
-        (429, "provider_rate_limit", 429),
-        (500, "provider_unavailable", 503),
+        (400, "model_not_supported", ErrorKind.VALIDATION),
+        (404, "model_unavailable", ErrorKind.VALIDATION),
+        (422, "model_not_supported", ErrorKind.VALIDATION),
+        (401, "provider_authentication", ErrorKind.DEPENDENCY),
+        (403, "provider_authentication", ErrorKind.DEPENDENCY),
+        (429, "provider_rate_limit", ErrorKind.RATE_LIMIT),
+        (500, "provider_unavailable", ErrorKind.UNAVAILABLE),
     ],
 )
 def test_provider_status_distinguishes_missing_models_from_rejected_requests(
-    status: int, code: str, http_status: int
+    status: int, code: str, kind: ErrorKind
 ) -> None:
     error = provider_error(status)
-    assert (error.code, error.status) == (code, http_status)
+    assert (error.code, error.kind) == (code, kind)
 
 
 def test_missing_model_explains_name_or_key_access_without_a_replacement_model() -> None:

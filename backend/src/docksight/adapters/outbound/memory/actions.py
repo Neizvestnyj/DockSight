@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 
 from docksight.domain.actions import ActionState, PreparedAction
-from docksight.domain.errors import DockSightError
+from docksight.domain.errors import DockSightError, ErrorKind
 
 
 class MemoryActions:
@@ -32,16 +32,16 @@ class MemoryActions:
             if item.state != ActionState.RUNNING and now >= item.expires_at + self._retention:
                 del self._entries[key]
         if action.id in self._entries:
-            raise DockSightError("action_conflict", "Action already exists", 409)
+            raise DockSightError("action_conflict", "Action already exists", ErrorKind.CONFLICT)
         if len(self._entries) >= self._capacity or len(self._blocked) >= self._capacity:
-            raise DockSightError("action_capacity", "Action capacity reached; retry later", 503)
+            raise DockSightError("action_capacity", "Action capacity reached; retry later", ErrorKind.UNAVAILABLE)
         self._entries[action.id] = action
 
     async def get(self, action_id: str, actor: str) -> PreparedAction:
         """Resolve an action only for its owning actor."""
         item = self._entries.get(action_id)
         if item is None or item.actor != actor:
-            raise DockSightError("action_not_found", "Action not found", 404)
+            raise DockSightError("action_not_found", "Action not found", ErrorKind.NOT_FOUND)
 
         return item
 
@@ -70,7 +70,7 @@ class MemoryActions:
                     raise DockSightError(
                         "target_indeterminate",
                         "Inspect Docker and reconcile the previous action before restarting this backend",
-                        409,
+                        ErrorKind.CONFLICT,
                     )
                 yield
         finally:

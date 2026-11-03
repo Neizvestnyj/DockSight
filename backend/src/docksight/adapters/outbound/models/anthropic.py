@@ -7,7 +7,7 @@ from anthropic.types import Message, MessageParam, OutputConfigParam, ToolUnionP
 from docksight.adapters.outbound.models.common import parse_object, provider_error, strict_schema
 from docksight.application.ports.models import ModelMessage, ModelReply, ToolCall, ToolSpec
 from docksight.domain.diagnostics import JsonObject
-from docksight.domain.errors import DockSightError
+from docksight.domain.errors import DockSightError, ErrorKind
 
 
 def _messages(messages: Sequence[ModelMessage]) -> list[dict[str, Any]]:
@@ -35,9 +35,9 @@ def _messages(messages: Sequence[ModelMessage]) -> list[dict[str, Any]]:
 def _reply(response: Message) -> ModelReply:
     """Validate stop reasons and retain native blocks for the next Messages request."""
     if response.stop_reason == "refusal":
-        raise DockSightError("model_refusal", "Model declined this request", 422)
+        raise DockSightError("model_refusal", "Model declined this request", ErrorKind.VALIDATION)
     if response.stop_reason == "max_tokens":
-        raise DockSightError("model_truncated", "Model output exceeded its token limit", 502)
+        raise DockSightError("model_truncated", "Model output exceeded its token limit", ErrorKind.DEPENDENCY)
     return ModelReply(
         "".join(block.text for block in response.content if block.type == "text"),
         tuple(
@@ -96,8 +96,12 @@ class AnthropicModel:
         except APIStatusError as exc:
             raise provider_error(exc.status_code) from exc
         except APITimeoutError as exc:
-            raise DockSightError("provider_timeout", "Model provider timed out", 504) from exc
+            raise DockSightError("provider_timeout", "Model provider timed out", ErrorKind.TIMEOUT) from exc
         except AnthropicError as exc:
-            raise DockSightError("provider_unavailable", "Model provider is unavailable", 503) from exc
+            raise DockSightError(
+                "provider_unavailable", "Model provider is unavailable", ErrorKind.UNAVAILABLE
+            ) from exc
         except (ValueError, KeyError, TypeError) as exc:
-            raise DockSightError("invalid_model_response", "Model provider returned an invalid response", 502) from exc
+            raise DockSightError(
+                "invalid_model_response", "Model provider returned an invalid response", ErrorKind.DEPENDENCY
+            ) from exc

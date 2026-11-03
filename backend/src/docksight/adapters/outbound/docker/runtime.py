@@ -12,7 +12,7 @@ from docksight.adapters.outbound.docker.hosts import HostConfig, connect
 from docksight.adapters.outbound.docker.logs import LogAPI, read_logs
 from docksight.adapters.outbound.docker.mapping import map_container, map_metrics, parse_logs
 from docksight.application.redaction import Redactor
-from docksight.domain.errors import DockSightError
+from docksight.domain.errors import DockSightError, ErrorKind
 from docksight.domain.runtime import (
     ContainerSnapshot,
     Host,
@@ -78,7 +78,7 @@ class DockerRuntime:
         """Run SDK work off-loop and retain its slot until the worker actually finishes."""
         config = self._hosts.get(host)
         if config is None:
-            raise DockSightError("host_not_found", "Configured host not found", 404)
+            raise DockSightError("host_not_found", "Configured host not found", ErrorKind.NOT_FOUND)
         effective_timeout = self._timeout if sdk_timeout is None else min(sdk_timeout, self._timeout)
 
         def run() -> T:
@@ -90,9 +90,9 @@ class DockerRuntime:
                 finally:
                     client.close()
             except NotFound as exc:
-                raise DockSightError("container_not_found", "Container not found", 404) from exc
+                raise DockSightError("container_not_found", "Container not found", ErrorKind.NOT_FOUND) from exc
             except (DockerException, RequestException, SSHException, OSError) as exc:
-                raise DockSightError("runtime_unavailable", "Docker operation failed", 503) from exc
+                raise DockSightError("runtime_unavailable", "Docker operation failed", ErrorKind.UNAVAILABLE) from exc
 
         try:
             async with asyncio.timeout(effective_timeout + 5):
@@ -112,12 +112,12 @@ class DockerRuntime:
                 await asyncio.wait((task,))
                 return task.result()
         except TimeoutError as exc:
-            raise DockSightError("runtime_timeout", "Docker operation timed out", 504) from exc
+            raise DockSightError("runtime_timeout", "Docker operation timed out", ErrorKind.TIMEOUT) from exc
 
     async def ping(self, host: str) -> None:
         """Use a short SDK timeout while preserving worker-slot ownership after cancellation."""
         if not await self._call(host, lambda client: client.ping(), sdk_timeout=3):
-            raise DockSightError("runtime_unavailable", "Docker ping failed", 503)
+            raise DockSightError("runtime_unavailable", "Docker ping failed", ErrorKind.UNAVAILABLE)
 
     async def containers(self, host: str) -> tuple[ContainerSnapshot, ...]:
         """Read and sanitize at most 200 container snapshots."""

@@ -4,7 +4,7 @@ from docksight.adapters.outbound.memory.sessions import MemorySessions
 from docksight.application.diagnostics.use_case import Diagnostics
 from docksight.application.ports.models import ModelReply, ToolCall
 from docksight.application.redaction import Redactor
-from docksight.domain.errors import DockSightError
+from docksight.domain.errors import DockSightError, ErrorKind
 from tests.fakes import FakeRuntime, ScriptedModel
 
 
@@ -138,7 +138,7 @@ async def test_provider_failure_completes_the_running_trace_step_before_terminal
 
         async def complete(self, messages, tools=(), schema=None):
             """Report an expected provider failure without a raw upstream response."""
-            raise DockSightError("provider_unavailable", "Model provider is unavailable", 503)
+            raise DockSightError("provider_unavailable", "Model provider is unavailable", ErrorKind.UNAVAILABLE)
 
     events = await trace_turn(UnavailableModel([]))
     finished = [

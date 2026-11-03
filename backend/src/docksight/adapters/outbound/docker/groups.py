@@ -1,7 +1,7 @@
 from typing import Any, Protocol
 
 from docksight.application.redaction import Redactor
-from docksight.domain.errors import DockSightError
+from docksight.domain.errors import DockSightError, ErrorKind
 from docksight.domain.runtime import ContainerSnapshot, StackMember, StackSummary
 
 
@@ -84,7 +84,7 @@ def swarm_stacks(client: SwarmAPI, redactor: Redactor) -> tuple[StackSummary, ..
     """Group namespace-labeled services into actual Swarm stacks, excluding standalone services."""
     swarm: dict[str, Any] = client.info().get("Swarm") or {}
     if not swarm.get("ControlAvailable"):
-        raise DockSightError("unsupported_operation", "Swarm reads require a manager", 409)
+        raise DockSightError("unsupported_operation", "Swarm reads require a manager", ErrorKind.CONFLICT)
     services = client.services()
     groups: dict[str, list[tuple[StackMember, tuple[str, ...], bool]]] = {}
     for service in services[:200]:

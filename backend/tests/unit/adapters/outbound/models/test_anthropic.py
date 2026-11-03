@@ -8,7 +8,7 @@ from pydantic import TypeAdapter
 
 from docksight.adapters.outbound.models.anthropic import AnthropicModel
 from docksight.application.ports.models import ModelMessage, ToolSpec
-from docksight.domain.errors import DockSightError
+from docksight.domain.errors import DockSightError, ErrorKind
 
 
 async def test_anthropic_tool_results_use_native_message_blocks() -> None:
@@ -100,5 +100,5 @@ async def test_rate_limit_is_reported_without_automatic_retries() -> None:
         with pytest.raises(DockSightError) as error:
             await AnthropicModel(client, "claude-test").complete([ModelMessage("user", "Test")])
     assert len(requests) == 1
-    assert error.value.status == 429
+    assert error.value.kind == ErrorKind.RATE_LIMIT
     assert "private-sentinel" not in str(error.value)

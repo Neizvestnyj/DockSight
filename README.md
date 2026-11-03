@@ -6,37 +6,32 @@
 ![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
 
-**Docker troubleshooting with AI explanations and runtime evidence.**
-
-Inspect Docker containers, Compose projects, and Swarm stacks through a local web interface. DockSight collects runtime
-state and bounded logs, asks an LLM to explain the observations, and offers restart or stop actions for confirmation.
+DockSight is a local web interface for diagnosing Docker containers, Compose projects, and Swarm stacks.
+It collects Docker state and logs, links model explanations to those observations, and prepares restart or stop actions.
+Each action requires confirmation.
 
 ![DockSight explaining a container restart loop alongside Docker state, logs, and evidence](docs/screenshots/investigation.jpg)
 
-*Demo workspace with simulated observations. No Docker connection or model is required to try it.*
+*Demo with simulated observations. Requires no Docker connection or model.*
 
-- **Follow the evidence.** Inspect container state, logs, metrics, allowlisted environment values, and Compose context.
-- **Ask follow-up questions.** Investigate a problem in a session scoped to one Docker host.
-- **Choose your model.** Use Ollama locally, OpenAI, Anthropic, Gemini, or a compatible API.
-- **Review before acting.** Models have read-only tools; restart and stop require separate confirmation.
+- Container state, healthchecks, logs, metrics, allowlisted environment values, and Compose context.
+- Follow-up questions within one Docker host, with fresh observations on each turn.
+- Local Ollama, OpenAI, Anthropic, Gemini, and compatible APIs.
+- Read-only model tools and expiring action IDs prepared by the backend.
 
-## Why use it instead of pasting logs into a chat?
-
-DockSight reads the selected Docker environment and links explanations to collected observations. Container state,
-healthchecks, metrics, and available actions come from the backend. Follow-up questions collect fresh evidence;
-restart and stop use expiring, server-prepared actions with separate confirmation.
-
-Model explanations can still be wrong. Evidence-reference validation checks that an observation exists; it does not
-prove the model's interpretation or root-cause claim. Review the linked facts before acting.
+Model explanations can be wrong. Valid evidence references do not prove a root-cause claim.
+Review the linked observations before acting.
 
 ## Quick start
 
-Clone the repository and run the commands below from its root:
+Clone the repository:
 
 ```sh
 git clone https://github.com/Neizvestnyj/DockSight.git
 cd DockSight
 ```
+
+Run all commands below from the repository root.
 
 ### Try the demo
 
@@ -56,7 +51,7 @@ Also requires [Python 3.12+](https://www.python.org/), [uv](https://docs.astral.
 [Docker Engine or Desktop](https://docs.docker.com/get-started/get-docker/), and [Ollama](https://ollama.com/).
 Development uses Python 3.14. Start Docker and Ollama before continuing.
 
-**1. Prepare the backend.** The commands below use PowerShell; on Linux/macOS, replace `Copy-Item` with `cp`.
+**1. Prepare the backend.** These commands use PowerShell. On Linux/macOS, replace `Copy-Item` with `cp`.
 
 ```powershell
 uv sync --project backend --locked
@@ -87,17 +82,18 @@ For a reproducible failure and confirmed restart, follow the [working example](d
 
 ## How it works
 
-The backend collects Docker observations, asks the model to explain them, validates its evidence references, and returns
-typed UI cards. Runtime values and permissions come from the backend. Confirmed actions use a separate execution path.
+The backend collects Docker observations and sends them to the model. It validates the returned evidence references and
+builds typed UI cards. Runtime values, permissions, and action execution belong to the backend.
 
 ![Diagnostic data flow between the browser, backend, Docker, and model](docs/diagrams/system-overview.png)
 
-Sessions and action records are temporary. Use one backend worker; restarting it clears that state. DockSight provides
-diagnosis and confirmed container actions; it has no persistent monitoring history or stack deployment workflow.
+Current limitations:
 
-This is an early MVP for operator-assisted diagnosis. Host overviews and logs are bounded and disclose collection gaps.
-Swarm diagnostics cannot read logs from remote nodes. Docker healthchecks describe probe results separately from process
-state. A clean exit or an old error message alone does not establish why a container stopped.
+- Sessions and action records live in memory. Run one backend worker. Restarting it clears this state.
+- Host overviews and logs have collection limits. Reports identify missing or clipped data.
+- Swarm diagnostics cannot read logs from remote nodes.
+- Healthchecks report probe results separately from process state. A clean exit or old error alone cannot explain a stop.
+- Persistent monitoring history and stack deployment are not supported.
 
 ## Configuration
 
@@ -108,7 +104,7 @@ Settings are loaded from environment variables or the root `.env` file.
 | `DOCKSIGHT_API_TOKEN`      | Bearer token, at least 24 characters                                 |
 | `DOCKSIGHT_API_TOKENS`     | Optional named tokens for several operators, as a JSON object        |
 | `DOCKSIGHT_PROVIDER`       | `ollama` (default), `openai`, `anthropic`, `gemini`, or `compatible` |
-| `DOCKSIGHT_MODEL`          | Model name; defaults to `qwen3.5:9b`                                 |
+| `DOCKSIGHT_MODEL`          | Model name (default: `qwen3.5:9b`)                                   |
 | `DOCKSIGHT_MODEL_BASE_URL` | Custom model endpoint                                                |
 | `DOCKSIGHT_MODEL_API_KEY`  | Credentials for the selected provider                                |
 | `DOCKSIGHT_HOSTS_FILE`     | YAML configuration for local, SSH, or mTLS Docker hosts              |
@@ -117,15 +113,15 @@ See [configuration and deployment](docs/configuration.md) for provider examples,
 
 ## Documentation
 
-- [Documentation index](docs/README.md) — guides and technical references.
-- [Usage examples](docs/examples.md) — browser investigation and a reproducible Docker failure.
-- [HTTP API](docs/api.md) — authentication, reads, diagnostic streams, and confirmed actions.
-- [Architecture](docs/architecture.md) — backend boundaries and diagrams.
-- [Contributing](CONTRIBUTING.md) — development setup, checks, and contribution guidelines.
-- [Changelog](CHANGELOG.md) — release changes.
+- [Documentation index](docs/README.md)
+- [Usage examples](docs/examples.md)
+- [HTTP API](docs/api.md)
+- [Architecture](docs/architecture.md)
+- [Contributing](CONTRIBUTING.md)
+- [Changelog](CHANGELOG.md)
 
-For development shortcuts, optional [Make commands](CONTRIBUTING.md#make-commands) provide setup, server,
-check, test, and build targets. Run `make help` to list them.
+Optional [Make commands](CONTRIBUTING.md#make-commands) cover setup, servers, checks, tests, and builds.
+Run `make help` to list them.
 
 ## License
 

@@ -10,7 +10,7 @@ from paramiko import Channel
 from requests import Response
 from requests.exceptions import Timeout
 
-from docksight.domain.errors import DockSightError
+from docksight.domain.errors import DockSightError, ErrorKind
 
 
 class LogAPI(Protocol):
@@ -41,7 +41,7 @@ def _remaining(deadline: float) -> float:
     """Reject expired reads instead of presenting the bytes collected so far as a complete tail."""
     remaining = deadline - monotonic()
     if remaining <= 0:
-        raise DockSightError("runtime_timeout", "Docker log read timed out", 504)
+        raise DockSightError("runtime_timeout", "Docker log read timed out", ErrorKind.TIMEOUT)
     return remaining
 
 
@@ -55,7 +55,7 @@ def read_logs(client: LogAPI, container_id: str, tty: bool, lines: int, deadline
             url, params=params, stream=True, timeout=_remaining(deadline)
         )
     except Timeout as exc:
-        raise DockSightError("runtime_timeout", "Docker log read timed out", 504) from exc
+        raise DockSightError("runtime_timeout", "Docker log read timed out", ErrorKind.TIMEOUT) from exc
     with response:
         if response.status_code == 404:
             raise NotFound("Container not found")
@@ -92,7 +92,9 @@ def _read_body(response: Response, tty: bool, deadline: float, scan_limit: int) 
             _remaining(deadline)
             if len(result) + len(chunk) > scan_limit:
                 raise DockSightError(
-                    "log_read_limit", "Docker log tail exceeded the bounded read limit; latest output is unknown", 502
+                    "log_read_limit",
+                    "Docker log tail exceeded the bounded read limit; latest output is unknown",
+                    ErrorKind.DEPENDENCY,
                 )
             result.extend(chunk)
         _remaining(deadline)
@@ -101,7 +103,7 @@ def _read_body(response: Response, tty: bool, deadline: float, scan_limit: int) 
         raise
     except Exception as exc:
         if monotonic() >= deadline:
-            raise DockSightError("runtime_timeout", "Docker log read timed out", 504) from exc
+            raise DockSightError("runtime_timeout", "Docker log read timed out", ErrorKind.TIMEOUT) from exc
         raise DockerException("Docker log stream failed") from exc
 
 
@@ -118,7 +120,9 @@ def _frames(response: Response, deadline: float, scan_limit: int) -> Iterator[by
         length = int.from_bytes(header[4:], "big")
         if length > scan_limit - scanned:
             raise DockSightError(
-                "log_read_limit", "Docker log tail exceeded the bounded read limit; latest output is unknown", 502
+                "log_read_limit",
+                "Docker log tail exceeded the bounded read limit; latest output is unknown",
+                ErrorKind.DEPENDENCY,
             )
         data = cast(bytes, response.raw.read(length))
         if len(data) != length:

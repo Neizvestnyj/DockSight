@@ -8,7 +8,7 @@ from docksight.application.diagnostics.logs import collect_logs, needs_logs
 from docksight.application.ports.runtime import RuntimeReadPort
 from docksight.application.views.schemas import GroupLogResult, GroupTarget, HostInspection, HostMember
 from docksight.domain.diagnostics import JsonObject, JsonValue
-from docksight.domain.errors import DockSightError
+from docksight.domain.errors import DockSightError, ErrorKind
 from docksight.domain.runtime import ContainerSnapshot
 
 MAX_HOST_LOGS: Final = 4
@@ -91,12 +91,14 @@ async def inspect_host(
     """Collect one bounded local-host overview without choosing a project on the operator's behalf."""
     rows = tuple({row.id: row for row in inventory[:200]}.values())
     if any(row.host != host for row in rows):
-        raise DockSightError("invalid_runtime_data", "Inventory is outside the selected host", 502)
+        raise DockSightError("invalid_runtime_data", "Inventory is outside the selected host", ErrorKind.DEPENDENCY)
     ordered = sorted(rows, key=_priority)
     try:
         members = [_member(row) for row in ordered[:MAX_HOST_MEMBERS]]
     except ValidationError as exc:
-        raise DockSightError("invalid_runtime_data", "Invalid host inventory observation", 502) from exc
+        raise DockSightError(
+            "invalid_runtime_data", "Invalid host inventory observation", ErrorKind.DEPENDENCY
+        ) from exc
     targets = _targets(members, candidates)
     report = HostInspection(
         host=host,
@@ -176,7 +178,7 @@ def host_result(context: EvidenceContext) -> JsonObject:
     """Give the model bounded observations and explicit projection coverage without copying hidden context."""
     report = context.host_overview
     if report is None:
-        raise DockSightError("host_overview_missing", "No host overview has been collected", 409)
+        raise DockSightError("host_overview_missing", "No host overview has been collected", ErrorKind.CONFLICT)
     observations: list[JsonValue] = [
         {"evidence_id": row.id, "kind": row.kind, "container_id": row.container_id, "data": row.data}
         for row in context.evidence.values()

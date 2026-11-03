@@ -9,7 +9,7 @@ from docksight.application.ports.state import ActionStore, AuditPort
 from docksight.application.views.schemas import ActionView
 from docksight.domain.actions import ActionState, Operation, PreparedAction, allowed_operations
 from docksight.domain.diagnostics import JsonObject
-from docksight.domain.errors import DockSightError
+from docksight.domain.errors import DockSightError, ErrorKind
 from docksight.domain.runtime import ContainerSnapshot
 
 
@@ -45,12 +45,14 @@ class Actions:
     async def prepare(self, actor: str, host: str, container_id: str, operation: Operation) -> ActionView:
         """Capture a permitted operation against one exact container fingerprint."""
         if not re.fullmatch(r"[a-f0-9]{64}", container_id):
-            raise DockSightError("invalid_target", "Actions require an exact full container ID", 422)
+            raise DockSightError("invalid_target", "Actions require an exact full container ID", ErrorKind.VALIDATION)
         snapshot = await self.reader.inspect(host, container_id)
         if snapshot.id != container_id or snapshot.host != host:
-            raise DockSightError("target_changed", "Container identity changed", 409)
+            raise DockSightError("target_changed", "Container identity changed", ErrorKind.CONFLICT)
         if operation not in allowed_operations(snapshot.state):
-            raise DockSightError("action_unavailable", "Operation is unavailable for this container state", 409)
+            raise DockSightError(
+                "action_unavailable", "Operation is unavailable for this container state", ErrorKind.CONFLICT
+            )
         action = PreparedAction(
             str(uuid4()),
             actor,
@@ -153,9 +155,9 @@ class Actions:
 def _validate_target(action: PreparedAction, current: ContainerSnapshot) -> None:
     """Reject stale container identity, state, or prepared-action fingerprints."""
     if current.id != action.container_id or current.fingerprint != action.fingerprint:
-        raise DockSightError("stale_action", "Container changed; prepare a new action", 409)
+        raise DockSightError("stale_action", "Container changed; prepare a new action", ErrorKind.CONFLICT)
     if action.operation not in allowed_operations(current.state):
-        raise DockSightError("action_unavailable", "Operation is unavailable for this state", 409)
+        raise DockSightError("action_unavailable", "Operation is unavailable for this state", ErrorKind.CONFLICT)
 
 
 def _finish_failure(action: PreparedAction, error: TimeoutError | DockSightError, started: bool) -> None:
