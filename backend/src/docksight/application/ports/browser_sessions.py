@@ -1,3 +1,4 @@
+from collections.abc import Mapping
 from datetime import datetime
 from typing import Annotated, Protocol
 
@@ -23,15 +24,15 @@ class BrowserSession(FrozenContract):
 class BrowserSessionStore(Protocol):
     """Persist browser lifecycle independently of HTTP cookies and authentication parsing."""
 
-    async def add(self, session: BrowserSession) -> None:
+    async def add(self, record: BrowserSession) -> None:
         """Retain a new hashed session with its configured credential fingerprint."""
         ...
 
-    async def get(self, token_hash: str, now: datetime) -> BrowserSession:
-        """Read an active session without returning any raw token."""
+    async def get(self, token_hash: str) -> BrowserSession | None:
+        """Read detached lifecycle data without returning any raw token."""
         ...
 
-    async def touch(self, token_hash: str, now: datetime) -> BrowserSession:
+    async def touch(self, token_hash: str, now: datetime) -> None:
         """Advance last-seen time without extending absolute expiry."""
         ...
 
@@ -39,6 +40,6 @@ class BrowserSessionStore(Protocol):
         """Revoke one session idempotently."""
         ...
 
-    async def cleanup(self, now: datetime, limit: int = 100) -> int:
-        """Remove at most one bounded batch of expired or revoked sessions."""
+    async def revoke_obsolete(self, fingerprints: Mapping[str, str], now: datetime) -> int:
+        """Revoke sessions whose stable actor or configured credential no longer matches."""
         ...

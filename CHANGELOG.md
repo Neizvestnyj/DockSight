@@ -23,6 +23,8 @@ Dates record merges into `master`. Version links show the corresponding changes.
 - Offline state commands inspect, back up, migrate, and explicitly reconcile blocked targets under the backend lock.
   Reconciliation requires a fresh Docker observation and operator acknowledgement, preserves the unknown outcome,
   and invalidates old preparations without resending Docker commands.
+- First-party browser login restores actor-bound sessions through an HttpOnly cookie with hash-only SQLite storage,
+  absolute and idle expiry, credential-rotation revocation, and CSRF protection. Bearer API access remains available.
 
 ### Fixed
 

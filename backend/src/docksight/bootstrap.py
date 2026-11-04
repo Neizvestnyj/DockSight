@@ -2,6 +2,7 @@ import logging
 import re
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
+from ipaddress import ip_address
 from typing import Final, Literal, Self
 from urllib.parse import urlparse
 
@@ -15,6 +16,7 @@ from docksight.adapters.outbound.audit import JsonAudit
 from docksight.adapters.outbound.docker.hosts import load_hosts
 from docksight.adapters.outbound.docker.runtime import DockerRuntime
 from docksight.adapters.outbound.memory.actions import MemoryActions
+from docksight.adapters.outbound.memory.browser_sessions import MemoryBrowserSessions
 from docksight.adapters.outbound.memory.sessions import MemorySessions
 from docksight.adapters.outbound.models.anthropic import AnthropicModel
 from docksight.adapters.outbound.models.compatible import CompatibleModel
@@ -22,8 +24,10 @@ from docksight.adapters.outbound.models.ollama import OllamaModel
 from docksight.adapters.outbound.models.openai import OpenAIModel
 from docksight.adapters.outbound.models.status import ModelAvailability
 from docksight.application.actions import Actions
+from docksight.application.browser_sessions import BrowserSessions
 from docksight.application.diagnostics.use_case import Diagnostics
 from docksight.application.model_choices import ModelChoices
+from docksight.application.ports.browser_sessions import BrowserSessionStore
 from docksight.application.ports.models import ModelPort
 from docksight.application.ports.runtime import RuntimeMutationPort, RuntimeReadPort
 from docksight.application.ports.status import ModelStatusPort
@@ -71,6 +75,10 @@ class Settings(BaseSettings):
     provider_fallback_models: dict[str, tuple[str, ...]] = Field(default_factory=dict, max_length=5)
     hosts_file: str | None = None
     cors_origins: tuple[str, ...] = ()
+    browser_origin: str | None = Field(default=None, min_length=1, max_length=2048)
+    cookie_secure: bool = True
+    browser_session_ttl: int = Field(default=28800, ge=60, le=28800)
+    browser_session_idle_ttl: int = Field(default=3600, ge=60, le=3600)
     env_allowlist: tuple[str, ...] = ()
     max_model_calls: int = Field(default=6, ge=2, le=30)
     max_tool_calls: int = Field(default=12, ge=1, le=100)
@@ -104,6 +112,31 @@ class Settings(BaseSettings):
         if self.api_token.get_secret_value():
             credentials[DEFAULT_ACTOR] = self.api_token.get_secret_value()
         return credentials
+
+    @field_validator("browser_origin")
+    @classmethod
+    def validate_browser_origin(cls, value: str | None) -> str | None:
+        """Require an exact public HTTP(S) origin without path or embedded authority."""
+        if value is None:
+            return None
+        parsed = urlparse(value)
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username
+            or parsed.password
+            or value != f"{parsed.scheme}://{parsed.netloc}"
+        ):
+            raise ValueError("Browser origin must be an exact HTTP(S) origin without credentials or a path")
+        _ = parsed.port
+        return value
+
+    @model_validator(mode="after")
+    def validate_cookie_settings(self) -> Self:
+        """Limit insecure cookie issuance to explicitly configured loopback HTTP development."""
+        if not self.cookie_secure and not _loopback_http_origin(self.browser_origin):
+            raise ValueError("Insecure cookies require an explicit loopback HTTP browser origin")
+        return self
 
     @field_validator("provider_fallback_models")
     @classmethod
@@ -154,6 +187,19 @@ def _check_credentials(credentials: Mapping[str, str]) -> None:
         raise ValueError("Each actor requires a distinct API token")
 
 
+def _loopback_http_origin(origin: str | None) -> bool:
+    """Recognize configured loopback addresses without DNS lookup or forwarded headers."""
+    parsed = urlparse(origin or "")
+    if parsed.scheme != "http" or parsed.hostname is None:
+        return False
+    if parsed.hostname == "localhost":
+        return True
+    try:
+        return ip_address(parsed.hostname).is_loopback
+    except ValueError:
+        return False
+
+
 @dataclass
 class Components:
     """Own wired application services and the cleanup callbacks for their adapters."""
@@ -163,6 +209,7 @@ class Components:
     actions: Actions
     status: SystemStatus
     closers: list[Callable[[], Awaitable[None]]]
+    browser_sessions: BrowserSessions
     models: ModelChoices | None = None
 
     async def close(self) -> None:
@@ -288,6 +335,7 @@ def build_components(
     writer: RuntimeMutationPort | None = None,
     model: ModelPort | None = None,
     model_probe: ModelStatusPort | None = None,
+    browser_session_store: BrowserSessionStore | None = None,
 ) -> Components:
     """Wire hexagonal services with configured adapters or explicitly injected test ports."""
     configure_logging()
@@ -358,5 +406,10 @@ def build_components(
         actions,
         SystemStatus(reader, model_probe, settings.provider, settings.model),
         closers,
+        BrowserSessions(
+            browser_session_store if browser_session_store is not None else MemoryBrowserSessions(),
+            settings.browser_session_ttl,
+            settings.browser_session_idle_ttl,
+        ),
         choices,
     )

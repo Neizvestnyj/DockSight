@@ -32,11 +32,18 @@ def safe_stack(exc: Exception) -> list[dict[str, str | int]]:
     ]
 
 
+def status_code(kind: ErrorKind) -> int:
+    """Share semantic HTTP mapping with failures raised before route dispatch."""
+    return _HTTP_STATUS[kind]
+
+
 def error_response(request: Request, code: str, message: str, status: int) -> JSONResponse:
     """Build a stable error envelope with its request identifier."""
     request_id: str | None = getattr(request.state, "request_id", None)
     body = {"code": code, "message": message}
     headers: dict[str, str] = {}
+    if request.url.path.startswith("/api/"):
+        headers["Cache-Control"] = "no-store"
     if request_id is not None:
         body["request_id"] = request_id
         headers["X-Request-ID"] = request_id
@@ -64,7 +71,7 @@ def install_errors(app: FastAPI) -> None:
     @app.exception_handler(DockSightError)
     async def domain_error(request: Request, exc: DockSightError) -> JSONResponse:
         """Translate a semantic failure category while preserving its public details."""
-        return error_response(request, exc.code, exc.message, _HTTP_STATUS[exc.kind])
+        return error_response(request, exc.code, exc.message, status_code(exc.kind))
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:

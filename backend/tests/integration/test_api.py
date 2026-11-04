@@ -197,4 +197,4 @@ def test_openapi_describes_authentication_and_sse() -> None:
         document = api.get("/openapi.json").json()
         chat = document["paths"]["/api/v1/chat/turns"]["post"]
         assert "text/event-stream" in chat["responses"]["200"]["content"]
-        assert chat["security"] == [{"HTTPBearer": []}]
+        assert chat["security"] == [{"HTTPBearer": []}, {"BrowserCookie": []}]

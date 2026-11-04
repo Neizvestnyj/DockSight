@@ -1,6 +1,5 @@
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
-from hmac import compare_digest
 from importlib import metadata
 from uuid import uuid4
 
@@ -8,17 +7,26 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 
-from docksight.adapters.inbound.http.errors import error_response, install_errors
+from docksight.adapters.inbound.http.auth import AuthenticationError, HttpAuthentication
+from docksight.adapters.inbound.http.auth_routes import build_auth_router
+from docksight.adapters.inbound.http.errors import error_response, install_errors, status_code
 from docksight.adapters.inbound.http.middleware import BodyLimit
 from docksight.adapters.inbound.http.routes import build_router
 from docksight.bootstrap import Components, Settings, build_components
+from docksight.domain.errors import DockSightError
 
 
 def create_app(settings: Settings | None = None, components: Components | None = None) -> FastAPI:
     """Create the HTTP application with explicit service ownership and safe defaults."""
     config = settings or Settings()
     services = components or build_components(config)
-    credentials = tuple((actor, token.encode()) for actor, token in config.api_credentials().items())
+    auth = HttpAuthentication(
+        services.browser_sessions,
+        config.api_credentials(),
+        browser_origin=config.browser_origin,
+        cors_origins=config.cors_origins,
+        cookie_secure=config.cookie_secure,
+    )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
@@ -35,6 +43,7 @@ def create_app(settings: Settings | None = None, components: Components | None =
     app.include_router(
         build_router(services.queries, services.diagnostics, services.actions, services.status, services.models)
     )
+    app.include_router(build_auth_router(auth))
 
     @app.middleware("http")
     async def request_context(
@@ -44,11 +53,13 @@ def create_app(settings: Settings | None = None, components: Components | None =
         """Assign request IDs and enforce API authentication before dispatch."""
         request_id = str(uuid4())
         request.state.request_id = request_id
-        denial = _authorize(request, config, credentials)
+        denial = await _authorize(request, auth)
         if denial is not None:
             return denial
         response = await call_next(request)
         response.headers["X-Request-ID"] = request_id
+        if request.url.path.startswith("/api/"):
+            response.headers["Cache-Control"] = "no-store"
 
         return response
 
@@ -56,8 +67,8 @@ def create_app(settings: Settings | None = None, components: Components | None =
         app.add_middleware(
             CORSMiddleware,
             allow_origins=list(config.cors_origins),
-            allow_methods=["GET", "POST"],
-            allow_headers=["Authorization", "Content-Type", "Idempotency-Key"],
+            allow_methods=["GET", "POST", "PATCH", "DELETE"],
+            allow_headers=["Authorization", "Content-Type", "Idempotency-Key", "X-CSRF-Token"],
             expose_headers=["X-Request-ID"],
         )
 
@@ -74,29 +85,17 @@ def create_app(settings: Settings | None = None, components: Components | None =
     return app
 
 
-def _authorize(request: Request, config: Settings, credentials: tuple[tuple[str, bytes], ...]) -> Response | None:
-    """Authenticate API requests, record the caller's actor, and reject origins outside the allowlist."""
+async def _authorize(request: Request, auth: HttpAuthentication) -> Response | None:
+    """Resolve shared API authority before dispatch and normalize safe middleware failures."""
     if not request.url.path.startswith("/api/"):
         return None
-    scheme, _, token = request.headers.get("authorization", "").partition(" ")
-    actor = _authenticate(token.encode(), credentials) if scheme.lower() == "bearer" else None
-    if actor is None:
-        response = error_response(request, "unauthorized", "Authentication required", 401)
-        response.headers["WWW-Authenticate"] = "Bearer"
-
+    try:
+        await auth.resolve(request)
+    except AuthenticationError as error:
+        response = error_response(request, error.code, error.message, error.status)
+        if error.status == 401:
+            response.headers["WWW-Authenticate"] = "Bearer"
         return response
-    origin = request.headers.get("origin")
-    same_origin = f"{request.url.scheme}://{request.url.netloc}"
-    if origin and origin != same_origin and origin not in config.cors_origins:
-        return error_response(request, "origin_not_allowed", "Origin is not allowed", 403)
-    request.state.actor = actor
+    except DockSightError as error:
+        return error_response(request, error.code, error.message, status_code(error.kind))
     return None
-
-
-def _authenticate(token: bytes, credentials: tuple[tuple[str, bytes], ...]) -> str | None:
-    """Compare against every configured token so the matching position does not shorten the check."""
-    matched: str | None = None
-    for actor, expected in credentials:
-        if compare_digest(token, expected):
-            matched = actor
-    return matched

@@ -1,7 +1,7 @@
 from typing import Annotated, Self
 from uuid import UUID
 
-from pydantic import Field, StrictBool, model_validator
+from pydantic import AwareDatetime, Field, StrictBool, model_validator
 
 from docksight.application.model_catalog import ModelSelection
 from docksight.application.views.schemas import Contract, GroupTarget
@@ -41,3 +41,15 @@ class ActionExecute(Contract):
     """Carry the caller's explicit confirmation of a prepared action."""
 
     confirmed: StrictBool
+
+
+class BrowserSessionInput(Contract):
+    """Require an empty JSON object for browser login and logout."""
+
+
+class BrowserSessionView(Contract):
+    """Expose session-bound bootstrap authority without revealing the HttpOnly credential."""
+
+    actor: str = Field(min_length=1, max_length=128)
+    expires_at: AwareDatetime
+    csrf_token: str = Field(pattern=r"^[A-Za-z0-9_-]{43}$", repr=False)

@@ -2,8 +2,8 @@ from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Path, Query, Request, Response
-from fastapi.security import HTTPBearer
 
+from docksight.adapters.inbound.http.auth import authenticated_principal
 from docksight.adapters.inbound.http.schemas import (
     ActionExecute,
     ActionPrepare,
@@ -32,7 +32,7 @@ from docksight.domain.runtime import (
 
 
 def _actor(request: Request) -> str:
-    """Return the identity that API authentication resolved from the caller's bearer token."""
+    """Return the actor selected by the shared bearer-first principal resolver."""
     return request.state.actor
 
 
@@ -47,7 +47,7 @@ def build_router(
     models: ModelChoices | None = None,
 ) -> APIRouter:
     """Bind versioned HTTP endpoints to application use cases."""
-    router = APIRouter(prefix="/api/v1", dependencies=[Depends(HTTPBearer())])
+    router = APIRouter(prefix="/api/v1", dependencies=[Depends(authenticated_principal)])
 
     @router.get("/system/status", tags=["System"])
     async def system_status(
