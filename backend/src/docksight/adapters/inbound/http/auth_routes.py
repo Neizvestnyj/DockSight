@@ -31,6 +31,7 @@ def build_auth_router(auth: HttpAuthentication) -> APIRouter:
         principal: Annotated[Principal, Depends(bearer_principal)],
     ) -> BrowserSessionView:
         """Rotate any presented session after bearer and first-party transport validation."""
+        await auth.sessions.cleanup(limit=100)
         issued = await auth.sessions.login(principal.actor, credential_fingerprints(auth.credentials)[principal.actor])
         await auth.sessions.logout(request.cookies.get(COOKIE_NAME, ""))
         response.set_cookie(

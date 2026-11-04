@@ -1,11 +1,13 @@
+from collections.abc import Mapping
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from docksight.adapters.outbound.persistence.actions import hydrate, save_action, save_guard, target_guard
-from docksight.adapters.outbound.persistence.database import RecoveryReport
+from docksight.adapters.outbound.persistence.browser_sessions import cleanup_browser_sessions, revoke_obsolete_sessions
+from docksight.adapters.outbound.persistence.database import Recovery, RecoveryReport
 from docksight.adapters.outbound.persistence.rows import (
     ActiveTurnScopeRow,
     InvestigationRow,
@@ -17,6 +19,20 @@ from docksight.application.investigations.contracts import TurnError, TurnOutcom
 from docksight.application.investigations.lifecycle import finished_snapshot
 from docksight.domain.actions import ActionState
 from docksight.domain.errors import DockSightError, ErrorKind
+
+
+def browser_session_recovery(fingerprints: Mapping[str, str], idle_ttl: int) -> Recovery:
+    """Keep session revocation and one bounded stale batch inside adapter-owned startup transactions."""
+    current = dict(fingerprints)
+
+    def recover(session: Session) -> RecoveryReport:
+        """Report obsolete revocations and reclaim stale session rows without touching unrelated state."""
+        now = datetime.now(UTC)
+        revoked = revoke_obsolete_sessions(session, current, now)
+        cleanup_browser_sessions(session, now, now - timedelta(seconds=idle_ttl), limit=100)
+        return RecoveryReport(revoked_sessions=revoked)
+
+    return recover
 
 
 def recover_actions(session: Session) -> RecoveryReport:

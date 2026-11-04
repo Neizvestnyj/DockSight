@@ -29,7 +29,7 @@ def test_unscoped_question_collects_host_overview_then_narrows_to_an_explicit_pr
             ),
         ]
     )
-    settings = Settings(api_token="unscoped-integration-token-24", _env_file=None)
+    settings = Settings(state_backend="memory", api_token="unscoped-integration-token-24", _env_file=None)
     components = build_components(settings, reader=runtime, writer=runtime, model=model)
     headers = {"Authorization": "Bearer unscoped-integration-token-24"}
     body = {"host": "local", "query": query}
@@ -98,7 +98,7 @@ def test_group_follow_up_keeps_history_and_reads_a_container_with_a_colliding_pr
             ),
         ]
     )
-    settings = Settings(api_token="followup-integration-token-24", _env_file=None)
+    settings = Settings(state_backend="memory", api_token="followup-integration-token-24", _env_file=None)
     components = build_components(settings, reader=runtime, writer=runtime, model=model)
     headers = {"Authorization": "Bearer followup-integration-token-24"}
     with TestClient(create_app(settings, components)) as api:
@@ -154,7 +154,7 @@ def _check_mixed_clarification(response: Response) -> None:
 
 
 def test_authorized_clarification_completes_without_answer_and_continues_with_exact_group() -> None:
-    settings = Settings(api_token="clarification-integration-token-24", _env_file=None)
+    settings = Settings(state_backend="memory", api_token="clarification-integration-token-24", _env_file=None)
     runtime = DiscoveryRuntime()
     model = ScriptedModel(
         [
@@ -213,7 +213,7 @@ def test_authorized_clarification_completes_without_answer_and_continues_with_ex
 
 def test_explicit_group_contract_collects_evidence_and_redacts_each_cause_field() -> None:
     token = "group-integration-token-24-characters"
-    settings = Settings(api_token=token, _env_file=None)
+    settings = Settings(state_backend="memory", api_token=token, _env_file=None)
     runtime = FakeRuntime()
     model = ScriptedModel(
         [

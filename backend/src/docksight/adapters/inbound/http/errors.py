@@ -8,6 +8,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException
 
+from docksight.application.investigations.errors import WorkspaceConflict
 from docksight.domain.errors import DockSightError, ErrorKind
 
 _HTTP_STATUS: Final[dict[ErrorKind, int]] = {
@@ -71,7 +72,16 @@ def install_errors(app: FastAPI) -> None:
     @app.exception_handler(DockSightError)
     async def domain_error(request: Request, exc: DockSightError) -> JSONResponse:
         """Translate a semantic failure category while preserving its public details."""
-        return error_response(request, exc.code, exc.message, status_code(exc.kind))
+        response = error_response(request, exc.code, exc.message, status_code(exc.kind))
+        if isinstance(exc, WorkspaceConflict):
+            body = json.loads(bytes(response.body))
+            body["current"] = exc.current.model_dump(mode="json")
+            return JSONResponse(
+                body,
+                status_code=response.status_code,
+                headers={key: value for key, value in response.headers.items() if key != "content-length"},
+            )
+        return response
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:

@@ -1,37 +1,12 @@
 from collections.abc import AsyncIterator
-from contextlib import AbstractAsyncContextManager
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal, Protocol
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
-from docksight.application.ports.models import ModelMessage
 from docksight.domain.actions import ActionState, PreparedAction
 from docksight.domain.diagnostics import JsonObject
-
-
-@dataclass
-class Session:
-    """Retain conversation history bound to one actor and configured host."""
-
-    id: str
-    actor: str
-    host: str
-    history: list[ModelMessage] = field(default_factory=list[ModelMessage])
-
-
-class SessionStore(Protocol):
-    """Define scoped session retention and exclusive turn ownership."""
-
-    def lease(
-        self,
-        session_id: str | None,
-        actor: str,
-        host: str,
-    ) -> AbstractAsyncContextManager[Session]:
-        """Lease an existing scoped session or create one for this actor and host."""
-        ...
 
 
 @dataclass(frozen=True)

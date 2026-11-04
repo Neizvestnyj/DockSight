@@ -17,6 +17,7 @@ BOB = {"Authorization": "Bearer bob-token-at-least-24-characters"}
 def client(suggested: bool = False, api_tokens: dict[str, str] | None = None) -> TestClient:
     """Create an authenticated in-process client with deterministic runtime and model ports."""
     settings = Settings(
+        state_backend="memory",
         api_token=TOKEN,
         api_tokens=api_tokens or {},
         cors_origins=("http://localhost:5173",),
@@ -82,7 +83,7 @@ def test_streamed_trace_contains_public_configuration_and_sanitized_proposal() -
         steps = [event["step"] for event in events if event["type"] == "trace.step"]
         assert steps[-1]["state"] == "succeeded"
         assert steps[-1]["operation"] == "validate_diagnosis"
-        assert any(step["response"] and '"summary": "Worker exited"' in step["response"] for step in steps)
+        assert all(step["response"] is None and not step["response_truncated"] for step in steps)
         assert TOKEN not in response.text
 
 

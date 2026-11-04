@@ -78,7 +78,7 @@ def test_model_cannot_replace_a_host_overview_with_an_unrequested_project_choice
             _proposal(),
         ]
     )
-    settings = Settings(api_token="host-overview-integration-token-24", _env_file=None)
+    settings = Settings(state_backend="memory", api_token="host-overview-integration-token-24", _env_file=None)
     components = build_components(settings, reader=runtime, writer=runtime, model=model)
     with TestClient(create_app(settings, components)) as api:
         events = _events(
@@ -118,7 +118,7 @@ def test_host_overview_can_narrow_to_one_fresh_exact_container_in_the_same_sessi
         {"widget_type": "log_anomalies", "evidence_ids": ["e2"]},
     ]
     model = ScriptedModel([ModelReply("Ready"), _proposal(), ModelReply("Ready"), ModelReply(json.dumps(proposal))])
-    settings = Settings(api_token="host-narrow-integration-token-24", _env_file=None)
+    settings = Settings(state_backend="memory", api_token="host-narrow-integration-token-24", _env_file=None)
     components = build_components(settings, reader=runtime, writer=runtime, model=model)
     headers = {"Authorization": "Bearer host-narrow-integration-token-24"}
     with TestClient(create_app(settings, components)) as api:
@@ -157,7 +157,7 @@ def test_host_overview_can_narrow_to_one_fresh_exact_container_in_the_same_sessi
 def test_unavailable_member_actions_do_not_discard_collected_host_observations(code: str) -> None:
     runtime = UnavailableActionRuntime(code)
     model = ScriptedModel([ModelReply("Ready"), _proposal(), _proposal()])
-    settings = Settings(api_token="host-actions-integration-token-24", _env_file=None)
+    settings = Settings(state_backend="memory", api_token="host-actions-integration-token-24", _env_file=None)
     components = build_components(settings, reader=runtime, writer=runtime, model=model)
     with TestClient(create_app(settings, components)) as api:
         events = _events(
@@ -189,7 +189,7 @@ def test_real_docker_host_overview_crosses_projects_and_retains_ungrouped_failur
         lab.start()
         runtime = FixtureRuntime(lab)
         model = ScriptedModel([ModelReply("Ready"), _proposal()])
-        settings = Settings(api_token="real-host-overview-integration-token-24", _env_file=None)
+        settings = Settings(state_backend="memory", api_token="real-host-overview-integration-token-24", _env_file=None)
         components = build_components(settings, reader=runtime, writer=runtime, model=model)
         components.closers.append(runtime.close)
         with TestClient(create_app(settings, components)) as api:

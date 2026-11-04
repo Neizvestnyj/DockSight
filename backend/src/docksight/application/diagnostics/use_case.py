@@ -5,7 +5,6 @@ from copy import copy
 from datetime import UTC, datetime
 from functools import partial
 from typing import Self, cast
-from uuid import uuid4
 
 from pydantic import ValidationError
 
@@ -23,10 +22,8 @@ from docksight.application.diagnostics.tools import DiagnosticTools, tool_specs
 from docksight.application.diagnostics.trace import DiagnosticTrace, schema_issues
 from docksight.application.events import TurnEvent
 from docksight.application.investigations.contracts import DiagnosticCommand
-from docksight.application.model_catalog import ModelSelection
 from docksight.application.ports.models import ModelMessage, ModelPort, ModelReply, ToolCall
 from docksight.application.ports.runtime import RuntimeReadPort
-from docksight.application.ports.state import SessionStore
 from docksight.application.redaction import Redactor
 from docksight.application.views.assembler import ViewAssembler
 from docksight.application.views.registry import proposal_schema
@@ -63,7 +60,6 @@ class Diagnostics:
         self,
         runtime: RuntimeReadPort,
         model: ModelPort,
-        sessions: SessionStore,
         redactor: Redactor,
         assembler: ViewAssembler | None = None,
         max_model_calls: int = 6,
@@ -77,7 +73,6 @@ class Diagnostics:
         """Bind ports and configure turn concurrency, budgets, and timeouts."""
         self.runtime = runtime
         self.model = model
-        self.sessions = sessions
         self.redactor = redactor
         self.assembler = assembler or ViewAssembler()
         self.max_model_calls = max_model_calls
@@ -89,14 +84,14 @@ class Diagnostics:
         self.model_identity = model_identity
 
     def with_model(self, model: ModelPort, identity: tuple[str, str]) -> Self:
-        """Share sessions, actions, redaction, and global capacity with an immutable turn selection."""
+        """Share actions, redaction, and global capacity with an immutable turn selection."""
         selected = copy(self)
         selected.model = model
         selected.model_identity = identity
         return selected
 
     async def reserve(self) -> DiagnosticLease:
-        """Reserve the same global capacity used by legacy sessions before committing accepted work."""
+        """Reserve shared diagnostic capacity before committing accepted work."""
         if self._slots.locked():
             raise DockSightError("turn_capacity", "Diagnostic capacity reached; retry later", ErrorKind.UNAVAILABLE)
         await self._slots.acquire()
@@ -117,51 +112,6 @@ class Diagnostics:
             await stream.aclose()
             await lease.close()
 
-    async def stream(
-        self,
-        actor: str,
-        host: str,
-        query: str,
-        session_id: str | None = None,
-        group: GroupTarget | None = None,
-        container_id: str | None = None,
-    ) -> AsyncGenerator[TurnEvent]:
-        """Lease a scoped session and emit one terminal event for a bounded turn."""
-        turn_id = str(uuid4())
-        trace = DiagnosticTrace(turn_id, self.redactor)
-        lease: DiagnosticLease | None = None
-        try:
-            self._validate_turn(host, query, group, container_id)
-            lease = await self.reserve()
-            async with self.sessions.lease(session_id, actor, host) as session:
-                command = DiagnosticCommand(
-                    turn_id=turn_id,
-                    investigation_id=session.id,
-                    actor=actor,
-                    host=host,
-                    query=self.redactor.text(query),
-                    context=tuple(session.history),
-                    target=group or (ContainerTarget(id=container_id, name=container_id) if container_id else None),
-                    identity=ModelSelection(provider=self.model_identity[0], model=self.model_identity[1])
-                    if self.model_identity
-                    else None,
-                )
-                async for event in self.run_reserved(command, lease.deadline):
-                    if event["type"] == "answer.ready":
-                        session.history.extend(
-                            [
-                                ModelMessage("user", command.query),
-                                ModelMessage("assistant", cast(str, event["answer"]["summary"])),
-                            ]
-                        )
-                    yield event
-        except (TimeoutError, DockSightError) as exc:
-            for event in trace.failed(exc):
-                yield event
-        finally:
-            if lease is not None:
-                await lease.close()
-
     async def run_reserved(self, command: DiagnosticCommand, deadline: float) -> AsyncGenerator[TurnEvent]:
         """Execute an owned reservation without acquiring shared capacity a second time."""
         trace = DiagnosticTrace(command.turn_id, self.redactor)
@@ -176,7 +126,7 @@ class Diagnostics:
                 yield event
 
     def _validate_turn(self, host: str, query: str, group: GroupTarget | None, container_id: str | None) -> None:
-        """Reject invalid scope, query size, or exhausted capacity before leasing a session."""
+        """Reject invalid scope and query size before collecting fresh runtime evidence."""
         if host not in {item.id for item in self.runtime.hosts()}:
             raise DockSightError("host_not_found", "Configured host not found", ErrorKind.NOT_FOUND)
         if not query.strip() or len(query) > 4000:

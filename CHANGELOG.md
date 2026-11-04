@@ -9,8 +9,7 @@ Dates record merges into `master`. Version links show the corresponding changes.
 ### Added
 
 - SQLite archive storage saves owned investigations, revisioned drafts and preferences, and paginated turn snapshots.
-  Explicit deletion preserves submission receipts and action protection. Runtime wiring remains in memory until the
-  recovery services are integrated.
+  Explicit deletion preserves submission receipts and action protection.
 - Packaged forward migrations, exclusive process ownership, and stopped-server status and byte-preserving backup
   support establish local state storage. Backups reject source-file and source-sidecar destinations.
   The backend image prepares `/var/lib/docksight` for a durable directory mount.
@@ -25,6 +24,8 @@ Dates record merges into `master`. Version links show the corresponding changes.
   and invalidates old preparations without resending Docker commands.
 - First-party browser login restores actor-bound sessions through an HttpOnly cookie with hash-only SQLite storage,
   absolute and idle expiry, credential-rotation revocation, and CSRF protection. Bearer API access remains available.
+- History and workspace endpoints restore saved turns, support revision conflicts, and accept duplicate-safe submissions.
+  Snapshot streams reconnect without generation. Legacy chat streams share the retained diagnostic runner.
 
 ### Fixed
 
@@ -40,6 +41,9 @@ Dates record merges into `master`. Version links show the corresponding changes.
 
 ### Changed
 
+- SQLite is the default state backend. Startup locks, migrates, and recovers state before readiness. Shutdown settles
+  diagnostic and action work before closing adapters. Explicit memory mode retains its session capacity and idle expiry.
+- Startup and browser login reclaim one bounded stale-session batch without adding background scheduling.
 - Keep temporary agent plans and review artifacts out of version control.
 - Architecture checks keep SQLAlchemy, Alembic, and file-locking libraries inside adapters.
 

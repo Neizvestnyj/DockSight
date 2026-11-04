@@ -1,15 +1,17 @@
 import base64
 import hashlib
 import hmac
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
+from docksight.adapters.outbound.memory.browser_sessions import MemoryBrowserSessions
 from docksight.adapters.outbound.persistence.browser_sessions import SQLiteBrowserSessions
 from docksight.adapters.outbound.persistence.database import PersistentDatabase
-from docksight.application.ports.browser_sessions import BrowserSessionStore
+from docksight.application.ports.browser_sessions import BrowserSession, BrowserSessionStore
 from docksight.bootstrap import Settings, build_components
 from docksight.main import create_app
 from tests.fakes import FakeRuntime, ScriptedModel
@@ -24,7 +26,13 @@ LOGIN = {**BEARER, "Origin": ORIGIN}
 def browser_client(*, browser_session_store: BrowserSessionStore | None = None, **overrides: object) -> TestClient:
     """Build an isolated first-party API without opening the operator's state database."""
     settings = Settings.model_validate(
-        {"api_token": TOKEN, "api_tokens": {"bob": BOB}, "browser_origin": ORIGIN, **overrides}
+        {
+            "state_backend": "memory",
+            "api_token": TOKEN,
+            "api_tokens": {"bob": BOB},
+            "browser_origin": ORIGIN,
+            **overrides,
+        }
     )
     runtime = FakeRuntime()
     components = build_components(
@@ -60,6 +68,25 @@ def test_login_restores_cookie_session_rotates_and_logs_out() -> None:
         assert api.get("/api/v1/auth/session").status_code == 401
         for result in (response, rotated, logged_out, stale):
             assert result.headers["cache-control"] == "no-store"
+
+
+async def test_browser_login_reclaims_one_bounded_stale_session_batch() -> None:
+    now, store = datetime.now(UTC), MemoryBrowserSessions()
+    for index in range(105):
+        await store.add(
+            BrowserSession(
+                token_hash=f"{index:064x}",
+                actor="operator",
+                credential_fingerprint="b" * 64,
+                created_at=now - timedelta(hours=2),
+                last_seen_at=now - timedelta(hours=2),
+                expires_at=now - timedelta(hours=1),
+            )
+        )
+    with browser_client(browser_session_store=store) as api:
+        assert api.post("/api/v1/auth/login", headers=LOGIN, json={}).status_code == 200
+        assert await store.cleanup(now, now - timedelta(hours=1), 100) == 5
+        assert api.get("/api/v1/auth/session").status_code == 200
 
 
 @pytest.mark.parametrize("origin", [None, "null", "https://foreign.example"])
@@ -139,7 +166,7 @@ def test_login_rejects_non_json_and_cross_site_fetch(headers: dict[str, str]) ->
 
 
 def test_cookie_proxy_requires_configured_origin_and_ignores_forwarded_headers() -> None:
-    settings = Settings(api_token=TOKEN, _env_file=None)
+    settings = Settings(state_backend="memory", api_token=TOKEN, _env_file=None)
     runtime = FakeRuntime()
     components = build_components(settings, reader=runtime, writer=runtime, model=ScriptedModel([]))
     with TestClient(create_app(settings, components), base_url="http://backend:8000") as api:
@@ -188,7 +215,7 @@ def test_login_and_errors_do_not_log_submitted_secrets(caplog: pytest.LogCapture
 @pytest.mark.parametrize("origin", [None, "http://example.com", "https://localhost", "http://localhost:4173/path"])
 def test_insecure_cookie_requires_explicit_loopback_http_origin(origin: str | None) -> None:
     with pytest.raises(ValidationError):
-        Settings(api_token=TOKEN, browser_origin=origin, cookie_secure=False, _env_file=None)
+        Settings(state_backend="memory", api_token=TOKEN, browser_origin=origin, cookie_secure=False, _env_file=None)
 
 
 @pytest.mark.parametrize(
@@ -203,7 +230,7 @@ def test_insecure_cookie_requires_explicit_loopback_http_origin(origin: str | No
 )
 def test_browser_origin_must_be_exact_origin(origin: str) -> None:
     with pytest.raises(ValidationError):
-        Settings(api_token=TOKEN, browser_origin=origin, _env_file=None)
+        Settings(state_backend="memory", api_token=TOKEN, browser_origin=origin, _env_file=None)
 
 
 def test_cookie_authorized_action_uses_session_actor_and_bearer_login_is_required() -> None:
@@ -295,7 +322,7 @@ def test_unconfigured_public_origin_uses_direct_https_origin_without_forwarded_t
     with browser_client(browser_origin=None) as api:
         response = api.post("/api/v1/auth/login", headers=LOGIN, json={})
         assert response.status_code == 200
-    settings = Settings(api_token=TOKEN, _env_file=None)
+    settings = Settings(state_backend="memory", api_token=TOKEN, _env_file=None)
     runtime = FakeRuntime()
     components = build_components(settings, reader=runtime, writer=runtime, model=ScriptedModel([]))
     with TestClient(create_app(settings, components), base_url="http://localhost:8000") as api:

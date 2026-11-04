@@ -6,6 +6,10 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
+from docksight.adapters.outbound.memory.actions import MemoryActions
+from docksight.adapters.outbound.memory.browser_sessions import MemoryBrowserSessions
+from docksight.adapters.outbound.memory.investigations import MemoryInvestigations
+from docksight.adapters.outbound.memory.turns import MemoryTurnStore
 from docksight.adapters.outbound.models.anthropic import AnthropicModel
 from docksight.adapters.outbound.models.compatible import CompatibleModel
 from docksight.adapters.outbound.models.openai import OpenAIModel
@@ -13,7 +17,7 @@ from docksight.adapters.outbound.models.status import ModelAvailability
 from docksight.application.ports.models import ModelMessage
 from docksight.bootstrap import Settings, build_components
 from docksight.main import create_app
-from tests.fakes import FakeRuntime
+from tests.fakes import FakeRuntime, ScriptedModel
 
 
 def test_standard_provider_keys_load_from_dotenv(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -24,7 +28,7 @@ def test_standard_provider_keys_load_from_dotenv(tmp_path, monkeypatch: pytest.M
     env_file.write_text(
         "OPENAI_API_KEY=openai-dotenv\nANTHROPIC_API_KEY=anthropic-dotenv\nGEMINI_API_KEY=gemini-dotenv\n"
     )
-    settings = Settings(api_token="test-token-at-least-24-chars", _env_file=env_file)
+    settings = Settings(state_backend="memory", api_token="test-token-at-least-24-chars", _env_file=env_file)
     assert settings.openai_api_key.get_secret_value() == "openai-dotenv"
     assert settings.anthropic_api_key.get_secret_value() == "anthropic-dotenv"
     assert settings.gemini_api_key.get_secret_value() == "gemini-dotenv"
@@ -33,7 +37,12 @@ def test_standard_provider_keys_load_from_dotenv(tmp_path, monkeypatch: pytest.M
 @pytest.mark.parametrize("models", [{"unknown": ["x"]}, {"openai": [""]}, {"openai": ["x"] * 101}])
 def test_fallback_configuration_rejects_unknown_or_unbounded_ids(models: dict[str, list[str]]) -> None:
     with pytest.raises(ValidationError):
-        Settings(api_token="test-token-at-least-24-chars", provider_fallback_models=models, _env_file=None)
+        Settings(
+            state_backend="memory",
+            api_token="test-token-at-least-24-chars",
+            provider_fallback_models=models,
+            _env_file=None,
+        )
 
 
 @pytest.mark.parametrize("explicit_key", [None, "explicit-gemini-key"])
@@ -46,6 +55,7 @@ async def test_gemini_wiring_uses_google_credentials_and_endpoint(
     monkeypatch.setenv("OPENAI_API_KEY", "unrelated-openai-key")
     monkeypatch.setenv("OPENAI_BASE_URL", "https://unrelated.example.test/")
     settings = Settings(
+        state_backend="memory",
         api_token="test-token-at-least-24-chars",
         provider="gemini",
         model="gemini-2.5-flash-lite",
@@ -76,7 +86,9 @@ def test_gemini_requires_its_own_credentials(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     monkeypatch.delenv("DOCKSIGHT_MODEL_API_KEY", raising=False)
     monkeypatch.setenv("OPENAI_API_KEY", "unrelated-openai-key")
-    settings = Settings(api_token="test-token-at-least-24-chars", provider="gemini", _env_file=None)
+    settings = Settings(
+        state_backend="memory", api_token="test-token-at-least-24-chars", provider="gemini", _env_file=None
+    )
     runtime = FakeRuntime()
     with pytest.raises(ValueError, match="GEMINI_API_KEY"):
         build_components(settings, reader=runtime, writer=runtime)
@@ -94,6 +106,7 @@ async def test_compatible_endpoint_never_receives_openai_credentials(
     monkeypatch.setenv("DOCKSIGHT_OPENAI_API_KEY", "unrelated-docksight-openai-key")
     monkeypatch.delenv("DOCKSIGHT_MODEL_API_KEY", raising=False)
     settings = Settings(
+        state_backend="memory",
         api_token="test-token-at-least-24-chars",
         provider="compatible",
         model="local-model",
@@ -124,7 +137,11 @@ async def test_status_probe_uses_the_generation_clients_effective_endpoint(
     monkeypatch.setenv("OPENAI_ORG_ID", "test-organization")
     monkeypatch.setenv("OPENAI_PROJECT_ID", "test-project")
     settings = Settings(
-        api_token="test-token-at-least-24-chars", provider=provider, model_api_key="gateway-test-key", _env_file=None
+        state_backend="memory",
+        api_token="test-token-at-least-24-chars",
+        provider=provider,
+        model_api_key="gateway-test-key",
+        _env_file=None,
     )
     runtime = FakeRuntime()
     components = build_components(settings, reader=runtime, writer=runtime)
@@ -148,23 +165,33 @@ async def test_status_probe_uses_the_generation_clients_effective_endpoint(
 def test_missing_token_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("DOCKSIGHT_API_TOKEN", raising=False)
     with pytest.raises(ValidationError):
-        Settings(_env_file=None)
+        Settings(state_backend="memory", _env_file=None)
 
 
 def test_invalid_provider_and_short_token_are_rejected() -> None:
     with pytest.raises(ValidationError):
-        Settings(api_token="short", provider="unknown", _env_file=None)
+        Settings(state_backend="memory", api_token="short", provider="unknown", _env_file=None)
 
 
 @pytest.mark.parametrize("idle_ttl", [60, 119, 3601])
 def test_browser_idle_lifetime_rejects_unrefreshable_or_unsupported_values(idle_ttl: int) -> None:
     with pytest.raises(ValidationError):
-        Settings(api_token="test-token-at-least-24-chars", browser_session_idle_ttl=idle_ttl, _env_file=None)
+        Settings(
+            state_backend="memory",
+            api_token="test-token-at-least-24-chars",
+            browser_session_idle_ttl=idle_ttl,
+            _env_file=None,
+        )
 
 
 @pytest.mark.parametrize("idle_ttl", [120, 3600])
 def test_browser_idle_lifetime_accepts_supported_boundary_values(idle_ttl: int) -> None:
-    settings = Settings(api_token="test-token-at-least-24-chars", browser_session_idle_ttl=idle_ttl, _env_file=None)
+    settings = Settings(
+        state_backend="memory",
+        api_token="test-token-at-least-24-chars",
+        browser_session_idle_ttl=idle_ttl,
+        _env_file=None,
+    )
     assert settings.browser_session_idle_ttl == idle_ttl
 
 
@@ -174,7 +201,7 @@ def test_named_tokens_replace_the_single_token_and_map_to_their_actors(monkeypat
         "DOCKSIGHT_API_TOKENS",
         json.dumps({"alice": "alice-token-at-least-24-characters", "ci.bot": "bot-token-at-least-24-characters"}),
     )
-    settings = Settings(_env_file=None)
+    settings = Settings(state_backend="memory", _env_file=None)
     assert settings.api_credentials() == {
         "alice": "alice-token-at-least-24-characters",
         "ci.bot": "bot-token-at-least-24-characters",
@@ -192,12 +219,14 @@ def test_named_tokens_replace_the_single_token_and_map_to_their_actors(monkeypat
 )
 def test_named_tokens_reject_weak_shared_or_unsafe_identities(api_tokens: dict[str, str]) -> None:
     with pytest.raises(ValidationError) as error:
-        Settings(api_token="test-token-at-least-24-chars", api_tokens=api_tokens, _env_file=None)
+        Settings(
+            state_backend="memory", api_token="test-token-at-least-24-chars", api_tokens=api_tokens, _env_file=None
+        )
     assert not any(token in str(error.value) for token in api_tokens.values())
 
 
 def test_health_does_not_require_a_docker_connection() -> None:
-    settings = Settings(api_token="test-token-at-least-24-chars", _env_file=None)
+    settings = Settings(state_backend="memory", api_token="test-token-at-least-24-chars", _env_file=None)
     with TestClient(create_app(settings)) as client:
         response = client.get("/health/live")
         assert response.status_code == 200
@@ -206,7 +235,7 @@ def test_health_does_not_require_a_docker_connection() -> None:
 
 
 def test_api_does_not_expose_configured_hosts_without_authentication() -> None:
-    settings = Settings(api_token="test-token-at-least-24-chars", _env_file=None)
+    settings = Settings(state_backend="memory", api_token="test-token-at-least-24-chars", _env_file=None)
     with TestClient(create_app(settings)) as client:
         response = client.get("/api/v1/hosts")
         assert response.status_code == 401
@@ -239,12 +268,41 @@ async def test_configured_ollama_context_reaches_native_requests(monkeypatch: py
 
     monkeypatch.setattr("docksight.bootstrap.httpx.AsyncClient", create_client)
     settings = Settings(
-        api_token="test-token-at-least-24-chars", provider="ollama", ollama_context_length=8192, _env_file=None
+        state_backend="memory",
+        api_token="test-token-at-least-24-chars",
+        provider="ollama",
+        ollama_context_length=8192,
+        _env_file=None,
     )
     runtime = FakeRuntime()
     components = build_components(settings, reader=runtime, writer=runtime)
     try:
         await components.diagnostics.model.complete([ModelMessage("user", "Inspect worker")])
         assert payloads[0]["options"]["num_ctx"] == 8192
+    finally:
+        await components.close()
+
+
+async def test_explicit_injected_stores_do_not_open_the_configured_sqlite_path(tmp_path) -> None:
+    settings = Settings(
+        api_token="test-token-at-least-24-chars", state_path=tmp_path / "unused.sqlite3", _env_file=None
+    )
+    archive = MemoryInvestigations()
+    runtime = FakeRuntime()
+    components = build_components(
+        settings,
+        reader=runtime,
+        writer=runtime,
+        model=ScriptedModel([]),
+        archive_store=archive,
+        turn_store=MemoryTurnStore(archive),
+        action_store=MemoryActions(),
+        browser_session_store=MemoryBrowserSessions(),
+    )
+    try:
+        await components.start()
+        assert components.database is None
+        assert not settings.state_path.exists()
+        assert components.ready
     finally:
         await components.close()

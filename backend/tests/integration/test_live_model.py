@@ -2,9 +2,11 @@ import json
 import os
 from dataclasses import replace
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 
+from docksight.application.investigations.contracts import QuestionTurn, StartTurn
 from docksight.bootstrap import Settings, build_components
 from docksight.domain.runtime import LogBatch, LogEntry
 from tests.fakes import FakeRuntime
@@ -24,7 +26,9 @@ pytestmark = [
     ids=lambda case: case["name"],
 )
 async def test_configured_model_produces_an_evidence_linked_card(case: dict) -> None:
-    settings = Settings()
+    settings = Settings(
+        state_backend="memory",
+    )
     runtime = FakeRuntime()
     runtime.item = replace(
         runtime.item,
@@ -36,19 +40,30 @@ async def test_configured_model_produces_an_evidence_linked_card(case: dict) -> 
     runtime.log_batch = LogBatch((LogEntry(case["log"]),) if case["log"] else (), case["truncated"])
     components = build_components(settings, reader=runtime, writer=runtime)
     try:
-        events = [
-            event
-            async for event in components.diagnostics.stream(
-                "operator",
-                "local",
-                case.get(
-                    "query",
-                    "Inspect worker and include its container_status card. Explain only what the evidence supports.",
-                ),
-            )
-        ]
-        assert events[-1]["type"] == "turn.completed", events[-1]
-        answer = next(event["answer"] for event in events if event["type"] == "answer.ready")
+        await components.start()
+        identity = str(uuid4())
+        await components.investigations.create("operator", identity, "local")
+        accepted = await components.runner.submit(
+            "operator",
+            StartTurn(
+                QuestionTurn(
+                    investigation_id=identity,
+                    submission_id=str(uuid4()),
+                    expected_revision=0,
+                    query=case.get(
+                        "query",
+                        "Inspect worker and include its container_status card. "
+                        "Explain only what the evidence supports.",
+                    ),
+                )
+            ),
+            "live-model-test",
+        )
+        snapshots = [saved async for saved in components.runner.observe("operator", accepted.snapshot.id)]
+        final = snapshots[-1]
+        assert final.state == "completed", final.error
+        assert final.answer is not None
+        answer = final.answer.model_dump(mode="json")
         assert answer["evidence"]
         assert any(card["widget_type"] == "container_status" for card in answer["widgets"])
         card = next(card for card in answer["widgets"] if card["widget_type"] == "container_status")

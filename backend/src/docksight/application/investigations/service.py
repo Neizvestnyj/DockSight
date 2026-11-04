@@ -11,6 +11,7 @@ from docksight.application.investigations.contracts import (
     WorkspacePatch,
 )
 from docksight.application.investigations.ports import InvestigationArchive
+from docksight.application.model_choices import ModelChoices
 from docksight.application.redaction import Redactor
 from docksight.domain.errors import DockSightError, ErrorKind
 
@@ -18,9 +19,16 @@ from docksight.domain.errors import DockSightError, ErrorKind
 class Investigations:
     """Validate configured scope and sanitize acknowledged actor-owned archive changes."""
 
-    def __init__(self, archive: InvestigationArchive, hosts: Callable[[], Set[str]], redactor: Redactor) -> None:
+    def __init__(
+        self,
+        archive: InvestigationArchive,
+        hosts: Callable[[], Set[str]],
+        redactor: Redactor,
+        models: ModelChoices | None = None,
+    ) -> None:
         """Resolve configured host identities without retaining transport or settings objects."""
         self.archive, self.hosts, self.redactor = archive, hosts, redactor
+        self.models = models
 
     def validate_host(self, host: str) -> None:
         """Reject arbitrary or removed host identities before accepting new work."""
@@ -58,6 +66,12 @@ class Investigations:
         """Validate explicit host preferences without overwriting investigation drafts."""
         if patch.host is not None:
             self.validate_host(patch.host)
+        if patch.model is not None:
+            if self.models is None:
+                raise DockSightError(
+                    "provider_not_configured", "Model selection is not configured", ErrorKind.VALIDATION
+                )
+            await self.models.select(patch.model)
         return await self.archive.patch_actor_workspace(actor, patch, datetime.now(UTC))
 
     async def delete(self, actor: str, investigation_id: str) -> None:

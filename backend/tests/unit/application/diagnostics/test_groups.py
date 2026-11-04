@@ -4,7 +4,6 @@ from unittest.mock import patch
 
 import pytest
 
-from docksight.adapters.outbound.memory.sessions import MemorySessions
 from docksight.application.diagnostics.context import EvidenceContext
 from docksight.application.diagnostics.scope import resolve_target
 from docksight.application.diagnostics.tools import DiagnosticTools
@@ -15,6 +14,7 @@ from docksight.application.views.assembler import ViewAssembler
 from docksight.application.views.schemas import DiagnosisProposal, GroupTarget
 from docksight.domain.errors import DockSightError, ErrorKind
 from docksight.domain.runtime import ContainerSnapshot, LogBatch, StackMember, StackSummary
+from tests.diagnostics import diagnostic_stream
 from tests.fakes import FakeRuntime, ScriptedModel
 
 
@@ -146,11 +146,12 @@ async def test_healthy_group_final_and_repair_schemas_only_offer_cards_with_coll
     model = ScriptedModel(
         [ModelReply("Ready"), *([ModelReply(json.dumps(invalid))] if repair else []), ModelReply(json.dumps(answer))]
     )
-    service = Diagnostics(runtime, model, MemorySessions(), Redactor())
+    service = Diagnostics(runtime, model, Redactor())
     with patch.object(model, "complete", wraps=model.complete) as complete:
         events = [
             event
-            async for event in service.stream(
+            async for event in diagnostic_stream(
+                service,
                 "alice",
                 "local",
                 "Show the current state of Compose project infra",
@@ -221,8 +222,8 @@ async def test_server_group_report_survives_a_final_proposal_without_group_widge
     )
     events = [
         event
-        async for event in Diagnostics(GroupRuntime(), model, MemorySessions(), Redactor()).stream(
-            "alice", "local", "What is wrong with the infra project?"
+        async for event in diagnostic_stream(
+            Diagnostics(GroupRuntime(), model, Redactor()), "alice", "local", "What is wrong with the infra project?"
         )
     ]
     answer = next(event["answer"] for event in events if event["type"] == "answer.ready")
@@ -240,13 +241,13 @@ async def test_explicit_group_is_collected_before_the_model_and_missing_target_n
             ),
         ]
     )
-    service = Diagnostics(GroupRuntime(), model, MemorySessions(), Redactor())
+    service = Diagnostics(GroupRuntime(), model, Redactor())
     target = GroupTarget(kind="compose", name="infra")
-    events = [event async for event in service.stream("alice", "local", "Check this project", group=target)]
+    events = [event async for event in diagnostic_stream(service, "alice", "local", "Check this project", group=target)]
     assert events[-1]["type"] == "turn.completed"
     assert any(message.role == "tool" and '"infra"' in message.content for message in model.requests[0][0])
     missing = GroupTarget(kind="compose", name="missing")
-    failed = [event async for event in service.stream("alice", "local", "Check", group=missing)]
+    failed = [event async for event in diagnostic_stream(service, "alice", "local", "Check", group=missing)]
     assert failed[-1]["type"] == "turn.failed"
     assert failed[-1]["code"] == "group_not_found"
     assert len(model.requests) == 2
@@ -330,8 +331,8 @@ async def test_plain_question_resolves_the_exact_compose_name_before_model_explo
     )
     events = [
         event
-        async for event in Diagnostics(GroupRuntime(), model, MemorySessions(), Redactor()).stream(
-            "alice", "local", "What happened to infra?"
+        async for event in diagnostic_stream(
+            Diagnostics(GroupRuntime(), model, Redactor()), "alice", "local", "What happened to infra?"
         )
     ]
     answer = next(event["answer"] for event in events if event["type"] == "answer.ready")
@@ -393,7 +394,8 @@ async def test_two_failed_members_keep_separate_cards_when_model_only_selects_th
     )
     events = [
         event
-        async for event in Diagnostics(TwoFailures(), model, MemorySessions(), Redactor()).stream(
+        async for event in diagnostic_stream(
+            Diagnostics(TwoFailures(), model, Redactor()),
             "alice",
             "local",
             "Check vintoria-infta?",
@@ -426,8 +428,8 @@ async def test_scope_clarification_finishes_its_tool_progress_without_calling_th
     model = ScriptedModel([])
     events = [
         event
-        async for event in Diagnostics(runtime, model, MemorySessions(), Redactor()).stream(
-            "alice", "local", "What happened to infra?"
+        async for event in diagnostic_stream(
+            Diagnostics(runtime, model, Redactor()), "alice", "local", "What happened to infra?"
         )
     ]
     assert events[-1]["type"] == "turn.completed"
@@ -513,10 +515,10 @@ async def test_failed_optional_swarm_discovery_does_not_block_container_diagnost
             ),
         ]
     )
-    service = Diagnostics(FailedSwarm(), model, MemorySessions(), Redactor())
-    events = [event async for event in service.stream("alice", "local", "Why are containers restarting?")]
+    service = Diagnostics(FailedSwarm(), model, Redactor())
+    events = [event async for event in diagnostic_stream(service, "alice", "local", "Why are containers restarting?")]
     assert events[-1]["type"] == "turn.completed"
     assert any("Swarm discovery failed" in message.content for message in model.requests[0][0])
-    failed = [event async for event in service.stream("alice", "local", "Inspect the Swarm stack infra")]
+    failed = [event async for event in diagnostic_stream(service, "alice", "local", "Inspect the Swarm stack infra")]
     assert failed[-1]["type"] == "turn.failed"
     assert failed[-1]["code"] == "runtime_timeout"

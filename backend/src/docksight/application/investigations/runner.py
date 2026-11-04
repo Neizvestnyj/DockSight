@@ -1,5 +1,5 @@
 import asyncio
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable
 from datetime import UTC, datetime
 
 from docksight.application.events import TurnEvent
@@ -261,7 +261,7 @@ class TurnRunner:
                 queue.get_nowait()
             queue.put_nowait(value)
 
-    async def observe(self, actor: str, turn_id: str) -> AsyncIterator[SavedTurn]:
+    async def observe(self, actor: str, turn_id: str) -> AsyncGenerator[SavedTurn]:
         """Attach at most four bounded observers without acquiring any execution ownership."""
         await self.investigations.archive.read_turn(actor, turn_id)
         observers = self._observers.setdefault(turn_id, set())

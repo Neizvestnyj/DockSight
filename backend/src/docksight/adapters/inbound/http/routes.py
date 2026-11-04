@@ -3,17 +3,17 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Path, Query, Request, Response
 
-from docksight.adapters.inbound.http.auth import authenticated_principal
+from docksight.adapters.inbound.http.auth import HttpAuthentication, authenticated_principal
+from docksight.adapters.inbound.http.legacy import build_legacy_router
 from docksight.adapters.inbound.http.schemas import (
     ActionExecute,
     ActionPrepare,
-    ChatTurn,
     ContainerId,
     HostId,
 )
-from docksight.adapters.inbound.http.streaming import EventResponse
 from docksight.application.actions import Actions
-from docksight.application.diagnostics.use_case import Diagnostics
+from docksight.application.investigations.runner import TurnRunner
+from docksight.application.investigations.service import Investigations
 from docksight.application.model_catalog import CatalogView, ModelSelection, ProvidersView
 from docksight.application.model_choices import ModelChoices
 from docksight.application.queries import RuntimeQueries
@@ -41,9 +41,11 @@ type Actor = Annotated[str, Depends(_actor)]
 
 def build_router(
     queries: RuntimeQueries,
-    diagnostics: Diagnostics,
     actions: Actions,
     status: SystemStatus,
+    history: Investigations,
+    runner: TurnRunner,
+    auth: HttpAuthentication,
     models: ModelChoices | None = None,
 ) -> APIRouter:
     """Bind versioned HTTP endpoints to application use cases."""
@@ -143,27 +145,7 @@ def build_router(
         """Return the selected widget's versioned JSON schema."""
         return widget_schema()
 
-    @router.post(
-        "/chat/turns",
-        response_model=None,
-        response_class=EventResponse,
-        tags=["Chat"],
-        responses={200: {"content": {"text/event-stream": {}}}},
-    )
-    async def chat(turn: ChatTurn, request: Request, actor: Actor) -> EventResponse:
-        """Stream a bounded diagnostic turn as server-sent events."""
-        queries.check_host(turn.host)
-        selected = await _selected_diagnostics(diagnostics, models, turn.model_selection)
-        source = selected.stream(
-            actor,
-            turn.host,
-            turn.query,
-            str(turn.session_id) if turn.session_id else None,
-            turn.group,
-            turn.container_id,
-        )
-
-        return EventResponse(source, request.state.request_id)
+    router.include_router(build_legacy_router(history, runner, auth))
 
     return router
 
@@ -183,17 +165,3 @@ async def _selected_status(
         )
     _, probe = await models.select(ModelSelection(provider=provider, model=model))
     return status.with_model(probe, provider, model)
-
-
-async def _selected_diagnostics(
-    diagnostics: Diagnostics,
-    models: ModelChoices | None,
-    selection: ModelSelection | None,
-) -> Diagnostics:
-    """Resolve an optional model before SSE starts while retaining default injected adapters."""
-    if selection is None:
-        return diagnostics
-    if models is None:
-        raise DockSightError("provider_not_configured", "Model selection is not configured", ErrorKind.VALIDATION)
-    model, _ = await models.select(selection)
-    return diagnostics.with_model(model, (selection.provider, selection.model))
