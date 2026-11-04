@@ -20,6 +20,7 @@ from docksight.application.diagnostics.trace import TraceStep
 from docksight.application.investigations.contracts import (
     ClarificationTurn,
     QuestionTurn,
+    SavedTurn,
     StartTurn,
     StorageLimits,
     TurnOutcome,
@@ -282,6 +283,59 @@ async def test_sqlite_acceptance_commit_survives_http_cancellation_until_worker_
         release.set()
         await runner.close()
         await database.close()
+
+
+@pytest.mark.parametrize("followup", ["stop", "shutdown"])
+async def test_terminal_settlement_retains_ownership_across_repeated_stop_or_shutdown(
+    stores: tuple[InvestigationArchive, TurnStore],
+    monkeypatch: pytest.MonkeyPatch,
+    followup: str,
+) -> None:
+    archive, store = stores
+    service = Investigations(archive, lambda: {"local"}, Redactor())
+    identity = str(uuid4())
+    await service.create("alice", identity, "local")
+    source = ControlledDiagnostics()
+
+    async def selected(selection: object) -> SelectedDiagnostics:
+        """Use a deterministic diagnostic worker with observable lease ownership."""
+        return SelectedDiagnostics(source, None)
+
+    runner = TurnRunner(service, store, selected, Redactor(), shutdown_timeout=0)
+    entered, release = asyncio.Event(), asyncio.Event()
+    original = archive.read_turn
+
+    async def paused_read(actor: str, turn_id: str) -> SavedTurn:
+        """Hold terminal settlement before the real store's cancellable read admission."""
+        entered.set()
+        await release.wait()
+        return await original(actor, turn_id)
+
+    callers = []
+    try:
+        command = question(identity)
+        saved = (await runner.submit("alice", command, "req")).snapshot
+        await source.started.wait()
+        monkeypatch.setattr(archive, "read_turn", paused_read)
+        first = asyncio.create_task(runner.cancel("alice", saved.id))
+        callers.append(first)
+        await asyncio.wait_for(entered.wait(), 2)
+        second = asyncio.create_task(runner.close() if followup == "shutdown" else runner.cancel("alice", saved.id))
+        callers.append(second)
+        with pytest.raises(TimeoutError):
+            await asyncio.wait_for(asyncio.shield(second), 0.05)
+        assert source.leases == 1
+        release.set()
+        assert (await asyncio.wait_for(first, 2)).state == "stopped"
+        await second
+        assert (await original("alice", saved.id)).state == "stopped"
+        assert (await archive.read("alice", identity)).active_turn_id is None
+        assert await store.context("alice", identity) == ()
+        assert source.calls == 1 and source.leases == 0
+    finally:
+        release.set()
+        await asyncio.gather(*callers, return_exceptions=True)
+        await runner.close()
 
 
 def apply_limits(archive: InvestigationArchive, turns: TurnStore, limits: StorageLimits) -> None:

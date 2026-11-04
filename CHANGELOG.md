@@ -26,6 +26,8 @@ Dates record merges into `master`. Version links show the corresponding changes.
 
 ### Fixed
 
+- Repeated Stop and shutdown requests share diagnostic cancellation without interrupting terminal cleanup or leaving
+  saved turns running after their worker exits. Disconnecting a Stop caller preserves the owned cleanup.
 - Creating a saved investigation enforces both byte quotas before saving its initial workspace and model context.
   Rejected creation preserves existing archives and actor preferences.
 - A dispatch-marker commit that settles after its action deadline cannot send a late Docker command.

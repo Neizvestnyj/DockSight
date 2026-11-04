@@ -7,7 +7,7 @@ import pytest
 from docksight.adapters.outbound.memory.investigations import MemoryInvestigations
 from docksight.adapters.outbound.memory.turns import MemoryTurnStore
 from docksight.application.events import TurnEvent
-from docksight.application.investigations.contracts import DiagnosticCommand, QuestionTurn, StartTurn
+from docksight.application.investigations.contracts import DiagnosticCommand, QuestionTurn, SavedTurn, StartTurn
 from docksight.application.investigations.errors import StorageError
 from docksight.application.investigations.ports import SelectedDiagnostics
 from docksight.application.investigations.runner import TurnRunner
@@ -421,5 +421,111 @@ async def test_invalid_trimmed_question_is_a_validation_error_before_acceptance(
         assert caught.value.code == "invalid_query" and caught.value.kind == ErrorKind.VALIDATION
         assert (await runner.investigations.read("alice", command.root.investigation_id)).turn_count == 0
         assert source.calls == 0 and source.leases == 0
+    finally:
+        await runner.close()
+
+
+@pytest.mark.parametrize("followup", ["stop", "shutdown", "cancelled_stop"])
+async def test_terminal_cleanup_survives_repeated_cancellation_requests(
+    monkeypatch: pytest.MonkeyPatch,
+    followup: str,
+) -> None:
+    runner, command, source = await setup_runner()
+    entered, release = asyncio.Event(), asyncio.Event()
+    archive = runner.investigations.archive
+    original = archive.read_turn
+
+    async def paused_read(actor: str, turn_id: str) -> SavedTurn:
+        """Pause the cancellation settlement read before any storage operation is admitted."""
+        entered.set()
+        await release.wait()
+        return await original(actor, turn_id)
+
+    callers = []
+    try:
+        saved = (await runner.submit("alice", command, "req")).snapshot
+        await source.started.wait()
+        monkeypatch.setattr(archive, "read_turn", paused_read)
+        first = asyncio.create_task(runner.cancel("alice", saved.id))
+        callers.append(first)
+        await asyncio.wait_for(entered.wait(), 2)
+        second = asyncio.create_task(runner.close() if followup == "shutdown" else runner.cancel("alice", saved.id))
+        callers.append(second)
+        await asyncio.sleep(0)
+        if followup == "shutdown":
+            with pytest.raises(TimeoutError):
+                await asyncio.wait_for(asyncio.shield(second), 0.05)
+        if followup == "cancelled_stop":
+            second.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await second
+        assert source.leases == 1
+        release.set()
+        assert (await asyncio.wait_for(first, 2)).state == "stopped"
+        if followup == "stop":
+            assert (await second).state == "stopped"
+        elif followup == "shutdown":
+            await second
+        final = await original("alice", saved.id)
+        assert final.state == "stopped" and final.revision == 2
+        assert (await runner.investigations.read("alice", saved.investigation_id)).active_turn_id is None
+        assert source.calls == 1 and source.leases == 0
+    finally:
+        release.set()
+        await asyncio.gather(*callers, return_exceptions=True)
+        await runner.close()
+
+
+async def test_cancelled_stop_owner_leaves_terminal_cleanup_retained(monkeypatch: pytest.MonkeyPatch) -> None:
+    runner, command, source = await setup_runner()
+    entered, release = asyncio.Event(), asyncio.Event()
+    archive = runner.investigations.archive
+    original = archive.read_turn
+
+    async def paused_read(actor: str, turn_id: str) -> SavedTurn:
+        """Wait before terminal persistence while the originating Stop caller disconnects."""
+        entered.set()
+        await release.wait()
+        return await original(actor, turn_id)
+
+    caller = None
+    try:
+        saved = (await runner.submit("alice", command, "req")).snapshot
+        await source.started.wait()
+        monkeypatch.setattr(archive, "read_turn", paused_read)
+        caller = asyncio.create_task(runner.cancel("alice", saved.id))
+        await asyncio.wait_for(entered.wait(), 2)
+        caller.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await caller
+        assert source.leases == 1
+        release.set()
+        assert (await asyncio.wait_for(runner.cancel("alice", saved.id), 2)).state == "stopped"
+        assert source.leases == 0
+        assert (await runner.investigations.read("alice", saved.investigation_id)).active_turn_id is None
+    finally:
+        release.set()
+        if caller is not None:
+            await asyncio.gather(caller, return_exceptions=True)
+        await runner.close()
+
+
+async def test_unexpected_cancelled_worker_closes_admission_and_retains_scope(monkeypatch: pytest.MonkeyPatch) -> None:
+    runner, command, source = await setup_runner()
+
+    async def broken_settlement(saved: SavedTurn, state: str) -> None:
+        """Represent an unexpected cancellation before the terminal outcome can be saved."""
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(runner, "_settle", broken_settlement)
+    try:
+        saved = (await runner.submit("alice", command, "req")).snapshot
+        await source.started.wait()
+        with pytest.raises(asyncio.CancelledError):
+            await runner.cancel("alice", saved.id)
+        with pytest.raises(StorageError):
+            await runner.submit("alice", command, "new-req")
+        assert (await runner.investigations.read("alice", saved.investigation_id)).active_turn_id == saved.id
+        assert source.leases == 0
     finally:
         await runner.close()

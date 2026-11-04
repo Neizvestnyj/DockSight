@@ -49,6 +49,7 @@ class TurnRunner:
         self._interrupts: set[str] = set()
         self._entered: set[str] = set()
         self._actors: dict[str, str] = {}
+        self._cancelling: set[str] = set()
         self._closed = False
         self._healthy = True
 
@@ -155,7 +156,8 @@ class TurnRunner:
         self._interrupts.discard(turn_id)
         self._entered.discard(turn_id)
         self._actors.pop(turn_id, None)
-        if not task.cancelled() and task.exception() is not None:
+        self._cancelling.discard(turn_id)
+        if task.cancelled() or task.exception() is not None:
             self._healthy = False
             self._publish(turn_id, StorageError())
 
@@ -232,6 +234,7 @@ class TurnRunner:
 
     async def _settle(self, saved: SavedTurn, state: str) -> None:
         """Reread a cancellation-settled revision so terminal races preserve their committed winner."""
+        self._cancelling.add(saved.id)
         current = await self.investigations.archive.read_turn(saved.actor, saved.id)
         if current.state == "running":
             outcome = TurnOutcome.model_validate({"expected_revision": current.revision, "state": state})
@@ -239,6 +242,7 @@ class TurnRunner:
 
     async def _fail(self, saved: SavedTurn, code: str, message: str) -> None:
         """Persist a safe failure against the latest revision, including oversized final-result rejection."""
+        self._cancelling.add(saved.id)
         current = await self.investigations.archive.read_turn(saved.actor, saved.id)
         if current.state == "running":
             await self._terminal(
@@ -309,10 +313,17 @@ class TurnRunner:
         return await self.investigations.archive.read_turn(actor, turn_id)
 
     async def _cancel_job(self, turn_id: str, task: asyncio.Task[None]) -> None:
-        """Await cleanup while allowing a newly registered task to enter its cancellation handler first."""
+        """Share one cancellation request and shield the retained worker through terminal cleanup."""
+        self._request_cancel(turn_id, task)
+        await asyncio.shield(task)
+
+    def _request_cancel(self, turn_id: str, task: asyncio.Task[None]) -> None:
+        """Coalesce Stop and shutdown requests so terminal settlement cannot be cancelled again."""
+        if turn_id in self._cancelling:
+            return
+        self._cancelling.add(turn_id)
         if turn_id in self._entered:
             task.cancel()
-        await asyncio.shield(task)
 
     async def close(self) -> None:
         """Drain admissions, allow a short graceful finish, then save remaining jobs as interrupted."""
@@ -325,6 +336,5 @@ class TurnRunner:
         for identity, task in jobs:
             if task in pending:
                 self._interrupts.add(identity)
-                if identity in self._entered:
-                    task.cancel()
-        await asyncio.gather(*(task for _, task in jobs), return_exceptions=True)
+                self._request_cancel(identity, task)
+        await asyncio.gather(*(asyncio.shield(task) for _, task in jobs), return_exceptions=True)
