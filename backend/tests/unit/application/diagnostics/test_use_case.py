@@ -2,17 +2,67 @@ import json
 from collections.abc import Sequence
 from dataclasses import replace
 from unittest.mock import AsyncMock, patch
+from uuid import uuid4
 
 import pytest
 
 from docksight.adapters.outbound.memory.sessions import MemorySessions
 from docksight.application.diagnostics.use_case import Diagnostics
+from docksight.application.investigations.contracts import DiagnosticCommand
 from docksight.application.ports.models import ModelMessage, ModelReply, ToolCall
 from docksight.application.redaction import Redactor
-from docksight.application.views.schemas import GroupTarget
+from docksight.application.views.schemas import ContainerTarget, GroupTarget
 from docksight.domain.errors import DockSightError, ErrorKind
 from docksight.domain.runtime import ContainerSnapshot, LogBatch, StackSummary
 from tests.fakes import DiscoveryRuntime, FakeRuntime, ScriptedModel
+
+
+async def test_preallocated_diagnostic_run_keeps_plain_context_without_session_mutation() -> None:
+    model = ScriptedModel(
+        [
+            ModelReply("Ready"),
+            ModelReply('{"summary":"Current evidence","uncertain":true,"evidence_ids":[],"widgets":[]}'),
+        ]
+    )
+    sessions = MemorySessions()
+    diagnostics = Diagnostics(FakeRuntime(), model, sessions, Redactor(), concurrency=1)
+    command = DiagnosticCommand(
+        turn_id=str(uuid4()),
+        investigation_id=str(uuid4()),
+        actor="alice",
+        host="local",
+        query="Inspect",
+        context=(ModelMessage("user", "Earlier question"), ModelMessage("assistant", "Old summary")),
+    )
+    lease = await diagnostics.reserve()
+    try:
+        blocked = [event async for event in diagnostics.stream("bob", "local", "Inspect")]
+        assert blocked[-1]["type"] == "turn.failed" and blocked[-1]["code"] == "turn_capacity"
+        events = [event async for event in lease.run(command)]
+        assert events[0]["turn_id"] == command.turn_id and events[-1]["type"] == "turn.completed"
+        assert "Earlier question" in model.requests[0][0][1].content
+        assert all("response" not in str(event) or event["type"] == "trace.step" for event in events)
+    finally:
+        await lease.close()
+    returned = await diagnostics.reserve()
+    await returned.close()
+    await returned.close()
+
+
+async def test_preallocated_run_revalidates_removed_exact_target_without_model_or_fallback() -> None:
+    model = ScriptedModel([])
+    diagnostics = Diagnostics(FakeRuntime(), model, MemorySessions(), Redactor())
+    command = DiagnosticCommand(
+        turn_id=str(uuid4()),
+        investigation_id=str(uuid4()),
+        actor="alice",
+        host="local",
+        query="Inspect",
+        target=ContainerTarget(id="f" * 64, name="removed"),
+    )
+    events = [event async for event in diagnostics.run(command)]
+    assert events[-1]["type"] == "turn.failed" and events[-1]["code"] == "container_not_found"
+    assert model.requests == []
 
 
 async def test_selected_diagnoses_share_global_capacity_and_preserve_turn_identity() -> None:

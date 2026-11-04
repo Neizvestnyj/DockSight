@@ -36,7 +36,7 @@ from docksight.application.investigations.errors import HistoryError, capacity, 
 from docksight.domain.errors import ErrorKind
 
 
-def _owned(session: Session, actor: str, identity: str) -> InvestigationRow:
+def owned(session: Session, actor: str, identity: str) -> InvestigationRow:
     """Resolve exact archive ownership before reading workspace or turn content."""
     row = session.scalar(
         select(InvestigationRow).where(InvestigationRow.id == identity, InvestigationRow.actor == actor)
@@ -46,7 +46,7 @@ def _owned(session: Session, actor: str, identity: str) -> InvestigationRow:
     return row
 
 
-def _view(session: Session, row: InvestigationRow) -> InvestigationView:
+def archive_view(session: Session, row: InvestigationRow) -> InvestigationView:
     """Materialize owned values while the ORM session remains confined to its worker."""
     count = session.scalar(select(func.count()).select_from(TurnRow).where(TurnRow.investigation_id == row.id)) or 0
     return InvestigationView(
@@ -61,13 +61,13 @@ def _view(session: Session, row: InvestigationRow) -> InvestigationView:
     )
 
 
-def _actor_workspace(session: Session, actor: str) -> ActorWorkspace:
+def actor_workspace(session: Session, actor: str) -> ActorWorkspace:
     """Read preferences independently of diagnostic workspace revisions."""
     row = session.get(ActorWorkspaceRow, actor)
     return decode_value(ActorWorkspace, row.workspace) if row else ActorWorkspace()
 
 
-def _save_actor_workspace(session: Session, actor: str, value: ActorWorkspace, now: str) -> None:
+def save_actor_workspace(session: Session, actor: str, value: ActorWorkspace, now: str) -> None:
     """Persist an already-validated detached preference snapshot in the current transaction."""
     row = session.get(ActorWorkspaceRow, actor)
     if row is None:
@@ -101,12 +101,12 @@ class SQLiteInvestigations:
             """Keep duplicate resolution and capacity checks in the insertion transaction."""
             existing = session.get(InvestigationRow, investigation_id)
             if existing is not None:
-                _owned(session, actor, investigation_id)
+                owned(session, actor, investigation_id)
                 if existing.host != host:
                     raise HistoryError(
                         "history_conflict", "Investigation already exists for different input", ErrorKind.CONFLICT
                     )
-                return _view(session, existing)
+                return archive_view(session, existing)
             count = (
                 session.scalar(
                     select(func.count()).select_from(InvestigationRow).where(InvestigationRow.actor == actor)
@@ -126,7 +126,7 @@ class SQLiteInvestigations:
                 context="[]",
                 reserved_bytes=0,
             )
-            self._check_capacity(session, actor, row, initial.workspace)
+            self.check_capacity(session, actor, row, initial.workspace)
             session.add(row)
             return initial
 
@@ -134,7 +134,9 @@ class SQLiteInvestigations:
 
     async def read(self, actor: str, investigation_id: str) -> InvestigationView:
         """Read detached owned archive metadata and its validated workspace."""
-        return await self.database.transaction(lambda session: _view(session, _owned(session, actor, investigation_id)))
+        return await self.database.transaction(
+            lambda session: archive_view(session, owned(session, actor, investigation_id))
+        )
 
     async def list_owned(self, actor: str, limit: int = 10, cursor: str | None = None) -> InvestigationPage:
         """Query bounded actor-scoped activity keysets with stable tie-breaking IDs."""
@@ -163,7 +165,7 @@ class SQLiteInvestigations:
                 else None
             )
             items = tuple(
-                InvestigationSummary.model_validate(_view(session, row).model_dump(exclude={"workspace"}))
+                InvestigationSummary.model_validate(archive_view(session, row).model_dump(exclude={"workspace"}))
                 for row in selected
             )
             return InvestigationPage(items=items, next_cursor=cursor)
@@ -178,7 +180,7 @@ class SQLiteInvestigations:
 
         def listing(session: Session) -> TurnPage:
             """Check ownership before materializing supported or unsupported per-item snapshots."""
-            _owned(session, actor, investigation_id)
+            owned(session, actor, investigation_id)
             query = select(TurnRow).where(TurnRow.actor == actor, TurnRow.investigation_id == investigation_id)
             if before:
                 query = query.where(
@@ -201,7 +203,7 @@ class SQLiteInvestigations:
             row = session.scalar(select(TurnRow).where(TurnRow.id == turn_id, TurnRow.actor == actor))
             if row is None:
                 raise not_found()
-            _owned(session, actor, row.investigation_id)
+            owned(session, actor, row.investigation_id)
             return decode_turn(row.snapshot)
 
         return await self.database.transaction(read)
@@ -214,15 +216,15 @@ class SQLiteInvestigations:
 
         def patching(session: Session) -> InvestigationWorkspace:
             """Count UTF-8 bytes and reservations before saving the replacement workspace."""
-            row = _owned(session, actor, investigation_id)
+            row = owned(session, actor, investigation_id)
             updated = patch_value(decode_value(InvestigationWorkspace, row.workspace), patch)
-            self._check_capacity(session, actor, row, updated)
+            self.check_capacity(session, actor, row, updated)
             row.workspace, row.updated_at = updated.model_dump_json(), timestamp
             return updated
 
         return await self.database.transaction(patching, write=True)
 
-    def _check_capacity(
+    def check_capacity(
         self, session: Session, actor: str, current: InvestigationRow, workspace: InvestigationWorkspace
     ) -> None:
         """Include saved snapshots, workspace JSON, and retained turn reservations in byte accounting."""
@@ -243,7 +245,7 @@ class SQLiteInvestigations:
 
     async def workspace(self, actor: str) -> ActorWorkspace:
         """Read actor preferences independently of any investigation's draft revision."""
-        return await self.database.transaction(lambda session: _actor_workspace(session, actor))
+        return await self.database.transaction(lambda session: actor_workspace(session, actor))
 
     async def patch_actor_workspace(self, actor: str, patch: ActorWorkspacePatch, now: datetime) -> ActorWorkspace:
         """Compare actor preference revisions and validate last-active ownership in one transaction."""
@@ -251,10 +253,10 @@ class SQLiteInvestigations:
 
         def patching(session: Session) -> ActorWorkspace:
             """Resolve any referenced archive before saving independently revisioned preferences."""
-            updated = patch_value(_actor_workspace(session, actor), patch)
+            updated = patch_value(actor_workspace(session, actor), patch)
             if updated.last_investigation_id is not None:
-                _owned(session, actor, updated.last_investigation_id)
-            _save_actor_workspace(session, actor, updated, timestamp)
+                owned(session, actor, updated.last_investigation_id)
+            save_actor_workspace(session, actor, updated, timestamp)
             return updated
 
         return await self.database.transaction(patching, write=True)
@@ -265,7 +267,7 @@ class SQLiteInvestigations:
 
         def deleting(session: Session) -> None:
             """Choose the next owned last-active archive and retain content-free duplicate receipts."""
-            row = _owned(session, actor, investigation_id)
+            row = owned(session, actor, investigation_id)
             running = session.scalar(
                 select(TurnRow.id)
                 .where(TurnRow.investigation_id == investigation_id, TurnRow.state == "running")
@@ -273,7 +275,7 @@ class SQLiteInvestigations:
             )
             if row.active_turn_id or running:
                 raise HistoryError("turn_busy", "Investigation has a running turn", ErrorKind.CONFLICT)
-            workspace = _actor_workspace(session, actor)
+            workspace = actor_workspace(session, actor)
             session.execute(
                 update(SubmissionReceiptRow)
                 .where(SubmissionReceiptRow.actor == actor, SubmissionReceiptRow.investigation_id == investigation_id)
@@ -291,6 +293,6 @@ class SQLiteInvestigations:
                 updated = workspace.model_copy(
                     update={"revision": workspace.revision + 1, "last_investigation_id": next_id}
                 )
-                _save_actor_workspace(session, actor, updated, timestamp)
+                save_actor_workspace(session, actor, updated, timestamp)
 
         await self.database.transaction(deleting, write=True)

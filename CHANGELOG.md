@@ -16,6 +16,10 @@ Dates record merges into `master`. Version links show the corresponding changes.
   The backend image prepares `/var/lib/docksight` for a durable directory mount.
 - Durable action claims, dispatch markers, outcomes, and audit retain idempotency and exact-target uncertainty guards
   across restart. Cancelled callers retain an owned execution handoff.
+- Saved diagnostic turns retain cards, evidence, clarification attempts, and bounded progress independently of model
+  context. Continuations use the latest ten successful question/summary pairs and collect fresh runtime evidence.
+- Supervised diagnostic jobs survive observer loss, deduplicate submission receipts, and stop only through explicit
+  cancellation or shutdown. Startup marks abandoned work interrupted without resuming generation.
 - Offline state commands inspect, back up, migrate, and explicitly reconcile blocked targets under the backend lock.
   Reconciliation requires a fresh Docker observation and operator acknowledgement, preserves the unknown outcome,
   and invalidates old preparations without resending Docker commands.

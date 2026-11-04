@@ -10,6 +10,7 @@ from uuid import uuid4
 from pydantic import ValidationError
 
 from docksight.application.diagnostics.context import EvidenceContext
+from docksight.application.diagnostics.lease import DiagnosticLease
 from docksight.application.diagnostics.prompts import (
     SYSTEM_PROMPT,
     final_prompt,
@@ -21,13 +22,15 @@ from docksight.application.diagnostics.scope import resolve_target
 from docksight.application.diagnostics.tools import DiagnosticTools, tool_specs
 from docksight.application.diagnostics.trace import DiagnosticTrace, schema_issues
 from docksight.application.events import TurnEvent
+from docksight.application.investigations.contracts import DiagnosticCommand
+from docksight.application.model_catalog import ModelSelection
 from docksight.application.ports.models import ModelMessage, ModelPort, ModelReply, ToolCall
 from docksight.application.ports.runtime import RuntimeReadPort
-from docksight.application.ports.state import Session, SessionStore
+from docksight.application.ports.state import SessionStore
 from docksight.application.redaction import Redactor
 from docksight.application.views.assembler import ViewAssembler
 from docksight.application.views.registry import proposal_schema
-from docksight.application.views.schemas import DiagnosisProposal, GroupTarget
+from docksight.application.views.schemas import ContainerTarget, DiagnosisProposal, GroupTarget
 from docksight.domain.diagnostics import JsonObject
 from docksight.domain.errors import DockSightError, ErrorKind
 
@@ -54,7 +57,7 @@ def _redact_narrative(proposal: DiagnosisProposal, redactor: Redactor) -> None:
 
 
 class Diagnostics:
-    """Coordinate bounded evidence collection, validated cards, and session history."""
+    """Coordinate bounded fresh evidence and validated cards using caller-owned plain context."""
 
     def __init__(
         self,
@@ -92,6 +95,28 @@ class Diagnostics:
         selected.model_identity = identity
         return selected
 
+    async def reserve(self) -> DiagnosticLease:
+        """Reserve the same global capacity used by legacy sessions before committing accepted work."""
+        if self._slots.locked():
+            raise DockSightError("turn_capacity", "Diagnostic capacity reached; retry later", ErrorKind.UNAVAILABLE)
+        await self._slots.acquire()
+        return DiagnosticLease(self, asyncio.get_running_loop().time() + self.timeout)
+
+    def release(self) -> None:
+        """Return one slot after its owning lease settles."""
+        self._slots.release()
+
+    async def run(self, command: DiagnosticCommand) -> AsyncGenerator[TurnEvent]:
+        """Run a preallocated turn without mutable session history or an archive lease."""
+        lease = await self.reserve()
+        stream = lease.run(command)
+        try:
+            async for event in stream:
+                yield event
+        finally:
+            await stream.aclose()
+            await lease.close()
+
     async def stream(
         self,
         actor: str,
@@ -104,31 +129,51 @@ class Diagnostics:
         """Lease a scoped session and emit one terminal event for a bounded turn."""
         turn_id = str(uuid4())
         trace = DiagnosticTrace(turn_id, self.redactor)
-        deadline = asyncio.get_running_loop().time() + self.timeout
+        lease: DiagnosticLease | None = None
         try:
             self._validate_turn(host, query, group, container_id)
-            async with (
-                self._slots,
-                self.sessions.lease(session_id, actor, host) as session,
-            ):
-                async for event in self._run_turn(session, query, deadline, trace, group, container_id):
+            lease = await self.reserve()
+            async with self.sessions.lease(session_id, actor, host) as session:
+                command = DiagnosticCommand(
+                    turn_id=turn_id,
+                    investigation_id=session.id,
+                    actor=actor,
+                    host=host,
+                    query=self.redactor.text(query),
+                    context=tuple(session.history),
+                    target=group or (ContainerTarget(id=container_id, name=container_id) if container_id else None),
+                    identity=ModelSelection(provider=self.model_identity[0], model=self.model_identity[1])
+                    if self.model_identity
+                    else None,
+                )
+                async for event in self.run_reserved(command, lease.deadline):
+                    if event["type"] == "answer.ready":
+                        session.history.extend(
+                            [
+                                ModelMessage("user", command.query),
+                                ModelMessage("assistant", cast(str, event["answer"]["summary"])),
+                            ]
+                        )
                     yield event
         except (TimeoutError, DockSightError) as exc:
-            code, message = (
-                (exc.code, exc.message)
-                if isinstance(exc, DockSightError)
-                else ("turn_timeout", "Diagnostic turn timed out")
-            )
-            if trace.active:
-                if trace.active.kind == "tool":
-                    yield {"type": "tool.completed", "turn_id": turn_id, "tool": trace.active.operation, "ok": False}
-                yield trace.finish(code=code)
-            yield {
-                "type": "turn.failed",
-                "turn_id": turn_id,
-                "code": code,
-                "message": message,
-            }
+            for event in trace.failed(exc):
+                yield event
+        finally:
+            if lease is not None:
+                await lease.close()
+
+    async def run_reserved(self, command: DiagnosticCommand, deadline: float) -> AsyncGenerator[TurnEvent]:
+        """Execute an owned reservation without acquiring shared capacity a second time."""
+        trace = DiagnosticTrace(command.turn_id, self.redactor)
+        group = command.target if isinstance(command.target, GroupTarget) else None
+        container_id = command.target.id if isinstance(command.target, ContainerTarget) else None
+        try:
+            self._validate_turn(command.host, command.query, group, container_id)
+            async for event in self._run_turn(command, deadline, trace, group, container_id):
+                yield event
+        except (TimeoutError, DockSightError) as exc:
+            for event in trace.failed(exc):
+                yield event
 
     def _validate_turn(self, host: str, query: str, group: GroupTarget | None, container_id: str | None) -> None:
         """Reject invalid scope, query size, or exhausted capacity before leasing a session."""
@@ -136,36 +181,34 @@ class Diagnostics:
             raise DockSightError("host_not_found", "Configured host not found", ErrorKind.NOT_FOUND)
         if not query.strip() or len(query) > 4000:
             raise DockSightError("invalid_query", "Query must contain 1-4000 characters", ErrorKind.VALIDATION)
-        if self._slots.locked():
-            raise DockSightError("turn_capacity", "Diagnostic capacity reached; retry later", ErrorKind.UNAVAILABLE)
         if group is not None and container_id is not None:
             raise DockSightError("invalid_target", "Choose either a group or an exact container", ErrorKind.VALIDATION)
 
     async def _run_turn(
         self,
-        session: Session,
-        query: str,
+        command: DiagnosticCommand,
         deadline: float,
         trace: DiagnosticTrace,
         group: GroupTarget | None,
         container_id: str | None,
     ) -> AsyncGenerator[TurnEvent]:
-        """Collect fresh evidence and retain only the validated summary in session history."""
-        yield {"type": "turn.started", "turn_id": trace.turn_id, "session_id": session.id}
+        """Collect fresh evidence without mutating any persistent or legacy session values."""
+        query = command.query
+        yield {"type": "turn.started", "turn_id": trace.turn_id, "session_id": command.investigation_id}
         yield {
             "type": "trace.started",
             "turn_id": trace.turn_id,
-            "provider": self.model_identity[0] if self.model_identity else None,
-            "model": self.model_identity[1] if self.model_identity else None,
+            "provider": command.identity.provider if command.identity else None,
+            "model": command.identity.model if command.identity else None,
             "started_at": datetime.now(UTC).isoformat(),
         }
         messages = [
             ModelMessage("system", SYSTEM_PROMPT),
-            *history_context(session.history),
+            *history_context(command.context),
             ModelMessage("user", self.redactor.text(query)),
         ]
         context = EvidenceContext()
-        tools = DiagnosticTools(self.runtime, context, session.host, self.log_lines, self.log_bytes, group, query=query)
+        tools = DiagnosticTools(self.runtime, context, command.host, self.log_lines, self.log_bytes, group, query=query)
         if group is None:
             async for event in self._discover(query, tools, messages, deadline, trace, container_id):
                 yield event
@@ -186,7 +229,7 @@ class Diagnostics:
             }
             yield {"type": "turn.completed", "turn_id": trace.turn_id}
             return
-        async for event in self._answer_turn(query, messages, context, session, deadline, trace):
+        async for event in self._answer_turn(query, messages, context, command.actor, deadline, trace):
             yield event
         yield {"type": "turn.completed", "turn_id": trace.turn_id}
 
@@ -205,22 +248,15 @@ class Diagnostics:
         query: str,
         messages: list[ModelMessage],
         context: EvidenceContext,
-        session: Session,
+        actor: str,
         deadline: float,
         trace: DiagnosticTrace,
     ) -> AsyncGenerator[TurnEvent]:
-        """Retain validated answers in history without recording unresolved clarification turns."""
+        """Finalize a validated answer without mutating caller-owned history."""
         if messages[-1].role == "assistant" and not messages[-1].tool_calls:
             messages = messages[:-1]
         messages.append(ModelMessage("user", final_prompt(self.redactor.text(query), context)))
-        async for event in self._finalize(messages, context, session.actor, deadline, trace):
-            if event["type"] == "answer.ready":
-                session.history.extend(
-                    [
-                        ModelMessage("user", self.redactor.text(query)),
-                        ModelMessage("assistant", cast(str, event["answer"]["summary"])),
-                    ]
-                )
+        async for event in self._finalize(messages, context, actor, deadline, trace):
             yield event
 
     async def _discover(

@@ -1,16 +1,18 @@
 import json
 import re
 import time
+from collections.abc import Iterator
 from datetime import UTC, datetime
 from typing import Final, Literal, cast
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, ValidationError
 
-from docksight.application.events import TraceStepEvent
+from docksight.application.events import TraceStepEvent, TurnEvent
 from docksight.application.ports.models import ModelReply
 from docksight.application.redaction import Redactor, secret_name
 from docksight.application.views.schemas import CauseAssessment, DiagnosisProposal, WidgetProposal
 from docksight.domain.diagnostics import JsonObject, JsonValue
+from docksight.domain.errors import DockSightError
 
 _PREVIEW_BYTES: Final = 16384
 _PREVIEW_INPUT_BYTES: Final = 65536
@@ -171,3 +173,16 @@ class DiagnosticTrace:
     def _event(self, step: TraceStep) -> TraceStepEvent:
         """Serialize the owned DTO rather than exposing mutable recorder state."""
         return {"type": "trace.step", "turn_id": self.turn_id, "step": cast(JsonObject, step.model_dump(mode="json"))}
+
+    def failed(self, error: TimeoutError | DockSightError) -> Iterator[TurnEvent]:
+        """Finish an active operation and expose a safe terminal diagnostic failure."""
+        code, message = (
+            (error.code, error.message)
+            if isinstance(error, DockSightError)
+            else ("turn_timeout", "Diagnostic turn timed out")
+        )
+        if self.active:
+            if self.active.kind == "tool":
+                yield {"type": "tool.completed", "turn_id": self.turn_id, "tool": self.active.operation, "ok": False}
+            yield self.finish(code=code)
+        yield {"type": "turn.failed", "turn_id": self.turn_id, "code": code, "message": message}

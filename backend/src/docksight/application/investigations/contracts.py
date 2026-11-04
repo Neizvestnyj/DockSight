@@ -232,7 +232,11 @@ class DiagnosticCommand(FrozenContract):
         if sum(len(message.content) for message in self.context) > 32000:
             raise ValueError("Context exceeds the supported text budget")
         if any(
-            message.native or message.tool_calls or message.role not in {"user", "assistant"}
+            message.native
+            or message.tool_calls
+            or message.tool_call_id
+            or message.tool_name
+            or message.role not in {"user", "assistant"}
             for message in self.context
         ):
             raise ValueError("Context must contain plain question and summary messages")
