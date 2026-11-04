@@ -8,8 +8,15 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Final
 
-from docksight.application.ports.browser_sessions import BrowserSession, BrowserSessionStore
+from docksight.application.ports.browser_sessions import (
+    MAX_CLEANUP_BATCH,
+    BrowserSession,
+    BrowserSessionStore,
+    check_cleanup_limit,
+)
 
+MIN_IDLE_TTL: Final = 120
+MAX_IDLE_TTL: Final = 3600
 _TOUCH_INTERVAL: Final = timedelta(minutes=1)
 _CSRF_MESSAGE: Final = b"docksight-csrf-v1"
 
@@ -89,6 +96,8 @@ class BrowserSessions:
         clock: Callable[[], datetime] = _now,
     ) -> None:
         """Bind transport-independent storage and an injectable aware clock."""
+        if not MIN_IDLE_TTL <= idle_ttl <= MAX_IDLE_TTL:
+            raise ValueError("Browser session idle lifetime must be between 120 and 3600 seconds")
         self.store = store
         self.ttl = timedelta(seconds=ttl)
         self.idle_ttl = timedelta(seconds=idle_ttl)
@@ -133,3 +142,9 @@ class BrowserSessions:
         except BrowserSessionError:
             return
         await self.store.revoke(_identity(cookie), self._clock())
+
+    async def cleanup(self, limit: int = MAX_CLEANUP_BATCH) -> int:
+        """Delete one stale-session batch under the current absolute and idle expiration policy."""
+        check_cleanup_limit(limit)
+        now = self._clock()
+        return await self.store.cleanup(now, now - self.idle_ttl, limit)

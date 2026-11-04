@@ -2,13 +2,33 @@ import asyncio
 import hashlib
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from uuid import uuid4
 
+import pytest
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
-from docksight.adapters.outbound.persistence.browser_sessions import SQLiteBrowserSessions, revoke_obsolete_sessions
+from docksight.adapters.outbound.persistence.actions import SQLiteActions
+from docksight.adapters.outbound.persistence.browser_sessions import (
+    SQLiteBrowserSessions,
+    cleanup_browser_sessions,
+    revoke_obsolete_sessions,
+)
+from docksight.adapters.outbound.persistence.codec import utc_text
 from docksight.adapters.outbound.persistence.database import PersistentDatabase, RecoveryReport
+from docksight.adapters.outbound.persistence.investigations import SQLiteInvestigations
+from docksight.adapters.outbound.persistence.rows import (
+    ActionAuditRow,
+    InvestigationRow,
+    PreparedActionRow,
+    SubmissionReceiptRow,
+    TargetGuardRow,
+)
 from docksight.application.browser_sessions import BrowserSessions, credential_fingerprints
+from docksight.application.investigations.errors import StorageError
 from docksight.application.ports.browser_sessions import BrowserSession
+from docksight.domain.actions import PreparedAction
+from tests.browser_sessions import assert_bounded_browser_session_cleanup
 
 
 async def test_session_survives_restart_with_only_hashes_at_rest(tmp_path: Path) -> None:
@@ -88,5 +108,131 @@ async def test_startup_recovery_revokes_obsolete_credentials_inside_existing_tra
             identity = hashlib.sha256(session.cookie.encode()).hexdigest()
             record = await SQLiteBrowserSessions(reopened).get(identity)
             assert record is not None and record.revoked_at == now
+    finally:
+        await reopened.close()
+
+
+async def test_bounded_cleanup_removes_only_expired_and_revoked_sessions(tmp_path: Path) -> None:
+    database = PersistentDatabase(tmp_path / "sessions.sqlite3")
+    await database.initialize_server()
+    try:
+        now, investigation_id = datetime.now(UTC), str(uuid4())
+        await SQLiteInvestigations(database).create("alice", investigation_id, "local", now)
+        actions = SQLiteActions(database)
+        action = PreparedAction(
+            str(uuid4()), "alice", "local", "a" * 64, "restart", "fingerprint", now + timedelta(minutes=5)
+        )
+        await actions.add(action, now)
+        await actions.claim(action.id, "alice", "original-idempotency-key", True, now)
+
+        def seed_receipt(session: Session) -> None:
+            """Retain duplicate protection independently of browser authority."""
+            session.add(
+                SubmissionReceiptRow(
+                    actor="alice",
+                    submission_id=str(uuid4()),
+                    input_digest="a" * 64,
+                    turn_id=str(uuid4()),
+                    investigation_id=investigation_id,
+                    accepted_at=utc_text(now),
+                )
+            )
+
+        def protected_rows(session: Session) -> dict[str, list[tuple[object, ...]]]:
+            """Compare full retained rows including action idempotency, audit, guards, and history."""
+            tables = (InvestigationRow, PreparedActionRow, SubmissionReceiptRow, ActionAuditRow, TargetGuardRow)
+            return {
+                row.__tablename__: [tuple(item) for item in session.execute(select(row.__table__))] for row in tables
+            }
+
+        await database.transaction(seed_receipt, write=True)
+        before = await database.transaction(protected_rows)
+        assert all(before.values())
+        await assert_bounded_browser_session_cleanup(SQLiteBrowserSessions(database))
+        assert await database.transaction(protected_rows) == before
+    finally:
+        await database.close()
+
+
+async def test_cleanup_failure_rolls_back_session_deletion_and_closes_write_admission(tmp_path: Path) -> None:
+    database = PersistentDatabase(tmp_path / "sessions.sqlite3")
+    await database.initialize_server()
+    store = SQLiteBrowserSessions(database)
+    now = datetime.now(UTC)
+    records = [
+        BrowserSession(
+            token_hash=identity * 64,
+            actor="alice",
+            credential_fingerprint="d" * 64,
+            created_at=now - timedelta(hours=2),
+            last_seen_at=now - timedelta(hours=1),
+            expires_at=now,
+        )
+        for identity in ("a", "b")
+    ]
+    try:
+        for record in records:
+            await store.add(record)
+
+        def fail_deletion(session: Session) -> None:
+            """Make a real SQLite write fail after the cleanup statement has selected its batch."""
+            session.execute(
+                text(
+                    "CREATE TRIGGER fail_cleanup BEFORE DELETE ON browser_sessions "
+                    "WHEN OLD.token_hash = '" + "b" * 64 + "' "
+                    "BEGIN SELECT RAISE(ABORT, 'cleanup write failed'); END"
+                )
+            )
+
+        await database.transaction(fail_deletion, write=True)
+        with pytest.raises(StorageError):
+            await BrowserSessions(store, clock=lambda: now).cleanup()
+        assert not database.healthy
+        assert [await store.get(record.token_hash) for record in records] == records
+        with pytest.raises(StorageError):
+            await store.cleanup(now, now - timedelta(hours=1))
+    finally:
+        await database.close()
+
+
+async def test_cleanup_composes_with_startup_recovery_and_rolls_back_as_one_transaction(tmp_path: Path) -> None:
+    path, now = tmp_path / "sessions.sqlite3", datetime.now(UTC)
+    database = PersistentDatabase(path)
+    await database.initialize_server()
+    record = BrowserSession(
+        token_hash="a" * 64,
+        actor="alice",
+        credential_fingerprint="d" * 64,
+        created_at=now - timedelta(hours=2),
+        last_seen_at=now,
+        expires_at=now,
+    )
+    try:
+        await SQLiteBrowserSessions(database).add(record)
+    finally:
+        await database.close()
+
+    def failing_recovery(session: Session) -> RecoveryReport:
+        """Abort after deleting a session so the entire startup transaction must roll back."""
+        assert cleanup_browser_sessions(session, now, now - timedelta(hours=1)) == 1
+        raise OSError("Recovery failed after session cleanup")
+
+    failed = PersistentDatabase(path, recoveries=[failing_recovery])
+    try:
+        with pytest.raises(StorageError):
+            await failed.initialize_server()
+        assert not failed.healthy
+    finally:
+        await failed.close()
+
+    def successful_recovery(session: Session) -> RecoveryReport:
+        """Find the retained row again after rollback and commit only this requested batch."""
+        assert cleanup_browser_sessions(session, now, now - timedelta(hours=1)) == 1
+        return RecoveryReport()
+
+    reopened = PersistentDatabase(path, recoveries=[successful_recovery])
+    try:
+        await reopened.initialize_server()
+        assert await SQLiteBrowserSessions(reopened).get(record.token_hash) is None
     finally:
         await reopened.close()

@@ -1,8 +1,9 @@
 from collections.abc import Mapping
 from datetime import datetime
 from hmac import compare_digest
+from itertools import islice
 
-from docksight.application.ports.browser_sessions import BrowserSession
+from docksight.application.ports.browser_sessions import MAX_CLEANUP_BATCH, BrowserSession, check_cleanup_limit
 
 
 class MemoryBrowserSessions:
@@ -43,3 +44,16 @@ class MemoryBrowserSessions:
         for identity in obsolete:
             await self.revoke(identity, now)
         return len(obsolete)
+
+    async def cleanup(self, now: datetime, idle_before: datetime, limit: int = MAX_CLEANUP_BATCH) -> int:
+        """Delete one bounded batch of stale sessions without touching any live authority."""
+        check_cleanup_limit(limit)
+        stale = (
+            identity
+            for identity, record in self._records.items()
+            if record.revoked_at is not None or record.expires_at <= now or record.last_seen_at <= idle_before
+        )
+        identities = list(islice(stale, limit))
+        for identity in identities:
+            del self._records[identity]
+        return len(identities)

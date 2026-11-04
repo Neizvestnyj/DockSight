@@ -90,3 +90,49 @@ async def test_logout_is_idempotent_and_unknown_or_malformed_cookies_are_unautho
         with pytest.raises(BrowserSessionError):
             await sessions.authenticate(cookie, CREDENTIALS)
     await sessions.logout("malformed")
+
+
+@pytest.mark.parametrize("idle_ttl", [0, 60, 119, 3601])
+def test_idle_lifetime_rejects_values_outside_refreshable_supported_range(idle_ttl: int) -> None:
+    with pytest.raises(ValueError, match=r"120.*3600"):
+        BrowserSessions(MemoryBrowserSessions(), idle_ttl=idle_ttl)
+
+
+async def test_minimum_idle_lifetime_keeps_active_session_valid_across_minute_boundaries() -> None:
+    clock, store = Clock(), MemoryBrowserSessions()
+    sessions = BrowserSessions(store, idle_ttl=120, clock=clock)
+    issued = await sessions.login("alice", credential_fingerprints(CREDENTIALS)["alice"])
+    identity = hashlib.sha256(issued.cookie.encode()).hexdigest()
+    for second in (59, 60, 119, 120, 179, 180):
+        clock.now = NOW + timedelta(seconds=second)
+        assert await sessions.authenticate(issued.cookie, CREDENTIALS) == issued.principal
+        record = await store.get(identity)
+        assert record is not None
+        assert record.last_seen_at == NOW + timedelta(seconds=(second // 60) * 60)
+    clock.now = NOW + timedelta(seconds=300)
+    with pytest.raises(BrowserSessionError):
+        await sessions.authenticate(issued.cookie, CREDENTIALS)
+
+
+async def test_cleanup_uses_current_idle_policy_and_preserves_live_sessions() -> None:
+    clock, store = Clock(), MemoryBrowserSessions()
+    sessions = BrowserSessions(store, ttl=180, idle_ttl=120, clock=clock)
+    stale = await sessions.login("alice", credential_fingerprints(CREDENTIALS)["alice"])
+    live = await sessions.login("alice", credential_fingerprints(CREDENTIALS)["alice"])
+    clock.now = NOW + timedelta(seconds=60)
+    await sessions.authenticate(live.cookie, CREDENTIALS)
+    clock.now = NOW + timedelta(seconds=120)
+    assert await sessions.cleanup() == 1
+    with pytest.raises(BrowserSessionError):
+        await sessions.authenticate(stale.cookie, CREDENTIALS)
+    assert await sessions.authenticate(live.cookie, CREDENTIALS) == live.principal
+    clock.now = NOW + timedelta(seconds=180)
+    assert await sessions.cleanup() == 1
+    assert await sessions.cleanup() == 0
+
+
+@pytest.mark.parametrize("limit", [0, -1, 101])
+async def test_cleanup_rejects_batches_outside_one_to_one_hundred(limit: int) -> None:
+    sessions = BrowserSessions(MemoryBrowserSessions(), clock=Clock())
+    with pytest.raises(ValueError, match=r"1.*100"):
+        await sessions.cleanup(limit=limit)

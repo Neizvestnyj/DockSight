@@ -24,7 +24,7 @@ from docksight.adapters.outbound.models.ollama import OllamaModel
 from docksight.adapters.outbound.models.openai import OpenAIModel
 from docksight.adapters.outbound.models.status import ModelAvailability
 from docksight.application.actions import Actions
-from docksight.application.browser_sessions import BrowserSessions
+from docksight.application.browser_sessions import MAX_IDLE_TTL, MIN_IDLE_TTL, BrowserSessions
 from docksight.application.diagnostics.use_case import Diagnostics
 from docksight.application.model_choices import ModelChoices
 from docksight.application.ports.browser_sessions import BrowserSessionStore
@@ -78,7 +78,7 @@ class Settings(BaseSettings):
     browser_origin: str | None = Field(default=None, min_length=1, max_length=2048)
     cookie_secure: bool = True
     browser_session_ttl: int = Field(default=28800, ge=60, le=28800)
-    browser_session_idle_ttl: int = Field(default=3600, ge=60, le=3600)
+    browser_session_idle_ttl: int = Field(default=3600, ge=MIN_IDLE_TTL, le=MAX_IDLE_TTL)
     env_allowlist: tuple[str, ...] = ()
     max_model_calls: int = Field(default=6, ge=2, le=30)
     max_tool_calls: int = Field(default=12, ge=1, le=100)

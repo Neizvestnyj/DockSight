@@ -2,13 +2,13 @@ from collections.abc import Mapping
 from datetime import datetime
 from hmac import compare_digest
 
-from sqlalchemy import select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import Session
 
 from docksight.adapters.outbound.persistence.codec import utc_text
 from docksight.adapters.outbound.persistence.database import PersistentDatabase
 from docksight.adapters.outbound.persistence.rows import BrowserSessionRow
-from docksight.application.ports.browser_sessions import BrowserSession
+from docksight.application.ports.browser_sessions import MAX_CLEANUP_BATCH, BrowserSession, check_cleanup_limit
 
 
 def revoke_obsolete_sessions(session: Session, fingerprints: Mapping[str, str], now: datetime) -> int:
@@ -19,6 +19,28 @@ def revoke_obsolete_sessions(session: Session, fingerprints: Mapping[str, str], 
             row.revoked_at = utc_text(now)
             revoked += 1
     return revoked
+
+
+def cleanup_browser_sessions(
+    session: Session, now: datetime, idle_before: datetime, limit: int = MAX_CLEANUP_BATCH
+) -> int:
+    """Delete one stale-session batch inside an adapter transaction without deleting archive or action data."""
+    check_cleanup_limit(limit)
+    identities = session.scalars(
+        select(BrowserSessionRow.token_hash)
+        .where(
+            or_(
+                BrowserSessionRow.revoked_at.is_not(None),
+                BrowserSessionRow.expires_at <= utc_text(now),
+                BrowserSessionRow.last_seen_at <= utc_text(idle_before),
+            )
+        )
+        .order_by(BrowserSessionRow.token_hash)
+        .limit(limit)
+    ).all()
+    if identities:
+        session.execute(delete(BrowserSessionRow).where(BrowserSessionRow.token_hash.in_(identities)))
+    return len(identities)
 
 
 class SQLiteBrowserSessions:
@@ -98,4 +120,11 @@ class SQLiteBrowserSessions:
         """Invalidate removed actors and rotated credentials without retaining bearer values."""
         return await self._database.transaction(
             lambda session: revoke_obsolete_sessions(session, fingerprints, now), write=True
+        )
+
+    async def cleanup(self, now: datetime, idle_before: datetime, limit: int = MAX_CLEANUP_BATCH) -> int:
+        """Commit at most 100 stale-session deletions or propagate the storage failure."""
+        check_cleanup_limit(limit)
+        return await self._database.transaction(
+            lambda session: cleanup_browser_sessions(session, now, idle_before, limit), write=True
         )

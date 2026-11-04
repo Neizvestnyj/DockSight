@@ -156,6 +156,18 @@ def test_invalid_provider_and_short_token_are_rejected() -> None:
         Settings(api_token="short", provider="unknown", _env_file=None)
 
 
+@pytest.mark.parametrize("idle_ttl", [60, 119, 3601])
+def test_browser_idle_lifetime_rejects_unrefreshable_or_unsupported_values(idle_ttl: int) -> None:
+    with pytest.raises(ValidationError):
+        Settings(api_token="test-token-at-least-24-chars", browser_session_idle_ttl=idle_ttl, _env_file=None)
+
+
+@pytest.mark.parametrize("idle_ttl", [120, 3600])
+def test_browser_idle_lifetime_accepts_supported_boundary_values(idle_ttl: int) -> None:
+    settings = Settings(api_token="test-token-at-least-24-chars", browser_session_idle_ttl=idle_ttl, _env_file=None)
+    assert settings.browser_session_idle_ttl == idle_ttl
+
+
 def test_named_tokens_replace_the_single_token_and_map_to_their_actors(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("DOCKSIGHT_API_TOKEN", raising=False)
     monkeypatch.setenv(

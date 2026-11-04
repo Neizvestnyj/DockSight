@@ -28,6 +28,8 @@ Dates record merges into `master`. Version links show the corresponding changes.
 
 ### Fixed
 
+- Active browser sessions remain refreshable at the supported minimum idle timeout. Session maintenance removes only
+  expired or revoked browser records in batches of at most 100 and preserves saved history and action protection.
 - Repeated Stop and shutdown requests share diagnostic cancellation without interrupting terminal cleanup or leaving
   saved turns running after their worker exits. Disconnecting a Stop caller preserves the owned cleanup.
 - Creating a saved investigation enforces both byte quotas before saving its initial workspace and model context.
