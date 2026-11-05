@@ -1,3 +1,5 @@
+import { routeSavedApi } from './helpers/saved-server';
+import { openDemo } from './helpers/demo';
 import { chooseOption } from './helpers/select';
 import { expect, test } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
@@ -8,7 +10,7 @@ test.use({ locale: 'ru-RU' });
 test('explains demo controls, localizes every built-in scenario, and keeps empty logs empty', async ({
   page,
 }, info) => {
-  await page.goto('/');
+  await openDemo(page);
   await expect(page.locator('.breadcrumb')).toContainText('Демо-хост / EU');
   await expect(page.locator('.demo-bar')).toContainText('Пример данных вымышленного хоста');
   const examples = [
@@ -56,10 +58,10 @@ test('explains demo controls, localizes every built-in scenario, and keeps empty
   await page.screenshot({ path: `test-results/${info.project.name}-russian-refresh.png` });
 });
 
-test('localizes interrupted streams while preserving the same message when authored by the API', async ({ page }) => {
+test('localizes observer recovery while preserving a server-authored failure message', async ({ page }) => {
   const sourceMessage = 'Connection ended before the diagnostic turn completed. Retry manually.';
   let turns = 0;
-  await page.route('**/api/v1/**', (route) => {
+  const saved = await routeSavedApi(page, (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path.endsWith('/system/status'))
       return route.fulfill({ json: demoSystemStatus(new URL(route.request().url()).searchParams.get('host')) });
@@ -72,7 +74,7 @@ test('localizes interrupted streams while preserving the same message when autho
         : `data: ${JSON.stringify({ type: 'turn.failed', schema_version: 1, request_id: 'r', turn_id: 't', code: 'upstream_error', message: sourceMessage })}\n\n`;
     return route.fulfill({ contentType: 'text/event-stream', body });
   });
-  await page.goto('/');
+  await openDemo(page);
   if ((page.viewportSize()?.width ?? 1440) <= 560) {
     await page.getByRole('button', { name: 'Открыть хосты и контейнеры' }).click();
     await page.getByRole('button', { name: 'Подключить свой API' }).click();
@@ -82,15 +84,15 @@ test('localizes interrupted streams while preserving the same message when autho
   await expect(page.locator('.composer-foot')).toContainText('local');
   await page.getByRole('textbox', { name: 'Спросить DockSight' }).fill('Проверить подключение');
   await page.getByRole('button', { name: 'Исследовать', exact: true }).click();
-  await expect(page.getByRole('alert')).toHaveText(
-    'Соединение прервалось до завершения диагностики. Повторите запрос вручную.',
-  );
-  await page.getByRole('button', { name: 'Повторить диагностику' }).click();
+  await expect(page.getByText('Наблюдение прервано. Подключаемся к сохранённой диагностике.')).toBeVisible();
+  expect(turns).toBe(1);
+  saved.failRunning({ code: 'upstream_error', message: sourceMessage });
   await expect(page.getByRole('alert')).toHaveText(sourceMessage);
+  expect(turns).toBe(1);
 });
 
 test('detects Russian and preserves evidence, action IDs and draft while switching', async ({ page }, info) => {
-  await page.goto('/');
+  await openDemo(page);
   await expect(page.getByRole('heading', { name: 'Диагностика контейнера' })).toBeVisible();
   await expect(page.locator('html')).toHaveAttribute('lang', 'ru');
   const summary = await page.getByRole('region', { name: 'Объяснение модели' }).locator('p').first().innerText();
@@ -117,6 +119,7 @@ test('detects Russian and preserves evidence, action IDs and draft while switchi
   expect(await page.getByRole('dialog').locator('.confirmation-facts code').last().innerText()).toBe(actionId);
   await page.keyboard.press('Escape');
   await page.reload();
+  await page.getByRole('button', { name: 'Explore Demo' }).click();
   await expect(page.getByRole('heading', { name: 'Container investigation' })).toBeVisible();
   await expect(page.getByRole('combobox', { name: 'Language' })).toContainText('English');
   await chooseOption(page.getByRole('combobox', { name: 'Language' }), 'system');
@@ -151,7 +154,7 @@ test('does not translate API summaries, messages, logs, or environment values', 
       widget.logs.entries = [{ timestamp: null, message: 'Container investigation <script>untrusted</script>' }];
     if (widget.widget_type === 'env_inspector') widget.variables = { APP_ENV: 'Container status' };
   }
-  await page.route('**/api/v1/**', (route) => {
+  await routeSavedApi(page, (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path.endsWith('/system/status'))
       return route.fulfill({ json: demoSystemStatus(new URL(route.request().url()).searchParams.get('host')) });
@@ -163,7 +166,7 @@ test('does not translate API summaries, messages, logs, or environment values', 
       body: `data: ${JSON.stringify({ type: 'answer.ready', schema_version: 1, request_id: 'r', turn_id: 't', answer })}\n\ndata: ${JSON.stringify({ type: 'turn.completed', schema_version: 1, request_id: 'r', turn_id: 't' })}\n\n`,
     });
   });
-  await page.goto('/');
+  await openDemo(page);
   if ((page.viewportSize()?.width ?? 1440) <= 560) {
     await page.getByRole('button', { name: 'Открыть хосты и контейнеры' }).click();
     await page.getByRole('button', { name: 'Подключить свой API' }).click();

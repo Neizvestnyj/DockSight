@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { ModelCatalog, ModelProviders, ModelSelection, ProviderId } from './model-contracts';
+import type { HistoryTransport } from './investigation-contracts';
 
 export const metricsSchema = z.object({
   cpu_percent: z.number().nullable(),
@@ -381,6 +382,7 @@ export function targetKey(target: DiagnosticTarget): string {
   return `${target.kind}:${target.kind === 'container' ? target.id : target.name}`;
 }
 export interface Transport {
+  readonly history?: HistoryTransport;
   systemStatus(host: string | null, signal: AbortSignal, selection?: ModelSelection): Promise<SystemStatus>;
   modelProviders(signal: AbortSignal): Promise<ModelProviders>;
   models(provider: ProviderId, signal: AbortSignal, refresh?: boolean): Promise<ModelCatalog>;

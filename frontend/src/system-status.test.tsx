@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom/vitest';
-import { act, cleanup, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, renderHook, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import App from './App';
+import { renderDemoApp } from '../test-utils/demo';
 import { ApiClient, ApiError } from './api';
 import { DemoClient } from './demo';
 import { useSystemStatus } from './useSystemStatus';
@@ -27,13 +27,13 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('system availability', () => {
+describe('system availability', async () => {
   it('accepts Gemini status from the API and displays its provider and model', async () => {
     const gemini = { ...healthy, provider: 'gemini' as const, model: 'gemini-2.5-flash-lite' };
     const api = new ApiClient('/api/v1', 'test-token', vi.fn().mockResolvedValue(Response.json(gemini)));
     const parsed = await api.systemStatus('demo-eu', new AbortController().signal);
     vi.spyOn(DemoClient.prototype, 'systemStatus').mockResolvedValue(parsed);
-    render(<App />);
+    await renderDemoApp();
     fireEvent.click(screen.getByRole('button', { name: /^System status/ }));
     const panel = screen.getByRole('dialog', { name: 'System status' });
     await waitFor(() => expect(panel).toHaveTextContent('Gemini'));
@@ -121,7 +121,7 @@ describe('system availability', () => {
       .spyOn(DemoClient.prototype, 'systemStatus')
       .mockResolvedValue({ ...healthy, model_check: { ...check, state: 'unavailable', code: 'model_not_found' } });
     const diagnose = vi.spyOn(DemoClient.prototype, 'diagnose');
-    render(<App />);
+    await renderDemoApp();
     fireEvent.click(await screen.findByTitle('payments-api'));
     const facts = screen.getByRole('region', { name: 'Container facts' });
     expect(await within(facts).findByText('APP_ENV')).toBeInTheDocument();

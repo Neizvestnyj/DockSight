@@ -1,8 +1,8 @@
 import { chooseOption } from '../test-utils/select';
 import '@testing-library/jest-dom/vitest';
-import { act, cleanup, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, renderHook, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import App from './App';
+import { renderDemoApp } from '../test-utils/demo';
 import { ApiClient } from './api';
 import { DemoClient, demoSystemStatus } from './demo';
 import { useModelCatalog } from './useModelCatalog';
@@ -15,11 +15,11 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('model selection', () => {
+describe('model selection', async () => {
   it('loads catalogs only when opened and preserves the draft, evidence and prepared actions when switching', async () => {
     const providers = vi.spyOn(DemoClient.prototype, 'modelProviders');
     const catalogs = vi.spyOn(DemoClient.prototype, 'models');
-    render(<App />);
+    await renderDemoApp();
     expect(providers).not.toHaveBeenCalled();
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Keep this follow-up' } });
     fireEvent.click(screen.getByRole('button', { name: 'Review stop' }));
@@ -44,7 +44,7 @@ describe('model selection', () => {
 
   it('sends selection only on subsequent turns and retains it when changing hosts', async () => {
     const diagnose = vi.spyOn(DemoClient.prototype, 'diagnose').mockResolvedValue();
-    render(<App />);
+    await renderDemoApp();
     fireEvent.click(screen.getByRole('button', { name: /Choose model/ }));
     const picker = screen.getByRole('dialog');
     chooseOption(await within(picker).findByRole('combobox', { name: 'Provider' }), 'gemini');

@@ -1,12 +1,14 @@
+import { routeSavedApi } from './helpers/saved-server';
+import { openDemo } from './helpers/demo';
 import { chooseOption } from './helpers/select';
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 import { demoAnswer, demoSystemStatus } from '../src/demo';
-import type { TurnInput } from '../src/contracts';
+import type { StartTurn } from '../src/investigation-contracts';
 
 for (const kind of ['container', 'compose'] as const) {
   test(`clarifies a same-name ${kind} follow-up without losing the conversation`, async ({ page }, info) => {
-    const inputs: TurnInput[] = [];
+    const inputs: StartTurn[] = [];
     const original = demoAnswer('dependency', 'local');
     const answer = demoAnswer('oom', 'local');
     const snapshot = answer.widgets.find((row) => row.widget_type === 'container_status')!.snapshot;
@@ -19,15 +21,16 @@ for (const kind of ['container', 'compose'] as const) {
     const gate = new Promise<void>((resolve) => {
       finish = resolve;
     });
-    await page.route('**/api/v1/**', async (route) => {
+    await routeSavedApi(page, async (route) => {
       const request = route.request();
       const url = new URL(request.url());
-      expect(request.headers()['authorization']).toBe('Bearer target-test-token');
+      expect(request.headers()['authorization']).toBeUndefined();
       if (url.pathname.endsWith('/hosts')) return route.fulfill({ json: [{ id: 'local', name: 'Test host' }] });
       if (url.pathname.endsWith('/system/status')) return route.fulfill({ json: demoSystemStatus('local') });
       if (url.pathname.endsWith('/containers')) return route.fulfill({ json: [snapshot] });
-      expect(url.pathname).toBe('/api/v1/chat/turns');
-      inputs.push(request.postDataJSON() as TurnInput);
+      if (url.pathname.endsWith(`/${snapshot.id}`)) return route.fulfill({ json: snapshot });
+      expect(url.pathname.endsWith('/turns')).toBe(true);
+      inputs.push(request.postDataJSON() as StartTurn);
       const index = inputs.length;
       if (index === 3) await gate;
       const base = { schema_version: 1, request_id: `r-${index}`, turn_id: `t-${index}` };
@@ -43,13 +46,15 @@ for (const kind of ['container', 'compose'] as const) {
         body: events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join(''),
       });
     });
-    await page.goto('/');
+    await openDemo(page);
     if ((page.viewportSize()?.width ?? 1440) <= 560) {
       await page.getByRole('button', { name: 'Open host and containers' }).click();
       await page.getByRole('button', { name: 'Connect your API' }).click();
     } else await page.getByRole('button', { name: 'Connect API', exact: true }).click();
     await page.getByLabel('Bearer token').fill('target-test-token');
     await page.getByRole('button', { name: 'Connect', exact: true }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page.locator('.composer-foot')).toContainText('local');
     await page.getByRole('textbox').fill('Why did vintoria-infra fail?');
     await page.getByRole('button', { name: 'Investigate', exact: true }).click();
     await expect(page.locator('.widget-container_status')).toHaveCount(1);
@@ -85,19 +90,20 @@ for (const kind of ['container', 'compose'] as const) {
     await expect(page.locator('.widget-container_status')).toHaveCount(1);
     await expect(page.locator('.query-line h2')).toHaveText(question);
     expect(inputs).toHaveLength(3);
-    expect(inputs[2]).toEqual({
-      host: 'local',
-      query: question,
-      session_id: session,
-      ...(kind === 'container' ? { container_id: snapshot.id } : { group }),
+    expect(inputs[2]).toMatchObject({
+      kind: 'clarification',
+      clarification_of: expect.any(String),
+      expected_parent_revision: expect.any(Number),
+      target: kind === 'container' ? container : group,
     });
+    expect(inputs[2]).not.toHaveProperty('query');
     await expect(page.locator('.history-row')).toHaveCount(2);
     await page.locator('.history-row').first().click();
     await expect(page.getByRole('region', { name: 'Доказательства контейнера: checkout-api' })).toBeVisible();
     await expect(page.getByRole('textbox')).toHaveValue('Keep this next question');
     await page.getByRole('button', { name: 'Исследовать', exact: true }).click();
     await expect(page.locator('.collecting')).toHaveCount(0);
-    expect(inputs[3]).toEqual({ host: 'local', query: 'Keep this next question', session_id: session });
+    expect(inputs[3]).toMatchObject({ kind: 'question', query: 'Keep this next question', target: null });
     await expect(page.locator('.history-row')).toHaveCount(3);
   });
 }

@@ -1,8 +1,9 @@
 import '@testing-library/jest-dom/vitest';
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import App from './App';
+import { renderDemoApp } from '../test-utils/demo';
 import { demoAnswer, demoContainer, demoSystemStatus } from './demo';
+import type { InvestigationDetail, SavedTurn } from './investigation-contracts';
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -19,6 +20,21 @@ afterEach(() => {
 
 /** Serve changing Docker observations at the HTTP boundary, keeping transport validation real. */
 function installApi() {
+  const id = '11111111-1111-4111-8111-111111111111';
+  const timestamp = '2026-10-28T07:00:00Z';
+  const workspace = { revision: 0, draft: '', target: null, selected_container: null, view: 'diagnostics' as const };
+  let detail: InvestigationDetail = {
+    id,
+    host: 'test-host',
+    title: '',
+    created_at: timestamp,
+    updated_at: timestamp,
+    active_turn_id: null,
+    turn_count: 0,
+    workspace,
+    turns: { items: [], next_cursor: null },
+  };
+  let actor = { revision: 0, host: 'test-host', model: null, last_investigation_id: id };
   const container = demoContainer(0, 'test-host', '2026-10-28T07:00:00Z');
   const api = {
     rows: [container],
@@ -31,10 +47,63 @@ function installApi() {
     pendingStatus: undefined as Promise<Response> | undefined,
     reads: [] as string[],
   };
-  vi.stubGlobal('fetch', async (input: string) => {
+  vi.stubGlobal('fetch', async (input: string, options?: RequestInit) => {
     const url = new URL(input, 'http://localhost');
     const path = url.pathname;
     api.reads.push(path);
+    if (path.endsWith('/auth/session'))
+      return Response.json({ code: 'unauthorized', message: 'Sign in' }, { status: 401 });
+    if (path.endsWith('/auth/login'))
+      return Response.json({ actor: 'operator', expires_at: '2026-12-01T12:00:00Z', csrf_token: 'c'.repeat(43) });
+    if (path === '/api/v1/me/workspace') {
+      if (options?.method === 'PATCH')
+        actor = { ...actor, ...JSON.parse(String(options.body)), revision: actor.revision + 1 };
+      const { expected_revision: _expected, ...result } = actor as typeof actor & { expected_revision?: number };
+      void _expected;
+      return Response.json(result);
+    }
+    if (path === '/api/v1/investigations') return Response.json({ items: [], next_cursor: null });
+    if (path.endsWith(`/investigations/${id}`)) return Response.json(detail);
+    if (path.endsWith(`/investigations/${id}/workspace`)) {
+      const { expected_revision: _expected, ...changes } = JSON.parse(String(options?.body));
+      void _expected;
+      detail = { ...detail, workspace: { ...detail.workspace, ...changes, revision: detail.workspace.revision + 1 } };
+      return Response.json(detail.workspace);
+    }
+    if (path.endsWith(`/investigations/${id}/turns`)) {
+      const body = JSON.parse(String(options?.body));
+      const turn: SavedTurn = {
+        schema_version: 1,
+        id: crypto.randomUUID(),
+        investigation_id: id,
+        actor: 'operator',
+        host: detail.host,
+        submission_id: body.submission_id,
+        request_id: 'original',
+        query: body.query,
+        target: body.target,
+        model: null,
+        clarification_of: null,
+        resolved_by_turn_id: null,
+        state: 'completed',
+        revision: 2,
+        created_at: timestamp,
+        updated_at: timestamp,
+        finished_at: timestamp,
+        progress: [],
+        progress_truncated: false,
+        trace: [],
+        answer: demoAnswer('crash_loop', 'test-host'),
+        selection: null,
+        error: null,
+      };
+      detail = {
+        ...detail,
+        turns: { items: [...detail.turns.items, turn], next_cursor: null },
+        workspace: { ...detail.workspace, draft: '', revision: detail.workspace.revision + 1 },
+      };
+      return Response.json({ snapshot: turn, created: true }, { status: 202 });
+    }
     if (path.endsWith('/system/status'))
       return api.pendingStatus ?? Response.json(demoSystemStatus(url.searchParams.get('host')));
     if (path.endsWith('/hosts')) return Response.json([{ id: 'test-host', name: 'Test host' }]);
@@ -66,7 +135,7 @@ function installApi() {
 
 /** Connect through the product flow without persisting credentials. */
 async function connect() {
-  render(<App />);
+  await renderDemoApp();
   await act(async () => {});
   fireEvent.click(screen.getByRole('button', { name: 'Connect API' }));
   fireEvent.change(screen.getByLabelText('Bearer token'), { target: { value: 'test-token' } });
@@ -78,7 +147,7 @@ async function advance(milliseconds = 10_000) {
   await act(async () => vi.advanceTimersByTimeAsync(milliseconds));
 }
 
-describe('automatic runtime refresh', () => {
+describe('automatic runtime refresh', async () => {
   it('discovers new containers and changed states while preserving focus, drafts, and diagnostic evidence', async () => {
     const api = installApi();
     await connect();
@@ -105,7 +174,7 @@ describe('automatic runtime refresh', () => {
     await advance();
     expect(screen.queryByTitle('new-worker')).not.toBeInTheDocument();
     expect(screen.getByText('No containers on this host.')).toBeInTheDocument();
-    expect(api.reads.filter((path) => path.endsWith('/chat/turns'))).toHaveLength(1);
+    expect(api.reads.filter((path) => path.endsWith('/turns'))).toHaveLength(1);
     expect(api.reads.some((path) => path.includes('/actions'))).toBe(false);
   });
 

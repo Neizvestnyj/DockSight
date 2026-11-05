@@ -1,9 +1,11 @@
+import { routeSavedApi } from './helpers/saved-server';
+import { openDemo } from './helpers/demo';
 import { chooseOption } from './helpers/select';
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import { hostAnswer } from './fixtures/host-overview';
-import { demoSystemStatus } from '../src/demo';
-import type { TurnInput } from '../src/contracts';
+import { demoContainer, demoSystemStatus } from '../src/demo';
+import type { StartTurn } from '../src/investigation-contracts';
 
 /** Connect to the test's isolated intercepted API on desktop and mobile. */
 async function connect(page: Page) {
@@ -21,16 +23,20 @@ for (const locale of ['en', 'ru'] as const) {
     page,
   }, info) => {
     const answer = hostAnswer();
-    const inputs: TurnInput[] = [];
-    await page.route('**/api/v1/**', (route) => {
+    const inputs: StartTurn[] = [];
+    await routeSavedApi(page, (route) => {
       const request = route.request();
       const url = new URL(request.url());
-      expect(request.headers()['authorization']).toBe('Bearer host-overview-browser-token');
+      expect(request.headers()['authorization']).toBeUndefined();
       if (url.pathname.endsWith('/hosts')) return route.fulfill({ json: [{ id: 'local', name: 'Test host' }] });
       if (url.pathname.endsWith('/containers')) return route.fulfill({ json: [] });
+      if (url.pathname.endsWith(`/${'a'.repeat(64)}`))
+        return route.fulfill({
+          json: { ...demoContainer(0, 'local', new Date().toISOString()), id: 'a'.repeat(64), name: 'checkout-api' },
+        });
       if (url.pathname.endsWith('/system/status')) return route.fulfill({ json: demoSystemStatus('local') });
-      expect(url.pathname).toBe('/api/v1/chat/turns');
-      inputs.push(request.postDataJSON() as TurnInput);
+      expect(url.pathname.endsWith('/turns')).toBe(true);
+      inputs.push(request.postDataJSON() as StartTurn);
       const base = { schema_version: 1, request_id: `r${inputs.length}`, turn_id: `t${inputs.length}` };
       return route.fulfill({
         contentType: 'text/event-stream',
@@ -58,7 +64,7 @@ for (const locale of ['en', 'ru'] as const) {
           .join(''),
       });
     });
-    await page.goto('/');
+    await openDemo(page);
     await connect(page);
     await page.getByRole('textbox').fill('What happened?');
     await page.getByRole('button', { name: 'Investigate', exact: true }).click();
@@ -96,8 +102,8 @@ for (const locale of ['en', 'ru'] as const) {
     await investigate.focus();
     await page.keyboard.press('Enter');
     await expect(page.locator('.conclusion')).toContainText('The selected resource needs more evidence.');
-    expect(inputs[1]).toMatchObject({ host: 'local', container_id: 'a'.repeat(64) });
-    expect(inputs[1]?.session_id).toBeUndefined();
+    expect(inputs[1]).toMatchObject({ kind: 'question', target: { kind: 'container', id: 'a'.repeat(64) } });
+    expect(inputs[1]).not.toHaveProperty('session_id');
     await expect(page.locator('.query-scope')).toContainText('checkout-api');
     await expect(page.getByRole('textbox')).toHaveValue('Keep this unrelated draft');
     await page.locator('.session-turns summary').click();
@@ -105,8 +111,8 @@ for (const locale of ['en', 'ru'] as const) {
     await expect(overview).toBeVisible();
     await overview.getByRole('button', { name: 'Docker Compose commerce', exact: true }).click();
     await expect(page.locator('.query-scope')).toContainText('commerce');
-    expect(inputs[2]).toMatchObject({ host: 'local', group: { kind: 'compose', name: 'commerce' } });
-    expect(inputs[2]?.session_id).toBeUndefined();
+    expect(inputs[2]).toMatchObject({ kind: 'question', target: { kind: 'compose', name: 'commerce' } });
+    expect(inputs[2]).not.toHaveProperty('session_id');
     await expect(page.getByRole('textbox')).toHaveValue('Keep this unrelated draft');
     await expect(page.locator('.history-row')).toHaveCount(3);
   });
@@ -116,13 +122,17 @@ test('keeps long observed names compact and narrows by exact identity within the
   const answer = hostAnswer();
   const name = `checkout-${'x'.repeat(4087)}`;
   answer.host_overview!.members[0]!.name = name;
-  const inputs: TurnInput[] = [];
-  await page.route('**/api/v1/**', (route) => {
+  const inputs: StartTurn[] = [];
+  await routeSavedApi(page, (route) => {
     const url = new URL(route.request().url());
     if (url.pathname.endsWith('/hosts')) return route.fulfill({ json: [{ id: 'local', name: 'Test host' }] });
     if (url.pathname.endsWith('/containers')) return route.fulfill({ json: [] });
+    if (url.pathname.endsWith(`/${'a'.repeat(64)}`))
+      return route.fulfill({
+        json: { ...demoContainer(0, 'local', new Date().toISOString()), id: 'a'.repeat(64), name },
+      });
     if (url.pathname.endsWith('/system/status')) return route.fulfill({ json: demoSystemStatus('local') });
-    inputs.push(route.request().postDataJSON() as TurnInput);
+    inputs.push(route.request().postDataJSON() as StartTurn);
     const base = { schema_version: 1, request_id: 'r', turn_id: 't' };
     return route.fulfill({
       contentType: 'text/event-stream',
@@ -134,7 +144,7 @@ test('keeps long observed names compact and narrows by exact identity within the
         .join(''),
     });
   });
-  await page.goto('/');
+  await openDemo(page);
   await connect(page);
   await page.getByRole('textbox').fill('What happened?');
   await page.getByRole('button', { name: 'Investigate', exact: true }).click();
@@ -142,8 +152,9 @@ test('keeps long observed names compact and narrows by exact identity within the
   await expect(member).toBeVisible();
   expect((await member.boundingBox())!.height).toBeLessThan(320);
   await member.getByRole('button', { name: 'Investigate container', exact: true }).click();
-  await expect(page.locator('.query-scope')).toContainText(name);
-  expect(inputs[1]?.container_id).toBe('a'.repeat(64));
-  expect(inputs[1]!.query.length).toBeLessThanOrEqual(4000);
+  await expect(page.locator('.query-scope')).toContainText(name.slice(0, 256));
+  expect(inputs[1]?.target).toMatchObject({ kind: 'container', id: 'a'.repeat(64) });
+  if (inputs[1]?.kind !== 'question') throw new Error('Expected a container question');
+  expect(inputs[1].query.length).toBeLessThanOrEqual(4000);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });

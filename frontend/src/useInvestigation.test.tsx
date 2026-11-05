@@ -1,10 +1,73 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { ApiClient } from './api';
+import type { SavedTurn } from './investigation-contracts';
 import { DemoClient, demoAnswer } from './demo';
 import { useInvestigation } from './useInvestigation';
 import type { GroupTarget, TurnEvent, TurnInput } from './contracts';
 
 const target: GroupTarget = { kind: 'compose', name: 'vintoria-infra' };
+
+it('restores the same accepted turn and detaches without cancelling on unmount', async () => {
+  const api = new ApiClient();
+  const snapshot: SavedTurn = {
+    schema_version: 1,
+    id: crypto.randomUUID(),
+    investigation_id: crypto.randomUUID(),
+    actor: 'operator',
+    host: 'local',
+    submission_id: crypto.randomUUID(),
+    request_id: 'original',
+    query: 'Why?',
+    target: null,
+    model: null,
+    clarification_of: null,
+    resolved_by_turn_id: null,
+    state: 'running',
+    revision: 2,
+    created_at: '2026-11-04T12:00:00Z',
+    updated_at: '2026-11-04T12:00:00Z',
+    finished_at: null,
+    progress: [],
+    progress_truncated: false,
+    trace: [],
+    answer: null,
+    selection: null,
+    error: null,
+  };
+  vi.spyOn(api, 'turn').mockResolvedValue(snapshot);
+  let signal: AbortSignal | undefined;
+  vi.spyOn(api, 'observeTurn').mockImplementation(async (_id, _receive, current) => {
+    signal = current;
+    await new Promise<void>((resolve) => current.addEventListener('abort', () => resolve(), { once: true }));
+  });
+  const stop = vi.spyOn(api, 'cancelTurn');
+  const post = vi.spyOn(api, 'startTurn');
+  const saved = {
+    detail: {
+      id: snapshot.investigation_id,
+      host: 'local',
+      title: '',
+      created_at: snapshot.created_at,
+      updated_at: snapshot.updated_at,
+      active_turn_id: snapshot.id,
+      turn_count: 1,
+      workspace: { revision: 1, draft: '', target: null, selected_container: null, view: 'diagnostics' as const },
+      turns: { items: [snapshot], next_cursor: null },
+    },
+    flush: async () => true,
+    revision: () => 1,
+    refresh: async () => {},
+    changed: () => {},
+  };
+  const { result, unmount } = renderHook(() => useInvestigation(api, 'local', undefined, undefined, saved));
+  await waitFor(() => expect(signal).toBeDefined());
+  expect(result.current.turns[0]?.requestId).toBe('original');
+  unmount();
+  expect(signal?.aborted).toBe(true);
+  expect(stop).not.toHaveBeenCalled();
+  expect(post).not.toHaveBeenCalled();
+});
 
 /** Emit a complete scope-resolution response without manufacturing a diagnostic answer. */
 function requireSelection(receive: (event: TurnEvent) => void) {

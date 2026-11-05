@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LocaleProvider, LanguageSwitch } from './LocaleProvider';
 import { useLocale } from './locale';
 import { resolveLocale, translate } from './messages';
-import App from './App';
+import { renderDemoApp } from '../test-utils/demo';
 
 afterEach(() => {
   cleanup();
@@ -27,8 +27,8 @@ function Probe() {
   );
 }
 
-describe('language preference', () => {
-  it('matches system language regions, uses the first supported preference, and falls back to English', () => {
+describe('language preference', async () => {
+  it('matches system language regions, uses the first supported preference, and falls back to English', async () => {
     expect(resolveLocale('system', ['ru-RU', 'en-US'])).toBe('ru');
     expect(resolveLocale('system', ['EN-gb', 'ru'])).toBe('en');
     expect(resolveLocale('system', ['de-DE', 'ru'])).toBe('ru');
@@ -59,7 +59,7 @@ describe('language preference', () => {
     await waitFor(() => expect(document.documentElement.lang).toBe('ru'));
   });
 
-  it('follows languagechange only in automatic mode', () => {
+  it('follows languagechange only in automatic mode', async () => {
     const languages = vi.spyOn(navigator, 'languages', 'get').mockReturnValue(['en-US']);
     render(
       <LocaleProvider>
@@ -74,7 +74,7 @@ describe('language preference', () => {
     expect(screen.getByText('en: Container investigation')).toBeInTheDocument();
   });
 
-  it('ignores invalid stored values and keeps following system language', () => {
+  it('ignores invalid stored values and keeps following system language', async () => {
     localStorage.setItem('docksight.locale', 'invalid');
     vi.spyOn(navigator, 'languages', 'get').mockReturnValue(['ru-RU']);
     render(
@@ -86,7 +86,7 @@ describe('language preference', () => {
     expect(screen.getByText('ru: Диагностика контейнера')).toBeInTheDocument();
   });
 
-  it('keeps switching usable when browser storage is blocked', () => {
+  it('keeps switching usable when browser storage is blocked', async () => {
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
       throw new DOMException('Blocked');
     });
@@ -102,7 +102,7 @@ describe('language preference', () => {
     expect(screen.getByText('ru: Диагностика контейнера')).toBeInTheDocument();
   });
 
-  it('uses Russian plurals for returned lines', () => {
+  it('uses Russian plurals for returned lines', async () => {
     expect(translate('ru', '{count} lines returned', { count: 1 })).toBe('Получена 1 строка');
     expect(translate('ru', '{count} lines returned', { count: 2 })).toBe('Получены 2 строки');
     expect(translate('ru', '{count} lines returned', { count: 5 })).toBe('Получено 5 строк');
@@ -113,7 +113,7 @@ describe('language preference', () => {
   });
 
   it('localizes demo copy without replacing evidence or the current action', async () => {
-    render(<App />);
+    await renderDemoApp();
     const log = 'ValueError: invalid application configuration';
     chooseOption(screen.getByRole('combobox', { name: 'Language' }), 'ru');
     expect(screen.getByRole('heading', { name: 'Диагностика контейнера' })).toBeInTheDocument();
@@ -122,11 +122,11 @@ describe('language preference', () => {
     expect(screen.getByRole('heading', { name: 'Почему payments-api постоянно перезапускается?' })).toBeInTheDocument();
     fireEvent.click(await screen.findByRole('button', { name: 'Проверить остановку' }));
     expect(screen.getByRole('dialog')).toHaveTextContent('1'.repeat(64));
-    expect(screen.getByRole('button', { name: 'Подтвердить остановку' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Подтвердить остановку' })).toBeInTheDocument();
   });
 
   it('localizes the OOM example and identifies the simulated host without fabricating log lines', async () => {
-    render(<App />);
+    await renderDemoApp();
     chooseOption(screen.getByRole('combobox', { name: 'Language' }), 'ru');
     chooseOption(screen.getByLabelText('Демо-сценарий'), 'oom');
     expect(screen.getByRole('heading', { name: 'Почему report-worker завершился с кодом 137?' })).toBeInTheDocument();

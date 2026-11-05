@@ -1,9 +1,10 @@
+import { openDemo } from './helpers/demo';
 import { chooseOption } from './helpers/select';
 import { expect, test } from '@playwright/test';
 
 for (const locale of ['en', 'ru'] as const) {
   test(`keeps composer hints clear of submit and stop buttons in ${locale}`, async ({ page }, info) => {
-    await page.goto('/');
+    await openDemo(page);
     await chooseOption(page.getByRole('combobox', { name: 'Language' }), locale);
     const composer = page.getByRole('form', { name: locale === 'ru' ? 'Спросить DockSight' : 'Ask DockSight' });
     const field = composer.getByRole('textbox');

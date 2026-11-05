@@ -1,8 +1,8 @@
 import { chooseOption } from '../test-utils/select';
 import '@testing-library/jest-dom/vitest';
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import App from './App';
+import { renderDemoApp } from '../test-utils/demo';
 import { DemoClient, demoAnswer, demoContainer } from './demo';
 
 afterEach(() => {
@@ -10,11 +10,11 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('read-only container viewing', () => {
+describe('read-only container viewing', async () => {
   it('opens Docker facts without a model request and preserves historical cards and drafts', async () => {
     const diagnose = vi.spyOn(DemoClient.prototype, 'diagnose');
     const scenario = vi.spyOn(DemoClient.prototype, 'setScenario');
-    render(<App />);
+    await renderDemoApp();
     await screen.findByTitle('payments-api');
     const originalTime = screen.getByRole('group', { name: 'Container status' }).querySelector('time')!.dateTime;
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Keep this follow-up' } });
@@ -35,7 +35,7 @@ describe('read-only container viewing', () => {
 
   it('retains successful observations when logs fail and retries only on manual refresh', async () => {
     const logs = vi.spyOn(DemoClient.prototype, 'logs').mockRejectedValue(new Error('Logs unavailable'));
-    render(<App />);
+    await renderDemoApp();
     fireEvent.click(await screen.findByTitle('payments-api'));
     const facts = await screen.findByRole('region', { name: 'Container facts' });
     expect(await within(facts).findByText('APP_ENV')).toBeInTheDocument();
@@ -62,7 +62,7 @@ describe('read-only container viewing', () => {
           }),
       )
       .mockResolvedValueOnce(demoContainer(1, 'demo-eu', '2026-10-27T12:00:00Z'));
-    render(<App />);
+    await renderDemoApp();
     fireEvent.click(await screen.findByTitle('payments-api'));
     fireEvent.click(screen.getByTitle('report-worker'));
     const facts = screen.getByRole('region', { name: 'Container facts' });
@@ -79,7 +79,7 @@ describe('read-only container viewing', () => {
       receive({ ...envelope, type: 'answer.ready', answer: demoAnswer('oom', input.host) });
       receive({ ...envelope, type: 'turn.completed' });
     });
-    render(<App />);
+    await renderDemoApp();
     fireEvent.click(await screen.findByTitle('report-worker'));
     const button = screen.getByRole('button', { name: 'Diagnose' });
     await waitFor(() => expect(button).toBeEnabled());
@@ -108,7 +108,7 @@ describe('read-only container viewing', () => {
             fail = reject;
           }),
       );
-    render(<App />);
+    await renderDemoApp();
     fireEvent.click(await screen.findByTitle('payments-api'));
     const facts = screen.getByRole('region', { name: 'Container facts' });
     const panel = within(facts).getByRole('region', { name: 'Container logs' });
@@ -130,7 +130,7 @@ describe('read-only container viewing', () => {
       pending = signal;
       return new Promise(() => {});
     });
-    render(<App />);
+    await renderDemoApp();
     fireEvent.click(await screen.findByTitle('payments-api'));
     expect(pending?.aborted).toBe(false);
     chooseOption(screen.getByLabelText('Configured host'), 'demo-empty');

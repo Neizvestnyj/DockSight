@@ -24,6 +24,7 @@ import { containerWidgetGroups, evidenceResource, widgetSource } from './evidenc
 import { ContainerEvidence } from './ContainerEvidence';
 import { GroupClarification } from './GroupClarification';
 import { HostOverview } from './HostOverview';
+import { utc } from './format';
 
 interface Props {
   investigation: ReturnType<typeof useInvestigation>;
@@ -35,6 +36,7 @@ interface Props {
   host: string;
   blocked?: boolean;
   group?: GroupTarget;
+  target?: DiagnosticTarget;
 }
 
 /** Compose conclusions, typed observations, and an always-available follow-up query. */
@@ -48,6 +50,7 @@ export function Investigation({
   host,
   blocked = false,
   group,
+  target,
 }: Props) {
   const { t, locale } = useLocale();
   const { turns, running, run, chooseTarget, stop } = investigation;
@@ -90,7 +93,7 @@ export function Investigation({
     if (blocked) return;
     setView(null);
     void run(query, false, target);
-    setDraft('');
+    if (demo) setDraft('');
   }
 
   /** Start an explicit scope-specific turn while retaining the operator's unrelated draft and history. */
@@ -104,15 +107,37 @@ export function Investigation({
             name: target.name,
           });
     setView(null);
-    void run(query, true, target);
+    const boundedTarget =
+      client.history && target.kind === 'container' ? { ...target, name: target.name.slice(0, 256) } : target;
+    void run(query, true, boundedTarget);
   }
 
   return (
     <>
       <div className="investigation-content">
+        {investigation.error && (
+          <p className="inline-warning" role="status">
+            {investigation.errorSource !== 'server' && isMessageKey(investigation.error)
+              ? t(investigation.error)
+              : investigation.error}
+          </p>
+        )}
+        {investigation.nextCursor && (
+          <button
+            className="secondary"
+            disabled={investigation.olderLoading}
+            onClick={() => void investigation.older()}
+          >
+            {t('Older answers')}
+          </button>
+        )}
         {turns.length > 1 && (
           <details className="session-turns">
-            <summary>{t('{count} turns in this tab session', { count: turns.length })}</summary>
+            <summary>
+              {t(client.history ? '{count} saved questions' : '{count} turns in this tab session', {
+                count: turns.length,
+              })}
+            </summary>
             <div>
               {turns.map((row) => (
                 <button
@@ -144,6 +169,22 @@ export function Investigation({
               <h2>{displayedQuery}</h2>
               <span className="muted query-author">{t('Operator')}</span>
             </div>
+            {turn.createdAt && (
+              <p className="section-note">
+                {t('Saved {time} · historical evidence', { time: utc(turn.createdAt, true) })}
+              </p>
+            )}
+            {turn.attempts && turn.attempts.length > 1 && (
+              <details className="saved-attempts">
+                <summary>{t('{count} diagnostic attempts', { count: turn.attempts.length })}</summary>
+                {turn.attempts.map((attempt) => (
+                  <p key={attempt.id}>
+                    <time dateTime={attempt.updated_at}>{utc(attempt.updated_at, true)}</time> ·{' '}
+                    {stateLabel(attempt.state, t, true)} · <code>{attempt.request_id}</code>
+                  </p>
+                ))}
+              </details>
+            )}
             {turn.target && (
               <p className="section-note query-scope">
                 {t('Scope')}: {targetKindLabel(turn.target.kind, t)} / {turn.target.name}
@@ -260,7 +301,7 @@ export function Investigation({
                 </section>
               </>
             )}
-            {(turn.state === 'failed' || turn.state === 'stopped') && (
+            {(turn.state === 'failed' || turn.state === 'stopped' || turn.state === 'interrupted') && (
               <section className="turn-error" aria-label={t('Diagnostic interruption')}>
                 <TriangleAlert size={18} />
                 <div>
@@ -282,7 +323,7 @@ export function Investigation({
                   )}
                   <button
                     className="secondary"
-                    disabled={running || blocked}
+                    disabled={running || blocked || turn.code === 'history_unsupported'}
                     onClick={() => submit(turn.query, turn.target)}
                   >
                     {t('Retry diagnosis')}
@@ -353,7 +394,7 @@ export function Investigation({
         aria-labelledby="composer-title"
         onSubmit={(event) => {
           event.preventDefault();
-          submit(draft, group);
+          submit(draft, group ?? target);
         }}
       >
         <div className="composer-heading">
@@ -383,7 +424,7 @@ export function Investigation({
                 host
               ) {
                 event.preventDefault();
-                submit(draft, group);
+                submit(draft, group ?? target);
               }
             }}
           />

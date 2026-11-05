@@ -1,5 +1,107 @@
 @import './controls.css';
 
+.session-entry {
+  width: min(640px, calc(100% - 40px));
+  margin: 12vh auto;
+}
+.session-entry > .brand-logo {
+  width: 168px;
+  height: auto;
+  margin-bottom: 32px;
+}
+.session-entry h1 {
+  font-size: 24px;
+  margin: 0 0 12px;
+}
+.session-entry p {
+  color: var(--muted);
+}
+.entry-actions,
+.workspace-save {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 24px 0;
+}
+.workspace-save {
+  font-size: 13px;
+  color: var(--muted);
+}
+.saved-investigations {
+  margin: 0 12px 16px;
+  min-width: 0;
+  flex-shrink: 0;
+}
+.saved-investigations header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.saved-investigations h2 {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.saved-chat-list {
+  max-height: min(192px, 20dvh);
+  overflow-y: auto;
+}
+.saved-chat {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  border-radius: var(--radius-control);
+}
+.saved-chat.selected {
+  background: var(--active);
+}
+.saved-chat-open {
+  display: block;
+  min-width: 0;
+  flex: 1;
+  text-align: left;
+  padding: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: var(--radius-control);
+}
+.saved-chat-open:hover {
+  border-color: var(--control);
+}
+.saved-chat-open > span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+.saved-chat-open small {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.saved-attempts {
+  margin: 12px 0;
+  color: var(--muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 640px) {
+  .saved-chat-open,
+  .workspace-save button,
+  .entry-actions button {
+    min-height: 44px;
+  }
+  .saved-chat-list {
+    max-height: 240px;
+  }
+}
+
 :root {
   font-family: 'IBM Plex Sans', system-ui, sans-serif;
   color: var(--text);
@@ -568,6 +670,14 @@ textarea {
   padding: 24px 16px 16px;
   display: flex;
   flex-direction: column;
+  overflow-y: auto;
+}
+.sidebar > .inventory {
+  flex: 1 1 auto;
+  min-height: 120px;
+}
+.sidebar > .sidebar-bottom {
+  flex-shrink: 0;
 }
 .brand {
   display: flex;

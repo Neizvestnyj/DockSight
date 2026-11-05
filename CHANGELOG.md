@@ -26,6 +26,8 @@ Dates record merges into `master`. Version links show the corresponding changes.
   absolute and idle expiry, credential-rotation revocation, and CSRF protection. Bearer API access remains available.
 - History and workspace endpoints restore saved turns, support revision conflicts, and accept duplicate-safe submissions.
   Snapshot streams reconnect without generation. Legacy chat streams share the retained diagnostic runner.
+- The browser reopens owned saved chats, pages older answers, and restores acknowledged drafts and exact selections.
+  Revision conflicts keep local text and offer explicit reload or replacement. Reopening actions checks current server state.
 
 ### Fixed
 
@@ -46,6 +48,8 @@ Dates record merges into `master`. Version links show the corresponding changes.
 - Startup and browser login reclaim one bounded stale-session batch without adding background scheduling.
 - Keep temporary agent plans and review artifacts out of version control.
 - Architecture checks keep SQLAlchemy, Alembic, and file-locking libraries inside adapters.
+- Browser startup restores first-party cookie sessions before offering explicit Demo entry. Separate-origin bearer access
+  remains transient. Detached diagnostic views recover accepted work through reads without resubmitting it.
 
 ## [0.7.0]
 

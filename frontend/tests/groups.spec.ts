@@ -1,9 +1,11 @@
+import { routeSavedApi } from './helpers/saved-server';
+import { openDemo } from './helpers/demo';
 import { chooseOption } from './helpers/select';
 import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { DemoClient, demoAnswer, demoContainer, demoSystemStatus } from '../src/demo';
 import { demoGroupAnswer } from '../src/demoGroup';
-import type { TurnInput } from '../src/contracts';
+import type { StartTurn } from '../src/investigation-contracts';
 
 /** Locate optional diagnostic scope in the main workspace on every viewport. */
 async function openScope(page: Page) {
@@ -11,7 +13,7 @@ async function openScope(page: Page) {
 }
 
 test('diagnoses the whole Compose project and preserves its historical group observations', async ({ page }, info) => {
-  await page.goto('/');
+  await openDemo(page);
   await chooseOption(page.getByRole('combobox', { name: 'Language' }), 'en');
   await page.getByRole('textbox').fill('Keep this follow-up draft');
   await chooseOption(await openScope(page), 'compose');
@@ -43,7 +45,7 @@ test('diagnoses the whole Compose project and preserves its historical group obs
 });
 
 test('keeps empty Swarm discovery explicit without calling the model', async ({ page }) => {
-  await page.goto('/');
+  await openDemo(page);
   await chooseOption(page.getByRole('combobox', { name: 'Language' }), 'en');
   await chooseOption(await openScope(page), 'swarm');
   await expect(page.getByText('No groups of this kind were returned.').filter({ visible: true })).toBeVisible();
@@ -53,7 +55,7 @@ test('keeps empty Swarm discovery explicit without calling the model', async ({ 
 for (const motion of ['no-preference', 'reduce'] as const) {
   test(`settles repeated log toggles and preserves evidence with motion preference ${motion}`, async ({ page }) => {
     await page.emulateMedia({ reducedMotion: motion });
-    await page.goto('/');
+    await openDemo(page);
     await chooseOption(page.getByRole('combobox', { name: 'Language' }), 'en');
     const card = page.getByRole('group', { name: 'Container logs', exact: true });
     const toggle = card.getByRole('button', { name: /^(Collapse|Expand) logs$/ });
@@ -110,10 +112,10 @@ test('sends an authenticated exact group target and retries its original scope a
     { ...status, snapshot: second, evidence_ids: ['second-state'], actions: [], recommendation: null },
     { ...logCard, container_id: second.id, evidence_ids: ['second-logs'], logs: { entries, truncated: false } },
   );
-  const inputs: TurnInput[] = [];
-  await page.route('**/api/v1/**', (route) => {
+  const inputs: StartTurn[] = [];
+  await routeSavedApi(page, (route) => {
     const request = route.request();
-    expect(request.headers()['authorization']).toBe('Bearer browser-test-token');
+    expect(request.headers()['authorization']).toBeUndefined();
     const url = new URL(request.url());
     if (url.pathname.endsWith('/hosts')) return route.fulfill({ json: [{ id: 'test-host', name: 'Test host' }] });
     if (url.pathname.endsWith('/system/status'))
@@ -123,8 +125,8 @@ test('sends an authenticated exact group target and retries its original scope a
       expect(url.searchParams.get('kind')).toBe('compose');
       return route.fulfill({ json: groups });
     }
-    expect(url.pathname).toBe('/api/v1/chat/turns');
-    inputs.push(request.postDataJSON() as TurnInput);
+    expect(url.pathname.endsWith('/turns')).toBe(true);
+    inputs.push(request.postDataJSON() as StartTurn);
     const envelope = { schema_version: 1, request_id: 'r', turn_id: `t-${inputs.length}` };
     const events = [
       { ...envelope, type: 'turn.started', session_id: '4a59a145-0037-4934-92e0-f422105583b9' },
@@ -140,7 +142,7 @@ test('sends an authenticated exact group target and retries its original scope a
       body: events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join(''),
     });
   });
-  await page.goto('/');
+  await openDemo(page);
   await chooseOption(page.getByRole('combobox', { name: 'Language' }), 'en');
   if ((page.viewportSize()?.width ?? 1440) <= 560) {
     await page.getByRole('button', { name: 'Open host and containers' }).click();
@@ -154,13 +156,13 @@ test('sends an authenticated exact group target and retries its original scope a
   expect(inputs).toHaveLength(0);
   await page.getByRole('button', { name: 'Diagnose group' }).filter({ visible: true }).click();
   await expect(page.getByRole('button', { name: 'Retry diagnosis' })).toBeVisible();
-  expect(inputs[0]?.group).toEqual({ kind: 'compose', name: 'commerce' });
+  expect(inputs[0]?.target).toEqual({ kind: 'compose', name: 'commerce' });
   await chooseOption(await openScope(page), 'all');
   await page.getByRole('button', { name: 'Retry diagnosis' }).click();
   await expect(page.getByRole('region', { name: 'Group observations' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Group observations' }).getByText('Unhealthy')).toBeVisible();
   expect(inputs).toHaveLength(2);
-  expect(inputs[1]?.group).toEqual(inputs[0]?.group);
+  expect(inputs[1]?.target).toEqual(inputs[0]?.target);
   await expect(page.getByRole('group', { name: 'Container status', exact: true })).toHaveCount(2);
   await expect(page.getByRole('group', { name: 'Container logs', exact: true })).toHaveCount(2);
   const panels = page.locator('.container-evidence');
@@ -197,7 +199,7 @@ test('sends an authenticated exact group target and retries its original scope a
 test('keeps Russian group controls inside the workspace with an accessible consistent action', async ({
   page,
 }, info) => {
-  await page.goto('/');
+  await openDemo(page);
   await chooseOption(page.getByRole('combobox', { name: 'Language' }), 'ru');
   const scope = page.getByRole('region', { name: 'Область диагностики' });
   await chooseOption(scope.getByRole('combobox', { name: 'Область диагностики' }), 'compose');

@@ -2,7 +2,7 @@ import { chooseOption } from '../test-utils/select';
 import '@testing-library/jest-dom/vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
-import App from './App';
+import { renderDemoApp } from '../test-utils/demo';
 import { ActionReview } from './ActionReview';
 import { HostPicker } from './HostPicker';
 import { DemoClient, demoAnswer } from './demo';
@@ -13,7 +13,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('investigation workspace', () => {
+describe('investigation workspace', async () => {
   it('keeps host choice open through discovery and restores focus to the remounted breadcrumb', async () => {
     let finish: (rows: { id: string; name: string }[]) => void = () => {};
     vi.spyOn(DemoClient.prototype, 'hosts').mockImplementation(
@@ -22,7 +22,7 @@ describe('investigation workspace', () => {
           finish = resolve;
         }),
     );
-    render(<App />);
+    await renderDemoApp();
     screen.getByTitle('Workspace: choose host').focus();
     fireEvent.click(screen.getByTitle('Workspace: choose host'));
     expect(screen.getByRole('dialog', { name: 'Choose a host' })).toBeInTheDocument();
@@ -38,7 +38,7 @@ describe('investigation workspace', () => {
     expect(screen.getByTitle('Workspace: choose host')).toHaveFocus();
   });
 
-  it('keeps host selection useful while hosts load, when empty, and after a failed read', () => {
+  it('keeps host selection useful while hosts load, when empty, and after a failed read', async () => {
     const retry = vi.fn();
     const props = { hosts: [], host: '', retry, choose: vi.fn(), close: vi.fn(), connect: vi.fn() };
     const view = render(<HostPicker {...props} loading error="" />);
@@ -63,7 +63,7 @@ describe('investigation workspace', () => {
           }),
       )
       .mockRejectedValueOnce(new Error('Test: Docker is unavailable'));
-    render(<App />);
+    await renderDemoApp();
     const refresh = screen.getByRole('button', { name: 'Refresh container inventory' });
     await waitFor(() => expect(refresh).toBeEnabled());
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Keep my investigation draft' } });
@@ -82,7 +82,7 @@ describe('investigation workspace', () => {
   });
 
   it('opens host selection from the workspace breadcrumb and preserves the current investigation until switching', async () => {
-    render(<App />);
+    await renderDemoApp();
     await screen.findByRole('button', { name: 'Review stop' });
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Keep this question' } });
     fireEvent.click(screen.getByTitle('Workspace: choose host'));
@@ -100,7 +100,7 @@ describe('investigation workspace', () => {
   });
 
   it('does not create container evidence or actions by choosing a scenario on an empty demo host', async () => {
-    render(<App />);
+    await renderDemoApp();
     chooseOption(screen.getByLabelText('Configured host'), 'demo-empty');
     chooseOption(screen.getByLabelText('Demo scenario'), 'oom');
     expect(screen.queryByRole('button', { name: 'Review restart' })).not.toBeInTheDocument();
@@ -117,17 +117,20 @@ describe('investigation workspace', () => {
     const card = answer.widgets.find((row) => row.widget_type === 'container_status')!;
     const action = { ...card.actions[0]!, state: 'running' as const, message: 'Docker accepted the command' };
     const client = new DemoClient();
-    client.action = vi.fn().mockResolvedValue({ ...action, state: 'failed', message: 'Target changed' });
+    client.action = vi
+      .fn()
+      .mockResolvedValueOnce(action)
+      .mockResolvedValue({ ...action, state: 'failed', message: 'Target changed' });
     client.execute = vi.fn();
     render(<ActionReview action={action} client={client} keys={new Map()} demo close={() => {}} update={() => {}} />);
-    expect(screen.getByText('running', { exact: true })).toBeInTheDocument();
+    expect(await screen.findByText('running', { exact: true })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Confirm stop' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Check existing action' }));
     expect(await screen.findByText('failed', { exact: true })).toBeInTheDocument();
     expect(client.execute).not.toHaveBeenCalled();
   });
   it('does not replay a demo result after changing away from and back to a host', async () => {
-    render(<App />);
+    await renderDemoApp();
     chooseOption(screen.getByLabelText('Demo scenario'), 'oom');
     chooseOption(screen.getByLabelText('Configured host'), 'demo-empty');
     chooseOption(screen.getByLabelText('Configured host'), 'demo-eu');
@@ -149,7 +152,7 @@ describe('investigation workspace', () => {
     await waitFor(() => expect(client.execute).toHaveBeenCalledWith(action.id, 'retained-execution-key'));
   });
   it('connects a conclusion reference to a focusable evidence observation', async () => {
-    render(<App />);
+    await renderDemoApp();
     fireEvent.click(await screen.findByRole('button', { name: 'View log evidence' }));
     expect(screen.getByRole('heading', { name: 'Observation' })).toBeInTheDocument();
     expect(screen.getByLabelText('Evidence observation')).toHaveFocus();
@@ -157,16 +160,16 @@ describe('investigation workspace', () => {
   });
 
   it('requires a separate exact-target confirmation before running an action', async () => {
-    render(<App />);
+    await renderDemoApp();
     fireEvent.click(await screen.findByRole('button', { name: 'Review stop' }));
     expect(screen.getByRole('dialog')).toHaveTextContent('1'.repeat(64));
     expect(screen.getByRole('dialog')).toHaveTextContent('demo-eu');
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm stop' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm stop' }));
     await waitFor(() => expect(screen.getByText('succeeded', { exact: true })).toBeInTheDocument());
   });
 
   it('starts an empty separate investigation when the host changes', async () => {
-    render(<App />);
+    await renderDemoApp();
     await screen.findByRole('button', { name: 'Review stop' });
     chooseOption(screen.getByLabelText('Configured host'), 'demo-empty');
     expect(await screen.findByText('Start an investigation')).toBeInTheDocument();

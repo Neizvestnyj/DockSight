@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import App from './App';
+import { renderDemoApp } from '../test-utils/demo';
 import { containerSchema, stackSchema, type Container } from './contracts';
 import { DemoClient, demoAnswer, demoContainer } from './demo';
 import { GroupReport } from './GroupReport';
@@ -50,8 +50,8 @@ function renderCard(
   );
 }
 
-describe('container health observations', () => {
-  it('accepts only reported health states while allowing null and older snapshots without health', () => {
+describe('container health observations', async () => {
+  it('accepts only reported health states while allowing null and older snapshots without health', async () => {
     const snapshot = demoContainer(2, 'demo-eu', '2026-10-27T12:00:00Z');
     expect(containerSchema.safeParse(snapshot).success).toBe(true);
     for (const health of ['starting', 'healthy', 'unhealthy', null])
@@ -60,7 +60,7 @@ describe('container health observations', () => {
       expect(containerSchema.safeParse({ ...snapshot, health }).success).toBe(false);
   });
 
-  it('validates Compose member health without requiring it from older servers', () => {
+  it('validates Compose member health without requiring it from older servers', async () => {
     const member = {
       id: 'a'.repeat(64),
       name: 'api',
@@ -141,7 +141,7 @@ describe('container health observations', () => {
     };
     vi.spyOn(DemoClient.prototype, 'containers').mockResolvedValue([snapshot]);
     vi.spyOn(DemoClient.prototype, 'container').mockResolvedValue(snapshot);
-    render(<App />);
+    await renderDemoApp();
     const row = await screen.findByTitle(snapshot.name);
     expect(within(row).getByText('Unhealthy')).toBeVisible();
     expect(within(row).getByText('Healthcheck')).toBeVisible();
@@ -160,7 +160,7 @@ describe('container health observations', () => {
     };
     const completed = { ...failed, id: 'b'.repeat(64), name: 'batch-completed', exit_code: 0 };
     vi.spyOn(DemoClient.prototype, 'containers').mockResolvedValue([failed, completed]);
-    render(<App />);
+    await renderDemoApp();
     const failedRow = await screen.findByTitle(failed.name);
     expect(within(failedRow).getByText('exited', { exact: true })).toHaveClass('neutral');
     expect(within(failedRow).getByText('Exit code 1')).toHaveClass('negative');
@@ -169,7 +169,7 @@ describe('container health observations', () => {
     expect(within(completedRow).queryByText('Exit code 0')).not.toBeInTheDocument();
   });
 
-  it('retains running totals while showing unhealthy Compose members and unknown health', () => {
+  it('retains running totals while showing unhealthy Compose members and unknown health', async () => {
     render(
       <GroupReport
         evidence={[]}

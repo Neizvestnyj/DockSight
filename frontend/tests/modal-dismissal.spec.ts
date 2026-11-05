@@ -1,3 +1,4 @@
+import { openDemo } from './helpers/demo';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
 /** Press the native backdrop without activating controls underneath the modal. */
@@ -11,7 +12,7 @@ async function clickBackdrop(page: Page, dialog: Locator) {
 
 for (const kind of ['model', 'status', 'host', 'connection', 'about'] as const) {
   test(`dismisses the ${kind} dialog only on an outside click`, async ({ page }) => {
-    await page.goto('/');
+    await openDemo(page);
     await page.getByRole('textbox').fill('Preserve this draft');
     const requests: string[] = [];
     page.on('request', (request) => {
@@ -42,7 +43,7 @@ for (const kind of ['model', 'status', 'host', 'connection', 'about'] as const) 
 }
 
 test('dragging from inside to the backdrop does not dismiss the dialog', async ({ page }) => {
-  await page.goto('/');
+  await openDemo(page);
   const trigger = page.getByRole('button', { name: /Choose model/ });
   await trigger.click();
   const dialog = page.getByRole('dialog');
@@ -59,7 +60,7 @@ test('dragging from inside to the backdrop does not dismiss the dialog', async (
 });
 
 test('dismissing action review preserves its prepared ID without executing the action', async ({ page }) => {
-  await page.goto('/');
+  await openDemo(page);
   const trigger = page.getByRole('button', { name: 'Review stop' });
   await trigger.click();
   const dialog = page.getByRole('dialog');
