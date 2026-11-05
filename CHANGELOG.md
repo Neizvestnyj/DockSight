@@ -52,6 +52,8 @@ Dates record merges into `master`. Version links show the corresponding changes.
 - Architecture checks keep SQLAlchemy, Alembic, and file-locking libraries inside adapters.
 - Browser startup restores first-party cookie sessions before offering explicit Demo entry. Separate-origin bearer access
   remains transient. Detached diagnostic views recover accepted work through reads without resubmitting it.
+- Isolated HTTP-process and production-browser checks cover SQLite crash recovery, reloads, tab conflicts, and saved
+  action protection. Opt-in checks use owned Docker resources and an existing local model for recovery and continuation.
 
 ## [0.7.0]
 
