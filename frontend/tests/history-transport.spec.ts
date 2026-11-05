@@ -2,12 +2,69 @@ import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { savedApi } from './helpers/saved-api';
 import { writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import type { SavedTurn } from '../src/investigation-contracts';
 
 /** Open the existing navigation sheet when the current breakpoint folds the sidebar. */
 async function navigation(page: Page) {
   if ((page.viewportSize()?.width ?? 1440) <= 1100)
     await page.getByRole('button', { name: 'Open host and containers' }).click();
 }
+
+test('focus refresh preserves dirty revision ownership until explicit conflict resolution', async ({ page }) => {
+  const api = await savedApi(page);
+  await page.clock.install();
+  await page.goto('/');
+  await expect(page.getByRole('textbox')).toHaveValue('Acknowledged draft');
+  await page.clock.pauseAt(new Date(Date.now() + 1000));
+  await page.getByRole('textbox').fill('My focus draft');
+  const chat = api.chats[0]!;
+  chat.workspace = { ...chat.workspace, revision: 3, draft: 'Another tab draft' };
+  api.actor.last_investigation_id = api.chats[1]!.id;
+  await page.evaluate(() => dispatchEvent(new Event('focus')));
+  await expect(page.getByText('This chat changed in another tab. Your draft is unsaved.')).toBeVisible();
+  await page.clock.runFor(300);
+  expect(api.workspaceWrites).toEqual([]);
+  await expect(page.getByRole('textbox')).toHaveValue('My focus draft');
+  await expect(page.locator('.query-line h2')).toHaveText('Archived question 1');
+  await page.getByRole('button', { name: 'Use this draft' }).click();
+  await expect(page.getByText('Draft saved', { exact: true })).toBeVisible();
+  expect(api.workspaceWrites).toEqual([{ id: chat.id, expected_revision: 3, draft: 'My focus draft' }]);
+  expect(api.submissions).toEqual([]);
+  expect(api.mutations).toBe(0);
+});
+
+test('focus refresh adopts another tab running turn and Stop cancels it without resubmission', async ({ page }) => {
+  const api = await savedApi(page);
+  await page.clock.install();
+  await page.goto('/');
+  await expect(page.getByRole('textbox')).toHaveValue('Acknowledged draft');
+  await page.clock.pauseAt(new Date(Date.now() + 1000));
+  const chat = api.chats[0]!;
+  const running: SavedTurn = {
+    ...(chat.turns.items[0] as SavedTurn),
+    id: randomUUID(),
+    submission_id: randomUUID(),
+    query: 'Started in another tab',
+    state: 'running',
+    revision: 0,
+    answer: null,
+    finished_at: null,
+  };
+  chat.turns.items.push(running);
+  chat.turn_count++;
+  chat.active_turn_id = running.id;
+  chat.workspace = { ...chat.workspace, revision: 3, draft: '' };
+  await page.evaluate(() => dispatchEvent(new Event('focus')));
+  await expect(page.locator('.query-line h2')).toHaveText('Started in another tab');
+  await expect.poll(() => api.reads.filter((read) => read === `GET /turns/${running.id}/events`)).toHaveLength(1);
+  expect(api.reads.filter((read) => read === `GET /turns/${running.id}`)).toHaveLength(1);
+  await page.getByRole('button', { name: 'Stop diagnosis' }).click();
+  await expect(page.getByRole('heading', { name: 'Diagnosis stopped' })).toBeVisible();
+  expect(api.cancellations).toEqual([running.id]);
+  expect(api.submissions).toEqual([]);
+  expect(api.mutations).toBe(0);
+});
 
 test('bootstraps cookie history before Demo, pages older chats and restores only acknowledged drafts', async ({
   page,

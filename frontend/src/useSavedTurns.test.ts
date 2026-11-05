@@ -62,6 +62,112 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+it('adopts a refreshed running turn once and stops that exact turn without submitting', async () => {
+  const api = new ApiClient();
+  const previous = snapshot();
+  const running = snapshot({ state: 'running', revision: 0, finished_at: null });
+  const reads: string[] = [];
+  const observers: string[] = [];
+  const cancellations: string[] = [];
+  vi.spyOn(api, 'turn').mockImplementation(async (id) => {
+    reads.push(id);
+    return running;
+  });
+  vi.spyOn(api, 'observeTurn').mockImplementation(async (id, _receive, signal) => {
+    observers.push(id);
+    await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
+  });
+  vi.spyOn(api, 'cancelTurn').mockImplementation(async (id) => {
+    cancellations.push(id);
+    return { ...running, state: 'stopped', revision: 1 };
+  });
+  const post = vi.spyOn(api, 'startTurn');
+  const { result, rerender } = renderHook(({ saved }) => useSavedTurns(api, 'local', undefined, saved), {
+    initialProps: { saved: context([previous]) },
+  });
+  await act(async () => {
+    rerender({ saved: context([previous, running]) });
+  });
+  await waitFor(() => expect(result.current.running).toBe(true));
+  await act(async () => {
+    rerender({ saved: context([previous, running]) });
+    await result.current.stop();
+  });
+  expect({ reads, observers, cancellations }).toEqual({
+    reads: [running.id],
+    observers: [running.id],
+    cancellations: [running.id],
+  });
+  expect(result.current.running).toBe(false);
+  expect(post).not.toHaveBeenCalled();
+});
+
+it('keeps one observer when local acceptance refreshes the active turn identity', async () => {
+  const api = new ApiClient();
+  const running = snapshot({ state: 'running', revision: 0, finished_at: null });
+  const saved = context([]);
+  const post = vi.spyOn(api, 'startTurn').mockResolvedValue({ snapshot: running, created: true });
+  const reads = vi.spyOn(api, 'turn').mockResolvedValue(running);
+  const observers = vi.spyOn(api, 'observeTurn').mockImplementation(async (_id, _receive, signal) => {
+    await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
+  });
+  const { result, rerender } = renderHook(({ current }) => useSavedTurns(api, 'local', undefined, current), {
+    initialProps: { current: saved },
+  });
+  saved.refresh = async () => {
+    rerender({ current: { ...saved, detail: context([running]).detail } });
+  };
+  await act(async () => {
+    await result.current.run('Original question');
+  });
+  expect(post).toHaveBeenCalledTimes(1);
+  expect(reads).toHaveBeenCalledTimes(1);
+  expect(observers).toHaveBeenCalledTimes(1);
+  expect(result.current.running).toBe(true);
+});
+
+it('keeps cancellation ownership on a newer refreshed turn when an older Stop response arrives late', async () => {
+  const api = new ApiClient();
+  const first = snapshot({ state: 'running', revision: 0, finished_at: null });
+  const second = snapshot({ state: 'running', revision: 0, finished_at: null });
+  const reads: string[] = [];
+  vi.spyOn(api, 'turn').mockImplementation(async (id) => {
+    reads.push(id);
+    return id === first.id ? first : second;
+  });
+  vi.spyOn(api, 'observeTurn').mockImplementation(async (_id, _receive, signal) => {
+    await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
+  });
+  let finish: (row: SavedTurn) => void = () => {};
+  const cancellations: string[] = [];
+  vi.spyOn(api, 'cancelTurn').mockImplementation(async (id) => {
+    cancellations.push(id);
+    if (id === first.id)
+      return new Promise((resolve) => {
+        finish = resolve;
+      });
+    return { ...second, state: 'stopped', revision: 1 };
+  });
+  const { result, rerender } = renderHook(({ saved }) => useSavedTurns(api, 'local', undefined, saved), {
+    initialProps: { saved: context([first]) },
+  });
+  await waitFor(() => expect(reads).toEqual([first.id]));
+  let stopping: Promise<void>;
+  act(() => {
+    stopping = result.current.stop();
+  });
+  await act(async () => {
+    rerender({ saved: context([{ ...first, state: 'stopped', revision: 1 }, second]) });
+  });
+  await waitFor(() => expect(reads).toEqual([first.id, second.id]));
+  await act(async () => {
+    finish({ ...first, state: 'stopped', revision: 1 });
+    await stopping!;
+    await result.current.stop();
+  });
+  expect(cancellations).toEqual([first.id, second.id]);
+});
+
 it('preserves server-authored admission errors even when their text matches local copy', async () => {
   const api = new ApiClient();
   vi.spyOn(api, 'startTurn').mockRejectedValue(

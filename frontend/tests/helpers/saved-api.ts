@@ -63,6 +63,8 @@ export async function savedApi(page: Page) {
     mutations: 0,
     reads: [] as string[],
     signedIn: true,
+    workspaceWrites: [] as { id: string; expected_revision: number; draft?: string }[],
+    cancellations: [] as string[],
   };
   await page.route('**/api/v1/**', async (route) => {
     const request = route.request();
@@ -126,6 +128,7 @@ export async function savedApi(page: Page) {
     const chat = chats.find((row) => row.id === chatId);
     if (chat && path.endsWith('/workspace')) {
       const { expected_revision, ...patch } = request.postDataJSON();
+      state.workspaceWrites.push({ id: chat.id, expected_revision, ...patch });
       if (state.conflictNext || expected_revision !== chat.workspace.revision) {
         state.conflictNext = false;
         chat.workspace = { ...chat.workspace, revision: chat.workspace.revision + 1, draft: 'Another tab draft' };
@@ -165,6 +168,26 @@ export async function savedApi(page: Page) {
       return route.fulfill({ status: 204 });
     }
     if (chat) return route.fulfill({ json: chat });
+    if (path.startsWith('/turns/')) {
+      const turnId = path.split('/')[2]!;
+      const owner = chats.find((row) => row.turns.items.some((turn) => turn.id === turnId));
+      const turn = owner?.turns.items.find((row): row is SavedTurn => row.id === turnId && 'state' in row);
+      if (!turn)
+        return route.fulfill({ status: 404, json: { code: 'history_not_found', message: 'History not found' } });
+      if (path.endsWith('/cancel')) {
+        state.cancellations.push(turnId);
+        turn.state = 'stopped';
+        turn.revision++;
+        turn.finished_at = now;
+        owner!.active_turn_id = null;
+      }
+      if (path.endsWith('/events'))
+        return route.fulfill({
+          contentType: 'text/event-stream',
+          body: `event: turn.snapshot\nid: ${turn.revision}\ndata: ${JSON.stringify(turn)}\n\n`,
+        });
+      return route.fulfill({ json: turn });
+    }
     if (path.includes('/actions/') && method === 'GET') return route.fulfill({ json: state.action });
     if (path.endsWith('/execute')) {
       state.mutations++;

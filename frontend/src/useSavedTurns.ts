@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiError } from './api';
 import { targetKey, type Answer, type DiagnosticTarget, type Transport } from './contracts';
 import type { ModelSelection } from './model-contracts';
@@ -34,8 +34,10 @@ export function useSavedTurns(client: Transport, host: string, selection?: Model
     latest.current = saved;
   }, [saved]);
   const runningId = useRef(saved?.detail?.active_turn_id ?? null);
+  const observedId = useRef<string | null>(null);
   const submittingRef = useRef(false);
   const id = saved?.detail?.id;
+  const refreshedActiveId = saved?.detail?.active_turn_id;
 
   useEffect(() => {
     const incoming = saved?.detail?.turns.items;
@@ -66,81 +68,112 @@ export function useSavedTurns(client: Transport, host: string, selection?: Model
   }, [saved?.detail?.turns.items]);
 
   /** Reject another host/chat and stale revisions before exposing a committed snapshot. */
-  function receive(snapshot: SavedTurn) {
-    if (snapshot.investigation_id !== id || snapshot.host !== host)
-      throw new Error('Turn response is outside the selected scope.');
-    runningId.current = snapshot.state === 'running' ? snapshot.id : null;
-    setSnapshots((previous) => {
-      const existing = previous.find((row) => row.id === snapshot.id);
-      if (existing && 'revision' in existing && existing.revision >= snapshot.revision) return previous;
-      return existing ? previous.map((row) => (row.id === snapshot.id ? snapshot : row)) : [...previous, snapshot];
-    });
-  }
+  const receive = useCallback(
+    (snapshot: SavedTurn) => {
+      if (snapshot.investigation_id !== id || snapshot.host !== host)
+        throw new Error('Turn response is outside the selected scope.');
+      if (snapshot.state === 'running') runningId.current = snapshot.id;
+      else if (runningId.current === snapshot.id) runningId.current = null;
+      setSnapshots((previous) => {
+        const existing = previous.find((row) => row.id === snapshot.id);
+        if (existing && 'revision' in existing && existing.revision >= snapshot.revision) return previous;
+        return existing ? previous.map((row) => (row.id === snapshot.id ? snapshot : row)) : [...previous, snapshot];
+      });
+    },
+    [host, id],
+  );
 
   /** Read and observe the same turn with bounded backoff while visible and online. */
-  async function observe(turnId: string, controller: AbortController, epoch: number) {
-    if (!history) return;
-    let failures = 0;
-    while (!controller.signal.aborted && generation.current === epoch) {
-      try {
-        await available(controller.signal);
-        const current = await history.turn(turnId, controller.signal);
-        if (controller.signal.aborted || generation.current !== epoch) return;
-        receive(current);
-        setError('');
-        if (current.state !== 'running') {
-          latest.current?.changed();
-          return;
-        }
-        setObserving(true);
-        await history.observeTurn(
-          turnId,
-          (snapshot) => {
-            if (!controller.signal.aborted && generation.current === epoch) receive(snapshot);
-          },
-          controller.signal,
-        );
-        if (!runningId.current) {
-          latest.current?.changed();
-          return;
-        }
-      } catch (failure) {
-        if (controller.signal.aborted || generation.current !== epoch) return;
-        setObserving(false);
-        setErrorSource('client');
-        if (failure instanceof ApiError && [401, 403, 404].includes(failure.httpStatus ?? 0)) {
-          setError(
-            failure.httpStatus === 404
-              ? 'This saved turn is unavailable.'
-              : 'Sign in again to observe this saved turn.',
+  const observe = useCallback(
+    async (turnId: string, controller: AbortController, epoch: number) => {
+      if (!history) return;
+      let failures = 0;
+      while (!controller.signal.aborted && generation.current === epoch) {
+        try {
+          await available(controller.signal);
+          const current = await history.turn(turnId, controller.signal);
+          if (controller.signal.aborted || generation.current !== epoch) return;
+          receive(current);
+          setError('');
+          if (current.state !== 'running') {
+            latest.current?.changed();
+            return;
+          }
+          setObserving(true);
+          await history.observeTurn(
+            turnId,
+            (snapshot) => {
+              if (!controller.signal.aborted && generation.current === epoch) receive(snapshot);
+            },
+            controller.signal,
           );
+          if (!runningId.current) {
+            latest.current?.changed();
+            return;
+          }
+        } catch (failure) {
+          if (controller.signal.aborted || generation.current !== epoch) return;
+          setObserving(false);
+          setErrorSource('client');
+          if (failure instanceof ApiError && [401, 403, 404].includes(failure.httpStatus ?? 0)) {
+            setError(
+              failure.httpStatus === 404
+                ? 'This saved turn is unavailable.'
+                : 'Sign in again to observe this saved turn.',
+            );
+            return;
+          }
+          setError('Observation disconnected. Reconnecting to the saved turn.');
+        }
+        try {
+          await delay([1000, 2000, 4000, 8000, 10_000][Math.min(failures++, 4)]!, controller.signal);
+        } catch {
           return;
         }
-        setError('Observation disconnected. Reconnecting to the saved turn.');
       }
-      try {
-        await delay([1000, 2000, 4000, 8000, 10_000][Math.min(failures++, 4)]!, controller.signal);
-      } catch {
-        return;
-      }
-    }
-  }
+    },
+    [history, receive],
+  );
 
   useEffect(() => {
     if (!history || !id || saved?.enabled === false) return;
     const controller = new AbortController();
     active.current = controller;
     const epoch = ++generation.current;
-    const running = latest.current?.detail?.active_turn_id;
+    const running = latest.current?.detail?.active_turn_id ?? null;
+    runningId.current = running;
+    observedId.current = running;
     if (running) void observe(running, controller, epoch);
     return () => {
       generation.current = epoch + 1;
       controller.abort();
       active.current?.abort();
     };
-    // The enclosing workspace remounts for each account, host and chat selection.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [history, id, host, saved?.enabled]);
+  }, [history, id, host, saved?.enabled, observe]);
+
+  useEffect(() => {
+    if (!history || !id || saved?.enabled === false || submitting) return;
+    if (!refreshedActiveId) {
+      const terminal = snapshots.find(
+        (row) => row.id === runningId.current && 'state' in row && row.state !== 'running',
+      );
+      if (terminal) {
+        runningId.current = null;
+        if (observedId.current === terminal.id) active.current?.abort();
+        observedId.current = null;
+      }
+      return;
+    }
+    if (observedId.current === refreshedActiveId) return;
+    const known = snapshots.find((row) => row.id === refreshedActiveId);
+    if (known && 'state' in known && known.state !== 'running') return;
+    active.current?.abort();
+    const controller = new AbortController();
+    active.current = controller;
+    runningId.current = refreshedActiveId;
+    observedId.current = refreshedActiveId;
+    void observe(refreshedActiveId, controller, generation.current);
+  }, [history, id, saved?.enabled, submitting, refreshedActiveId, snapshots, observe]);
 
   /** Admit a question or exact saved clarification once, recovering a lost response through reads. */
   async function submit(input: Omit<StartTurn, 'expected_revision'>, preservedDraft?: string) {
@@ -178,7 +211,10 @@ export function useSavedTurns(client: Transport, host: string, selection?: Model
       if (generation.current !== epoch) return;
       if (preservedDraft) await saved.restoreDraft?.(preservedDraft);
       saved.changed();
-      if (snapshot.state === 'running') void observe(snapshot.id, controller, epoch);
+      if (snapshot.state === 'running' && observedId.current !== snapshot.id) {
+        observedId.current = snapshot.id;
+        void observe(snapshot.id, controller, epoch);
+      }
     } catch (failure) {
       if (generation.current !== epoch) return;
       setErrorSource(failure instanceof ApiError ? 'server' : 'client');
@@ -229,12 +265,13 @@ export function useSavedTurns(client: Transport, host: string, selection?: Model
   /** Stop explicitly, retaining the authoritative terminal state returned by the server. */
   async function stop() {
     if (!history || !runningId.current) return;
+    const target = runningId.current;
     const epoch = generation.current;
     try {
-      const result = await history.cancelTurn(runningId.current);
+      const result = await history.cancelTurn(target);
       if (generation.current === epoch) {
         receive(result);
-        active.current?.abort();
+        if (observedId.current === target) active.current?.abort();
         saved?.changed();
       }
     } catch {

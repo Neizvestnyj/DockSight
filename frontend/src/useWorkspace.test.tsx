@@ -23,6 +23,80 @@ afterEach(() => {
 });
 
 describe('revisioned workspace', () => {
+  it('settles its own in-flight save before comparing a refreshed workspace revision', async () => {
+    const api = new ApiClient();
+    vi.spyOn(api, 'actorWorkspace').mockResolvedValue({
+      revision: 0,
+      last_investigation_id: id,
+      host: 'local',
+      model: null,
+    });
+    const own = { ...detail, workspace: { ...empty, revision: 1, draft: 'My local draft' } };
+    vi.spyOn(api, 'investigation').mockResolvedValueOnce(detail).mockResolvedValue(own);
+    let acknowledge: (value: typeof empty) => void = () => {};
+    vi.spyOn(api, 'saveWorkspace').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          acknowledge = resolve;
+        }),
+    );
+    const { result } = renderHook(() => useWorkspace(api));
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    let saving: Promise<boolean>;
+    let refreshing: Promise<void>;
+    act(() => {
+      result.current.setDraft('My local draft');
+      saving = result.current.flush();
+      refreshing = result.current.refresh();
+    });
+    await act(async () => {
+      acknowledge(own.workspace);
+      await saving!;
+      await refreshing!;
+    });
+    expect(result.current.revision()).toBe(1);
+    expect(result.current.saveState).toBe('saved');
+    expect(result.current.draft).toBe('My local draft');
+  });
+
+  it('requires explicit conflict resolution when refresh advances a dirty draft revision', async () => {
+    const api = new ApiClient();
+    vi.spyOn(api, 'actorWorkspace').mockResolvedValue({
+      revision: 0,
+      last_investigation_id: id,
+      host: 'local',
+      model: null,
+    });
+    const remote = { ...detail, workspace: { ...empty, revision: 1, draft: 'Another tab draft' } };
+    vi.spyOn(api, 'investigation').mockResolvedValueOnce(detail).mockResolvedValue(remote);
+    const writes: string[] = [];
+    vi.spyOn(api, 'saveWorkspace').mockImplementation(async (_id, revision, changes) => {
+      writes.push(`${revision}:${changes.draft}`);
+      return { ...remote.workspace, ...changes, revision: revision + 1 };
+    });
+    const { result } = renderHook(() => useWorkspace(api));
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    vi.useFakeTimers();
+    act(() => result.current.setDraft('My local draft'));
+    await act(async () => {
+      await result.current.refresh();
+      await result.current.flush();
+    });
+    expect(writes).toEqual([]);
+    expect(result.current.revision()).toBe(0);
+    expect(result.current.draft).toBe('My local draft');
+    expect(result.current.saveState).toBe('conflict');
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    expect(writes).toEqual([]);
+    await act(async () => {
+      await result.current.useDraft();
+    });
+    expect(writes).toEqual(['1:My local draft']);
+    expect(result.current.saveState).toBe('saved');
+  });
+
   it('debounces drafts by 300 milliseconds and serializes a second edit behind acknowledgement', async () => {
     const api = new ApiClient();
     vi.spyOn(api, 'actorWorkspace').mockResolvedValue({

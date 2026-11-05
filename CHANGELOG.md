@@ -31,6 +31,8 @@ Dates record merges into `master`. Version links show the corresponding changes.
 
 ### Fixed
 
+- Focus refresh preserves unsaved draft ownership and observes accepted work started in another tab.
+  Stop addresses the current saved turn without resubmitting work or detaching a newer turn after a late response.
 - Active browser sessions remain refreshable at the supported minimum idle timeout. Session maintenance removes only
   expired or revoked browser records in batches of at most 100 and preserves saved history and action protection.
 - Repeated Stop and shutdown requests share diagnostic cancellation without interrupting terminal cleanup or leaving

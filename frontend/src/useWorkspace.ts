@@ -228,13 +228,19 @@ export function useWorkspace(history?: HistoryTransport) {
     const epoch = generation.current;
     try {
       const result = await history.investigation(id, new AbortController().signal);
+      if (writing.current) await writing.current;
       if (generation.current !== epoch || current.current?.id !== id) return;
+      const acknowledged = current.current.workspace;
+      const dirty = Boolean(Object.keys(pending.current).length || conflict.current);
+      if (dirty && result.workspace.revision > acknowledged.revision) {
+        if (!conflict.current || result.workspace.revision >= conflict.current.revision)
+          conflict.current = result.workspace;
+        clearTimeout(timer.current);
+        setSaveState('conflict');
+      }
       current.current = {
         ...result,
-        workspace:
-          result.workspace.revision >= current.current.workspace.revision
-            ? result.workspace
-            : current.current.workspace,
+        workspace: dirty || result.workspace.revision < acknowledged.revision ? acknowledged : result.workspace,
       };
       setDetail(current.current);
       if (!Object.keys(pending.current).length && !writing.current && !conflict.current)
