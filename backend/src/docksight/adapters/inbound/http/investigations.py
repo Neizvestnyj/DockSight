@@ -62,8 +62,7 @@ def build_investigations_router(history: Investigations, runner: TurnRunner, aut
     @router.get("/investigations/{investigation_id}")
     async def detail(investigation_id: UUID, actor: Actor) -> InvestigationDetail:
         """Restore owned metadata, acknowledged workspace, and newest display turns."""
-        saved = await history.read(actor, str(investigation_id))
-        turns = await history.turns(actor, str(investigation_id))
+        saved, turns = await history.snapshot(actor, str(investigation_id))
         return InvestigationDetail(**saved.model_dump(), turns=turns)
 
     @router.get("/investigations/{investigation_id}/turns")

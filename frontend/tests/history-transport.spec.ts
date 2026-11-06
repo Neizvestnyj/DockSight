@@ -11,6 +11,84 @@ async function navigation(page: Page) {
     await page.getByRole('button', { name: 'Open host and containers' }).click();
 }
 
+test('saves pending drafts before same-row, other-chat and new-chat navigation', async ({ page }) => {
+  const api = await savedApi(page);
+  await page.clock.install();
+  await page.goto('/');
+  await expect(page.getByRole('textbox')).toHaveValue('Acknowledged draft');
+  await page.clock.pauseAt(new Date(Date.now() + 1000));
+  const first = api.chats[0]!;
+  await page.getByRole('textbox').fill('Immediate navigation draft');
+  await navigation(page);
+  await page
+    .getByRole('button', { name: /Archived question 1 local/, exact: false })
+    .first()
+    .click();
+  await expect(page.getByRole('textbox')).toHaveValue('Immediate navigation draft');
+  await expect.poll(() => first.workspace.draft).toBe('Immediate navigation draft');
+  await page.getByRole('textbox').fill('Second immediate draft');
+  await navigation(page);
+  await page.getByRole('button', { name: /Archived question 2 local/ }).click();
+  await expect(page.locator('.query-line h2')).toHaveText('Archived question 2');
+  expect(first.workspace.draft).toBe('Second immediate draft');
+  const second = api.chats[1]!;
+  await page.getByRole('textbox').fill('Before new investigation');
+  await navigation(page);
+  await page.locator('.workspace-nav:visible').getByRole('button', { name: 'New investigation', exact: true }).click();
+  await expect(page.getByRole('textbox')).toHaveValue('');
+  expect(second.workspace.draft).toBe('Before new investigation');
+  expect(api.submissions).toEqual([]);
+});
+
+test('retains a conflicted draft when selecting another chat or new investigation', async ({ page }) => {
+  const api = await savedApi(page);
+  await page.goto('/');
+  await expect(page.getByRole('textbox')).toHaveValue('Acknowledged draft');
+  api.conflictNext = true;
+  await page.getByRole('textbox').fill('Retain this conflict');
+  await expect(page.getByText('This chat changed in another tab. Your draft is unsaved.')).toBeVisible();
+  await navigation(page);
+  await page.getByRole('button', { name: /Archived question 2 local/ }).click();
+  await expect(page.locator('.query-line h2')).toHaveText('Archived question 1');
+  await expect(page.getByRole('textbox')).toHaveValue('Retain this conflict');
+  await navigation(page);
+  await page.locator('.workspace-nav:visible').getByRole('button', { name: 'New investigation', exact: true }).click();
+  await expect(page.getByRole('textbox')).toHaveValue('Retain this conflict');
+  await expect(page.getByRole('button', { name: 'Use this draft' })).toBeVisible();
+});
+
+test('remembers a removed-host archive on reload while continuation stays unavailable', async ({ page }) => {
+  const api = await savedApi(page);
+  api.chats[1]!.host = 'removed';
+  (api.chats[1]!.turns.items[0] as SavedTurn).host = 'removed';
+  await page.goto('/');
+  await expect(page.getByRole('textbox')).toHaveValue('Acknowledged draft');
+  await navigation(page);
+  await page.getByRole('button', { name: /Archived question 2 removed/ }).click();
+  await expect(page.locator('.query-line h2')).toHaveText('Archived question 2');
+  expect(api.actor.host).toBe('local');
+  await page.reload();
+  await expect(page.locator('.query-line h2')).toHaveText('Archived question 2');
+  await page.getByRole('textbox').fill('Cannot continue removed host');
+  await expect(page.getByRole('button', { name: 'Investigate', exact: true })).toBeDisabled();
+  expect(api.submissions).toEqual([]);
+});
+
+test('keeps another preparation unavailable when its authoritative target read is blocked', async ({ page }) => {
+  const api = await savedApi(page);
+  await page.route('**/api/v1/actions/*', (route) =>
+    route.fulfill({
+      status: 409,
+      json: { code: 'target_indeterminate', message: 'Inspect Docker and reconcile the previous action' },
+    }),
+  );
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Review stop' }).click();
+  await expect(page.getByRole('dialog')).toContainText('This saved action is unavailable.');
+  await expect(page.getByRole('button', { name: 'Confirm stop' })).toHaveCount(0);
+  expect(api.mutations).toBe(0);
+});
+
 test('focus refresh preserves dirty revision ownership until explicit conflict resolution', async ({ page }) => {
   const api = await savedApi(page);
   await page.clock.install();

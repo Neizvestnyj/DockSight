@@ -2,6 +2,8 @@ import asyncio
 from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable
 from datetime import UTC, datetime
 
+from pydantic import ValidationError
+
 from docksight.application.events import TurnEvent
 from docksight.application.investigations.contracts import (
     AcceptedTurn,
@@ -16,6 +18,7 @@ from docksight.application.investigations.errors import StorageError
 from docksight.application.investigations.lifecycle import conflict, input_digest
 from docksight.application.investigations.observations import TurnObservations
 from docksight.application.investigations.ports import DiagnosticLease, SelectedDiagnostics, TurnStore
+from docksight.application.investigations.sanitization import sanitized_target
 from docksight.application.investigations.service import Investigations
 from docksight.application.model_catalog import ModelSelection
 from docksight.application.redaction import Redactor
@@ -104,13 +107,18 @@ class TurnRunner:
     def _redacted(self, command: StartTurn, identity: ModelSelection | None) -> StartTurn:
         """Detach sanitized input while retaining the separately computed original logical digest."""
         submitted = command.root
-        updates: dict[str, object] = {"model": identity}
+        updates: dict[str, object] = {"model": identity, "target": sanitized_target(submitted.target, self.redactor)}
         if isinstance(submitted, QuestionTurn):
             query = submitted.query.strip()
             if not query or len(query) > 4000:
                 raise DockSightError("invalid_query", "Query must contain 1-4000 characters", ErrorKind.VALIDATION)
             updates["query"] = self.redactor.text(query)
-        return StartTurn(submitted.model_copy(update=updates, deep=True))
+        try:
+            return StartTurn.model_validate(submitted.model_dump() | updates)
+        except ValidationError as error:
+            raise DockSightError(
+                "invalid_query", "Sanitized query exceeds supported bounds", ErrorKind.VALIDATION
+            ) from error
 
     async def start(self, turn_id: str) -> None:
         """Transfer one accepted lease to a retained worker or durably fail registration."""
@@ -177,6 +185,7 @@ class TurnRunner:
                 turn_id=saved.id,
                 investigation_id=saved.investigation_id,
                 actor=saved.actor,
+                request_id=saved.request_id,
                 host=saved.host,
                 query=saved.query,
                 target=saved.target,

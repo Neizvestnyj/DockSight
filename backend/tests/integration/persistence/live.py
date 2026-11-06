@@ -31,7 +31,14 @@ def create(directory: Path) -> dict[str, Any]:
             labels={LABEL: owner},
         )
         metadata = {"id": container.id, "owner": owner, "name": container.name}
-        (directory / "live.json").write_text(json.dumps(metadata), encoding="utf-8")
+        try:
+            (directory / "live.json").write_text(json.dumps(metadata), encoding="utf-8")
+        except OSError as error:
+            container.reload()
+            if container.id != metadata["id"] or container.labels.get(LABEL) != owner:
+                raise AssertionError("Docker resource is outside this fixture's ownership") from error
+            container.remove(force=True)
+            raise
         return metadata
     finally:
         client.close()

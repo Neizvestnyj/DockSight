@@ -5,7 +5,7 @@ from pydantic import TypeAdapter
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
-from docksight.adapters.outbound.persistence.codec import decode_turn, decode_value, utc_text
+from docksight.adapters.outbound.persistence.codec import decode_value, utc_text
 from docksight.adapters.outbound.persistence.database import PersistentDatabase
 from docksight.adapters.outbound.persistence.investigations import (
     SQLiteInvestigations,
@@ -13,6 +13,7 @@ from docksight.adapters.outbound.persistence.investigations import (
     archive_view,
     owned,
     save_actor_workspace,
+    validated_turn,
 )
 from docksight.adapters.outbound.persistence.rows import (
     ActiveTurnScopeRow,
@@ -68,17 +69,7 @@ def owned_turn(session: Session, actor: str, identity: str) -> tuple[TurnRow, Sa
     if row is None or row.actor != actor:
         raise not_found()
     owned(session, actor, row.investigation_id)
-    saved = decode_turn(row.snapshot)
-    if (saved.id, saved.actor, saved.host, saved.investigation_id, saved.state, saved.revision) != (
-        row.id,
-        row.actor,
-        row.host,
-        row.investigation_id,
-        row.state,
-        row.revision,
-    ):
-        raise HistoryError("history_unsupported", "Saved turn metadata is inconsistent", ErrorKind.CONFLICT)
-    return row, saved
+    return row, validated_turn(row)
 
 
 def save_turn(row: TurnRow, saved: SavedTurn, maximum: int = 2097152) -> None:

@@ -16,6 +16,7 @@ from docksight.application.investigations.runner import TurnRunner
 from docksight.application.investigations.service import Investigations
 from docksight.application.model_catalog import CatalogView, ModelSelection, ProvidersView
 from docksight.application.model_choices import ModelChoices
+from docksight.application.ports.state import ActionOrigin
 from docksight.application.queries import RuntimeQueries
 from docksight.application.system_status import SystemStatus, SystemStatusView
 from docksight.application.views.registry import widget_schema
@@ -121,9 +122,11 @@ def build_router(
         return await queries.stacks(host, kind)
 
     @router.post("/actions", status_code=201, tags=["Actions"])
-    async def prepare(action: ActionPrepare, actor: Actor) -> ActionView:
+    async def prepare(action: ActionPrepare, actor: Actor, request: Request) -> ActionView:
         """Prepare an expiring action bound to the authenticated actor."""
-        return await actions.prepare(actor, action.host, action.container_id, action.operation)
+        return await actions.prepare(
+            actor, action.host, action.container_id, action.operation, ActionOrigin(request.state.request_id)
+        )
 
     @router.get("/actions/{action_id}", tags=["Actions"])
     async def action_state(action_id: UUID, actor: Actor) -> ActionView:

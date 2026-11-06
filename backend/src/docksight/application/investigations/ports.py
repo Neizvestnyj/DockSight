@@ -38,6 +38,10 @@ class InvestigationArchive(Protocol):
         """Read owned metadata and the acknowledged workspace."""
         ...
 
+    async def snapshot(self, actor: str, investigation_id: str) -> tuple[InvestigationView, TurnPage]:
+        """Read owned metadata and its initial display page from one archive snapshot."""
+        ...
+
     async def turns(self, actor: str, investigation_id: str, limit: int = 20, cursor: str | None = None) -> TurnPage:
         """Return bounded chronological turn pages scoped to this actor and investigation."""
         ...

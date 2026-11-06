@@ -13,6 +13,7 @@ from docksight.application.action_reconciliation import validate_reconciliation
 from docksight.application.investigations.errors import HistoryError
 from docksight.application.ports.state import (
     ActionClaim,
+    ActionOrigin,
     BlockedTarget,
     ReconcileTarget,
     ReconciliationObservation,
@@ -64,7 +65,12 @@ def _validate_lifecycle(row: PreparedActionRow, action: PreparedAction) -> None:
 
 
 def append_audit(
-    session: Session, event: str, action: PreparedAction, now: datetime, extra: JsonObject | None = None
+    session: Session,
+    event: str,
+    action: PreparedAction,
+    now: datetime,
+    extra: JsonObject | None = None,
+    origin: ActionOrigin | None = None,
 ) -> None:
     """Append authoritative safe lifecycle data in the same transaction as state and guards."""
     fields: JsonObject = {
@@ -74,12 +80,23 @@ def append_audit(
         "state": action.state.value,
         **(extra or {}),
     }
+    if origin is None:
+        prepared = session.scalar(
+            select(ActionAuditRow)
+            .where(ActionAuditRow.action_id == action.id, ActionAuditRow.event == "action.prepared")
+            .order_by(ActionAuditRow.id)
+            .limit(1)
+        )
+        if prepared is not None and prepared.request_id is not None:
+            origin = ActionOrigin(prepared.request_id, prepared.turn_id)
     session.add(
         ActionAuditRow(
             event=event,
             occurred_at=utc_text(now),
             actor=str(fields.pop("actor", action.actor)),
             action_id=action.id,
+            request_id=origin.request_id if origin else None,
+            turn_id=origin.turn_id if origin else None,
             fields=json.dumps(fields, separators=(",", ":")),
         )
     )
@@ -184,7 +201,7 @@ class SQLiteActions:
         self.database = database
         self.capacity = capacity
 
-    async def add(self, action: PreparedAction, now: datetime) -> StoredAction:
+    async def add(self, action: PreparedAction, now: datetime, origin: ActionOrigin | None = None) -> StoredAction:
         """Save one validated preparation and audit without deleting execution claims."""
         encoded = encode_action(action)
         action = decode_action(encoded)
@@ -205,14 +222,30 @@ class SQLiteActions:
                     snapshot=encoded,
                 )
             )
-            append_audit(session, "action.prepared", action, now)
+            append_audit(session, "action.prepared", action, now, origin=origin)
             return StoredAction(decode_action(encoded), 0, "prepared")
 
         return await self.database.transaction(add, write=True)
 
     async def get(self, action_id: str, actor: str, now: datetime) -> StoredAction:
         """Return an owned detached snapshot after persisting any due preparation expiry."""
-        current = await self.database.transaction(lambda session: hydrate(_read(session, action_id, actor)))
+
+        def read(session: Session) -> StoredAction:
+            """Withhold confirmation of unexpired preparations on a durably blocked exact target."""
+            stored = hydrate(_read(session, action_id, actor))
+            guard = session.get(TargetGuardRow, (stored.action.host, stored.action.container_id))
+            if (
+                stored.action.state == ActionState.PREPARED
+                and now < stored.action.expires_at
+                and guard
+                and guard.blocked_action_id
+            ):
+                raise DockSightError(
+                    "target_indeterminate", "Inspect Docker and reconcile the previous action", ErrorKind.CONFLICT
+                )
+            return stored
+
+        current = await self.database.transaction(read)
         if current.action.state != ActionState.PREPARED or now < current.action.expires_at:
             return current
         return await self.database.transaction(

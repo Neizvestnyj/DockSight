@@ -19,7 +19,7 @@ from docksight.adapters.outbound.persistence.recovery import recover_actions
 from docksight.adapters.outbound.persistence.rows import ActionAuditRow
 from docksight.application.actions import Actions
 from docksight.application.investigations.errors import StorageError
-from docksight.application.ports.state import ActionClaim, ActionStore
+from docksight.application.ports.state import ActionClaim, ActionOrigin, ActionStore
 from docksight.domain.actions import ActionState, PreparedAction
 from docksight.domain.diagnostics import JsonObject
 from docksight.domain.errors import DockSightError
@@ -237,10 +237,15 @@ async def test_real_sqlite_dispatch_commit_settles_timeout_without_sending_late_
     original = persistence.append_audit
 
     def paused_audit(
-        session: Session, event: str, action: PreparedAction, now: datetime, extra: JsonObject | None = None
+        session: Session,
+        event: str,
+        action: PreparedAction,
+        now: datetime,
+        extra: JsonObject | None = None,
+        origin: ActionOrigin | None = None,
     ) -> None:
         """Hold the accepted marker write until its awaiting workflow deadline has elapsed."""
-        original(session, event, action, now, extra)
+        original(session, event, action, now, extra, origin)
         if event == "action.dispatching":
             entered.set()
             assert release.wait(5)

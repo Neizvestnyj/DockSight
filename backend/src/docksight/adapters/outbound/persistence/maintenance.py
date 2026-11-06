@@ -53,15 +53,25 @@ class StateMaintenance:
         sources = (source, journal) if journal.exists() else (source,)
         targets = tuple(destination if item == source else Path(str(destination) + "-journal") for item in sources)
         protected = {source, journal, Path(str(source) + ".lock")}
-        if any(target.exists() or target in protected for target in targets):
+        members = (destination, Path(str(destination) + "-journal"))
+        if any(target.exists() or target.is_symlink() or target in protected for target in members):
             raise StorageError("storage_backup_exists", "Backup destination must not exist")
-        try:
-            for item, target in zip(sources, targets, strict=True):
-                with item.open("rb") as incoming, target.open("xb") as outgoing:
-                    shutil.copyfileobj(incoming, outgoing)
-            return targets
-        except OSError as error:
-            raise StorageError("storage_backup_failed", "Persistent state backup failed") from error
+        return _copy_backup(sources, targets)
+
+
+def _copy_backup(sources: tuple[Path, ...], targets: tuple[Path, ...]) -> tuple[Path, ...]:
+    """Remove only exclusive-created destination members if a raw backup copy fails."""
+    created: list[Path] = []
+    try:
+        for source, target in zip(sources, targets, strict=True):
+            with source.open("rb") as incoming, target.open("xb") as outgoing:
+                created.append(target)
+                shutil.copyfileobj(incoming, outgoing)
+        return targets
+    except OSError as error:
+        for target in reversed(created):
+            target.unlink(missing_ok=True)
+        raise StorageError("storage_backup_failed", "Persistent state backup failed") from error
 
 
 def _inspect_copy(path: Path) -> StateStatus:

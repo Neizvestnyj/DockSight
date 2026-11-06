@@ -86,7 +86,8 @@ export function useWorkspace(history?: HistoryTransport) {
   /** Commit pending local changes, stopping on conflicts and retaining dirty text. */
   async function flush(): Promise<boolean> {
     clearTimeout(timer.current);
-    if (!history || !current.current || conflict.current) return !history;
+    if (!history || !current.current) return true;
+    if (conflict.current) return false;
     if (writing.current) {
       await writing.current;
       return flush();
@@ -178,20 +179,23 @@ export function useWorkspace(history?: HistoryTransport) {
   /** Detach old reads before opening another owned archive. */
   async function open(id: string) {
     if (!history) return;
-    clearTimeout(timer.current);
+    if (!(await flush())) return;
     active.current?.abort();
     const controller = new AbortController();
     active.current = controller;
     const epoch = ++generation.current;
-    pending.current = {};
-    conflict.current = null;
     setLoading(true);
     setError('');
     try {
       const result = await history.investigation(id, controller.signal);
       if (generation.current !== epoch || controller.signal.aborted) return;
-      install(result);
-      await savePreferences({ last_investigation_id: id, host: result.host });
+      if (!(await flush()) || generation.current !== epoch || controller.signal.aborted) return;
+      const acknowledged = current.current?.id === id ? current.current.workspace : result.workspace;
+      install({
+        ...result,
+        workspace: acknowledged.revision > result.workspace.revision ? acknowledged : result.workspace,
+      });
+      await savePreferences({ last_investigation_id: id });
     } catch {
       if (generation.current === epoch && !controller.signal.aborted)
         setError('Could not open saved chat. Retry the read.');
@@ -203,15 +207,16 @@ export function useWorkspace(history?: HistoryTransport) {
   /** Create one explicit chat without deleting any previous archive. */
   async function create(host: string) {
     if (!history || !host) return;
+    if (!(await flush())) return;
     active.current?.abort();
     const epoch = ++generation.current;
     clearTimeout(timer.current);
-    pending.current = {};
     setLoading(true);
     setError('');
     try {
       const result = await history.createInvestigation(crypto.randomUUID(), host);
       if (generation.current !== epoch) return;
+      if (!(await flush()) || generation.current !== epoch) return;
       install({ ...result, turns: { items: [], next_cursor: null } });
       await savePreferences({ last_investigation_id: result.id, host });
     } catch {

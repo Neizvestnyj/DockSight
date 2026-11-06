@@ -23,6 +23,189 @@ afterEach(() => {
 });
 
 describe('revisioned workspace', () => {
+  it.each(['same', 'other', 'new'])('saves edits typed while %s navigation is reading', async (navigation) => {
+    const api = new ApiClient();
+    vi.spyOn(api, 'actorWorkspace').mockResolvedValue({
+      revision: 0,
+      last_investigation_id: id,
+      host: 'local',
+      model: null,
+    });
+    vi.spyOn(api, 'saveActorWorkspace').mockResolvedValue({
+      revision: 1,
+      last_investigation_id: id,
+      host: 'local',
+      model: null,
+    });
+    let release: (value: typeof detail) => void = () => {};
+    const reading = () =>
+      new Promise<typeof detail>((resolve) => {
+        release = resolve;
+      });
+    const reads = vi.spyOn(api, 'investigation').mockResolvedValueOnce(detail).mockImplementation(reading);
+    const creates = vi.spyOn(api, 'createInvestigation').mockImplementation(reading);
+    const writes: string[] = [];
+    vi.spyOn(api, 'saveWorkspace').mockImplementation(async (_id, revision, changes) => {
+      writes.push(changes.draft ?? '');
+      return { ...empty, revision: revision + 1, draft: changes.draft ?? '' };
+    });
+    const { result } = renderHook(() => useWorkspace(api));
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    let navigating: Promise<void>;
+    act(() => {
+      result.current.setDraft('First edit');
+      navigating =
+        navigation === 'new'
+          ? result.current.create('local')
+          : result.current.open(navigation === 'same' ? id : '22222222-2222-4222-8222-222222222222');
+    });
+    await waitFor(() =>
+      expect(navigation === 'new' ? creates : reads).toHaveBeenCalledTimes(navigation === 'new' ? 1 : 2),
+    );
+    act(() => result.current.setDraft('Typed during navigation'));
+    await act(async () => {
+      release({
+        ...detail,
+        id: navigation === 'same' ? id : '22222222-2222-4222-8222-222222222222',
+        workspace: { ...empty, revision: 1, draft: 'First edit' },
+      });
+      await navigating!;
+    });
+    expect(writes).toEqual(['First edit', 'Typed during navigation']);
+    if (navigation === 'same') expect(result.current.draft).toBe('Typed during navigation');
+  });
+
+  it.each(['same', 'other', 'new', 'host'])('saves pending text before %s navigation', async (navigation) => {
+    const api = new ApiClient();
+    vi.spyOn(api, 'actorWorkspace').mockResolvedValue({
+      revision: 0,
+      last_investigation_id: id,
+      host: 'local',
+      model: null,
+    });
+    vi.spyOn(api, 'saveActorWorkspace').mockResolvedValue({
+      revision: 1,
+      last_investigation_id: id,
+      host: 'local',
+      model: null,
+    });
+    const events: string[] = [];
+    vi.spyOn(api, 'investigation')
+      .mockImplementation(async (identity) => {
+        events.push('read');
+        return {
+          ...detail,
+          id: identity,
+          workspace: identity === id ? { ...empty, revision: 1, draft: 'Pending text' } : empty,
+        };
+      })
+      .mockResolvedValueOnce(detail);
+    vi.spyOn(api, 'createInvestigation').mockImplementation(async (identity, host) => {
+      events.push('create');
+      return { ...detail, id: identity, host };
+    });
+    vi.spyOn(api, 'saveWorkspace').mockImplementation(async () => {
+      events.push('save');
+      return { ...empty, revision: 1, draft: 'Pending text' };
+    });
+    const { result } = renderHook(() => useWorkspace(api));
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    act(() => result.current.setDraft('Pending text'));
+    await act(async () => {
+      if (navigation === 'new' || navigation === 'host')
+        await result.current.create(navigation === 'host' ? 'remote' : 'local');
+      else await result.current.open(navigation === 'same' ? id : '22222222-2222-4222-8222-222222222222');
+    });
+    expect(events).toEqual(['save', navigation === 'new' || navigation === 'host' ? 'create' : 'read']);
+    if (navigation === 'same') expect(result.current.draft).toBe('Pending text');
+  });
+
+  it.each(['same', 'other', 'new', 'host'])('retains conflict and draft during %s navigation', async (navigation) => {
+    const api = new ApiClient();
+    vi.spyOn(api, 'actorWorkspace').mockResolvedValue({
+      revision: 0,
+      last_investigation_id: id,
+      host: 'local',
+      model: null,
+    });
+    const reads = vi.spyOn(api, 'investigation').mockResolvedValue(detail);
+    const creates = vi.spyOn(api, 'createInvestigation').mockResolvedValue(detail);
+    vi.spyOn(api, 'saveActorWorkspace').mockResolvedValue({
+      revision: 1,
+      last_investigation_id: id,
+      host: 'local',
+      model: null,
+    });
+    const { result } = renderHook(() => useWorkspace(api));
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    act(() => {
+      result.current.setDraft('Keep this text');
+      result.current.conflictWith({ ...empty, revision: 1, draft: 'Remote text' });
+    });
+    await act(async () => {
+      if (navigation === 'new' || navigation === 'host')
+        await result.current.create(navigation === 'host' ? 'remote' : 'local');
+      else await result.current.open(navigation === 'same' ? id : '22222222-2222-4222-8222-222222222222');
+    });
+    expect(result.current.detail?.id).toBe(id);
+    expect(result.current.draft).toBe('Keep this text');
+    expect(result.current.saveState).toBe('conflict');
+    expect(reads).toHaveBeenCalledTimes(1);
+    expect(creates).not.toHaveBeenCalled();
+  });
+
+  it('retains workspace and local text when the navigation save fails', async () => {
+    const api = new ApiClient();
+    vi.spyOn(api, 'actorWorkspace').mockResolvedValue({
+      revision: 0,
+      last_investigation_id: id,
+      host: 'local',
+      model: null,
+    });
+    const reads = vi.spyOn(api, 'investigation').mockResolvedValue(detail);
+    vi.spyOn(api, 'saveWorkspace').mockRejectedValue(new Error('offline'));
+    vi.spyOn(api, 'saveActorWorkspace').mockResolvedValue({
+      revision: 1,
+      last_investigation_id: id,
+      host: 'local',
+      model: null,
+    });
+    const { result } = renderHook(() => useWorkspace(api));
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    act(() => result.current.setDraft('Keep this text'));
+    await act(async () => {
+      await result.current.open('22222222-2222-4222-8222-222222222222');
+    });
+    expect(result.current.detail?.id).toBe(id);
+    expect(result.current.draft).toBe('Keep this text');
+    expect(result.current.saveState).toBe('error');
+    expect(reads).toHaveBeenCalledTimes(1);
+  });
+
+  it('remembers removed-host archives without overwriting the valid preferred host', async () => {
+    const api = new ApiClient();
+    let preferences = { revision: 0, last_investigation_id: null as string | null, host: 'local', model: null };
+    vi.spyOn(api, 'actorWorkspace').mockImplementation(async () => preferences);
+    vi.spyOn(api, 'investigation').mockResolvedValue({ ...detail, host: 'removed' });
+    vi.spyOn(api, 'saveActorWorkspace').mockImplementation(async (revision, changes) => {
+      if (changes.host === 'removed') throw new Error('host removed');
+      preferences = { ...preferences, ...changes, host: preferences.host, model: null, revision: revision + 1 };
+      return preferences;
+    });
+    const first = renderHook(() => useWorkspace(api));
+    await waitFor(() => expect(first.result.current.ready).toBe(true));
+    await act(async () => {
+      await first.result.current.open(id);
+    });
+    expect(preferences.last_investigation_id).toBe(id);
+    expect(preferences.host).toBe('local');
+    first.unmount();
+    const restored = renderHook(() => useWorkspace(api));
+    await waitFor(() => expect(restored.result.current.ready).toBe(true));
+    expect(restored.result.current.detail?.id).toBe(id);
+    expect(restored.result.current.detail?.host).toBe('removed');
+  });
+
   it('settles its own in-flight save before comparing a refreshed workspace revision', async () => {
     const api = new ApiClient();
     vi.spyOn(api, 'actorWorkspace').mockResolvedValue({

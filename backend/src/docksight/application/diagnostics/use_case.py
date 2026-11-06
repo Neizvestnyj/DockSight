@@ -24,6 +24,7 @@ from docksight.application.events import TurnEvent
 from docksight.application.investigations.contracts import DiagnosticCommand
 from docksight.application.ports.models import ModelMessage, ModelPort, ModelReply, ToolCall
 from docksight.application.ports.runtime import RuntimeReadPort
+from docksight.application.ports.state import ActionOrigin
 from docksight.application.redaction import Redactor
 from docksight.application.views.assembler import ViewAssembler
 from docksight.application.views.registry import proposal_schema
@@ -129,8 +130,10 @@ class Diagnostics:
         """Reject invalid scope and query size before collecting fresh runtime evidence."""
         if host not in {item.id for item in self.runtime.hosts()}:
             raise DockSightError("host_not_found", "Configured host not found", ErrorKind.NOT_FOUND)
-        if not query.strip() or len(query) > 4000:
-            raise DockSightError("invalid_query", "Query must contain 1-4000 characters", ErrorKind.VALIDATION)
+        if not query.strip() or len(query) > 8000:
+            raise DockSightError(
+                "invalid_query", "Sanitized query must contain 1-8000 characters", ErrorKind.VALIDATION
+            )
         if group is not None and container_id is not None:
             raise DockSightError("invalid_target", "Choose either a group or an exact container", ErrorKind.VALIDATION)
 
@@ -179,7 +182,8 @@ class Diagnostics:
             }
             yield {"type": "turn.completed", "turn_id": trace.turn_id}
             return
-        async for event in self._answer_turn(query, messages, context, command.actor, deadline, trace):
+        origin = ActionOrigin(command.request_id, command.turn_id) if command.request_id else None
+        async for event in self._answer_turn(query, messages, context, command.actor, deadline, trace, origin):
             yield event
         yield {"type": "turn.completed", "turn_id": trace.turn_id}
 
@@ -201,12 +205,13 @@ class Diagnostics:
         actor: str,
         deadline: float,
         trace: DiagnosticTrace,
+        origin: ActionOrigin | None,
     ) -> AsyncGenerator[TurnEvent]:
         """Finalize a validated answer without mutating caller-owned history."""
         if messages[-1].role == "assistant" and not messages[-1].tool_calls:
             messages = messages[:-1]
         messages.append(ModelMessage("user", final_prompt(self.redactor.text(query), context)))
-        async for event in self._finalize(messages, context, actor, deadline, trace):
+        async for event in self._finalize(messages, context, actor, deadline, trace, origin):
             yield event
 
     async def _discover(
@@ -377,6 +382,7 @@ class Diagnostics:
         actor: str,
         deadline: float,
         trace: DiagnosticTrace,
+        origin: ActionOrigin | None,
     ) -> AsyncGenerator[TurnEvent]:
         """Validate the final proposal and allow one budgeted schema or evidence repair."""
         instruction = messages[-1].content
@@ -395,7 +401,9 @@ class Diagnostics:
                 proposal = DiagnosisProposal.model_validate_json(reply.content)
                 _redact_narrative(proposal, self.redactor)
 
-                answer = await _before_deadline(deadline, partial(self.assembler.build, proposal, context, actor))
+                answer = await _before_deadline(
+                    deadline, partial(self.assembler.build, proposal, context, actor, origin)
+                )
             except (ValidationError, DockSightError) as exc:
                 yield trace.finish(
                     code="invalid_schema" if isinstance(exc, ValidationError) else exc.code,

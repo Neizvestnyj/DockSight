@@ -92,6 +92,11 @@ class MemoryInvestigations:
         view = self.owned(actor, investigation_id)
         return view.model_copy(deep=True)
 
+    async def snapshot(self, actor: str, investigation_id: str) -> tuple[InvestigationView, TurnPage]:
+        """Materialize metadata and initial turns without yielding to another memory operation."""
+        view = self.owned(actor, investigation_id).model_copy(deep=True)
+        return view, await self.turns(actor, investigation_id)
+
     def owned(self, actor: str, investigation_id: str) -> InvestigationView:
         """Use one indistinguishable failure for missing and foreign identifiers."""
         if self._owners.get(investigation_id) != actor:

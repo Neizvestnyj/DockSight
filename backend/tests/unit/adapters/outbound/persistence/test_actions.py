@@ -9,6 +9,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from docksight.adapters.outbound.memory.actions import MemoryActions
 from docksight.adapters.outbound.persistence.actions import SQLiteActions
 from docksight.adapters.outbound.persistence.database import PersistentDatabase
 from docksight.adapters.outbound.persistence.rows import ActionAuditRow, PreparedActionRow
@@ -109,4 +110,32 @@ async def test_queued_add_detaches_input_before_the_database_worker_runs(tmp_pat
     finally:
         release.set()
         await asyncio.gather(blocked, adding, return_exceptions=True)
+        await database.close()
+
+
+@pytest.mark.parametrize("persistent", [False, True], ids=["memory", "sqlite"])
+async def test_read_of_other_preparation_reports_exact_target_block_without_foreign_action_id(
+    tmp_path: Path, persistent: bool
+) -> None:
+    database = PersistentDatabase(tmp_path / "state.sqlite3")
+    await database.initialize_server()
+    store = SQLiteActions(database) if persistent else MemoryActions()
+    first, second = prepared(), prepared()
+    second.actor = "bob"
+    try:
+        await store.add(first, NOW)
+        await store.add(second, NOW)
+        claimed = await store.claim(first.id, "alice", "key-one", True, NOW)
+        dispatched = await store.mark_dispatch(first.id, claimed.stored.revision, NOW)
+        await store.complete(first.id, dispatched.revision, ActionState.INDETERMINATE, "Unknown", NOW)
+        with pytest.raises(DockSightError) as caught:
+            await store.get(second.id, "bob", NOW)
+        assert caught.value.code == "target_indeterminate"
+        assert first.id not in caught.value.message
+        assert (await store.get(first.id, "alice", NOW)).action.state == ActionState.INDETERMINATE
+        assert not (await store.claim(first.id, "alice", "key-one", True, NOW)).claimed
+        with pytest.raises(DockSightError) as foreign:
+            await store.get(second.id, "alice", NOW)
+        assert foreign.value.code == "action_not_found"
+    finally:
         await database.close()

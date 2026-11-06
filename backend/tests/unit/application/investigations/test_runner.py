@@ -14,6 +14,7 @@ from docksight.application.investigations.runner import TurnRunner
 from docksight.application.investigations.service import Investigations
 from docksight.application.model_catalog import ModelSelection
 from docksight.application.redaction import Redactor
+from docksight.application.views.schemas import GroupTarget
 from docksight.domain.errors import DockSightError, ErrorKind
 
 
@@ -386,6 +387,32 @@ async def test_digest_precedes_redaction_and_default_model_resolution() -> None:
         with pytest.raises(DockSightError) as conflict:
             await runner.submit("alice", changed, "req")
         assert conflict.value.code == "submission_conflict"
+    finally:
+        await runner.close()
+
+
+@pytest.mark.parametrize("changed_policy", ["expanded_query", "sensitive_target"])
+async def test_receipt_replay_precedes_changed_redaction_bounds_and_target_validation(changed_policy: str) -> None:
+    runner, command, source = await setup_runner()
+    submitted = command.root.model_copy(
+        update={
+            "query": "x" * 1000 if changed_policy == "expanded_query" else "Inspect",
+            "target": GroupTarget(kind="compose", name="web") if changed_policy == "sensitive_target" else None,
+        }
+    )
+    command = StartTurn(submitted)
+    try:
+        saved = (await runner.submit("alice", command, "original-request")).snapshot
+        await source.started.wait()
+        runner.redactor = Redactor(secrets=("x" if changed_policy == "expanded_query" else "web",))
+        fresh = StartTurn(submitted.model_copy(update={"submission_id": str(uuid4()), "expected_revision": 1}))
+        with pytest.raises(DockSightError) as invalid:
+            await runner.submit("alice", fresh, "fresh-request")
+        assert invalid.value.code == ("invalid_query" if changed_policy == "expanded_query" else "invalid_target")
+        replay = await runner.submit("alice", command, "replay-request")
+        assert not replay.created and replay.snapshot.id == saved.id
+        assert replay.snapshot.request_id == "original-request"
+        assert source.calls == 1 and source.leases == 1
     finally:
         await runner.close()
 

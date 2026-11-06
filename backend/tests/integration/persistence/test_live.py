@@ -85,6 +85,9 @@ def test_live_restart_lost_delivery_retained_key_and_post_docker_crash_block(tmp
                 )
                 assert replay.status_code == 200 and replay.json()["state"] == "indeterminate"
                 candidate = prepare(api, metadata["id"])
+                unavailable = api.get(f"/api/v1/actions/{candidate}")
+                assert unavailable.status_code == 409 and unavailable.json()["code"] == "target_indeterminate"
+                assert second not in unavailable.text
                 denied = api.post(
                     f"/api/v1/actions/{candidate}/execute",
                     headers={"Idempotency-Key": "blocked-key"},

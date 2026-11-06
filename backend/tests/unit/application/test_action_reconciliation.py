@@ -112,7 +112,9 @@ async def test_incomplete_or_stale_confirmation_keeps_target_blocked(
     with pytest.raises(DockSightError):
         await service.reconcile(await confirmation(reconciliation_store, old, **changes))
     assert await reconciliation_store.inspect_block(old) == before
-    assert (await reconciliation_store.get(stale, "alice", NOW)).action.state == ActionState.PREPARED
+    with pytest.raises(DockSightError) as unavailable:
+        await reconciliation_store.get(stale, "alice", NOW)
+    assert unavailable.value.code == "target_indeterminate"
     assert not runtime.mutations
 
 
@@ -168,6 +170,8 @@ async def test_failed_reconciliation_audit_keeps_block_and_preparations(
     with pytest.raises(StorageError):
         await service.reconcile(command)
     assert await reconciliation_store.inspect_block(old) == before
-    assert (await reconciliation_store.get(stale, "alice", NOW)).action.state == ActionState.PREPARED
+    with pytest.raises(DockSightError) as unavailable:
+        await reconciliation_store.get(stale, "alice", NOW)
+    assert unavailable.value.code == "target_indeterminate"
     assert (await reconciliation_store.get(old, "alice", NOW)).action.state == ActionState.INDETERMINATE
     assert not runtime.mutations

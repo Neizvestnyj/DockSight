@@ -10,6 +10,14 @@ from docksight.domain.diagnostics import JsonObject
 
 
 @dataclass(frozen=True)
+class ActionOrigin:
+    """Carry server-owned originating request and optional diagnostic turn correlation."""
+
+    request_id: str
+    turn_id: str | None = None
+
+
+@dataclass(frozen=True)
 class StoredAction:
     """Return a detached domain value and its explicit persisted transition position."""
 
@@ -67,7 +75,7 @@ class ReconcileTarget(BaseModel):
 class ActionStore(Protocol):
     """Persist detached action transitions, authoritative audit, and exact-target guards atomically."""
 
-    async def add(self, action: PreparedAction, now: datetime) -> StoredAction:
+    async def add(self, action: PreparedAction, now: datetime, origin: ActionOrigin | None = None) -> StoredAction:
         """Retain a newly prepared action within storage capacity."""
         ...
 

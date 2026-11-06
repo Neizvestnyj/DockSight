@@ -76,12 +76,44 @@ def save_actor_workspace(session: Session, actor: str, value: ActorWorkspace, no
         row.workspace, row.updated_at = value.model_dump_json(), now
 
 
+def validated_turn(row: TurnRow) -> SavedTurn:
+    """Require snapshot identity, ownership, and lifecycle to agree with indexed row metadata."""
+    saved = decode_turn(row.snapshot)
+    if (saved.id, saved.actor, saved.host, saved.investigation_id, saved.state, saved.revision) != (
+        row.id,
+        row.actor,
+        row.host,
+        row.investigation_id,
+        row.state,
+        row.revision,
+    ):
+        raise HistoryError("history_unsupported", "Saved turn metadata is inconsistent", ErrorKind.CONFLICT)
+    return saved
+
+
 def _turn_item(row: TurnRow) -> SavedTurn | UnsupportedTurn:
     """Report one unsupported envelope without dropping the row or an entire history page."""
     try:
-        return decode_turn(row.snapshot)
+        return validated_turn(row)
     except HistoryError:
         return UnsupportedTurn(id=row.id)
+
+
+def turn_page(session: Session, actor: str, investigation_id: str, limit: int, cursor: str | None) -> TurnPage:
+    """Materialize one owned chronological page within the caller's archive transaction."""
+    page_limit(limit)
+    scope = f"turns:{investigation_id}"
+    before = decode_cursor(actor, scope, cursor)
+    owned(session, actor, investigation_id)
+    query = select(TurnRow).where(TurnRow.actor == actor, TurnRow.investigation_id == investigation_id)
+    if before:
+        query = query.where(
+            or_(TurnRow.created_at < before[0], (TurnRow.created_at == before[0]) & (TurnRow.id < before[1]))
+        )
+    rows = list(session.scalars(query.order_by(TurnRow.created_at.desc(), TurnRow.id.desc()).limit(limit + 1)))
+    selected = rows[:limit]
+    next_cursor = encode_cursor(actor, scope, selected[-1].created_at, selected[-1].id) if len(rows) > limit else None
+    return TurnPage(items=tuple(_turn_item(row) for row in reversed(selected)), next_cursor=next_cursor)
 
 
 class SQLiteInvestigations:
@@ -138,6 +170,16 @@ class SQLiteInvestigations:
             lambda session: archive_view(session, owned(session, actor, investigation_id))
         )
 
+    async def snapshot(self, actor: str, investigation_id: str) -> tuple[InvestigationView, TurnPage]:
+        """Keep metadata, active identity, workspace, and initial turns in one serialized read."""
+
+        def read(session: Session) -> tuple[InvestigationView, TurnPage]:
+            """Prevent acceptance or terminal settlement between the two detail components."""
+            row = owned(session, actor, investigation_id)
+            return archive_view(session, row), turn_page(session, actor, investigation_id, 20, None)
+
+        return await self.database.transaction(read)
+
     async def list_owned(self, actor: str, limit: int = 10, cursor: str | None = None) -> InvestigationPage:
         """Query bounded actor-scoped activity keysets with stable tie-breaking IDs."""
         page_limit(limit)
@@ -174,26 +216,9 @@ class SQLiteInvestigations:
 
     async def turns(self, actor: str, investigation_id: str, limit: int = 20, cursor: str | None = None) -> TurnPage:
         """Read older immutable turn pages in chronological display order."""
-        page_limit(limit)
-        scope = f"turns:{investigation_id}"
-        before = decode_cursor(actor, scope, cursor)
-
-        def listing(session: Session) -> TurnPage:
-            """Check ownership before materializing supported or unsupported per-item snapshots."""
-            owned(session, actor, investigation_id)
-            query = select(TurnRow).where(TurnRow.actor == actor, TurnRow.investigation_id == investigation_id)
-            if before:
-                query = query.where(
-                    or_(TurnRow.created_at < before[0], (TurnRow.created_at == before[0]) & (TurnRow.id < before[1]))
-                )
-            rows = list(session.scalars(query.order_by(TurnRow.created_at.desc(), TurnRow.id.desc()).limit(limit + 1)))
-            selected = rows[:limit]
-            cursor = (
-                encode_cursor(actor, scope, selected[-1].created_at, selected[-1].id) if len(rows) > limit else None
-            )
-            return TurnPage(items=tuple(_turn_item(row) for row in reversed(selected)), next_cursor=cursor)
-
-        return await self.database.transaction(listing)
+        return await self.database.transaction(
+            lambda session: turn_page(session, actor, investigation_id, limit, cursor)
+        )
 
     async def read_turn(self, actor: str, turn_id: str) -> SavedTurn:
         """Return only a validated owned snapshot and keep foreign IDs indistinguishable."""
@@ -204,7 +229,7 @@ class SQLiteInvestigations:
             if row is None:
                 raise not_found()
             owned(session, actor, row.investigation_id)
-            return decode_turn(row.snapshot)
+            return validated_turn(row)
 
         return await self.database.transaction(read)
 

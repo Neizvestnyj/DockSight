@@ -220,6 +220,7 @@ class DiagnosticCommand(FrozenContract):
     turn_id: Identifier
     investigation_id: Identifier
     actor: Label
+    request_id: str | None = Field(default=None, min_length=1, max_length=128)
     host: Label
     query: str = Field(min_length=1, max_length=8000)
     target: Target | None = None

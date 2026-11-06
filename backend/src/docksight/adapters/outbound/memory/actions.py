@@ -6,6 +6,7 @@ from docksight.application.action_reconciliation import validate_reconciliation
 from docksight.application.investigations.errors import StorageError
 from docksight.application.ports.state import (
     ActionClaim,
+    ActionOrigin,
     BlockedTarget,
     ReconcileTarget,
     ReconciliationObservation,
@@ -43,6 +44,7 @@ class MemoryActions:
         self._entries: dict[str, StoredAction] = {}
         self._guards: dict[tuple[str, str], _Guard] = {}
         self._audit: list[tuple[str, JsonObject]] = []
+        self._origins: dict[str, ActionOrigin] = {}
         self._capacity = capacity
         self._retention = timedelta(seconds=retention)
         self._clock = clock
@@ -50,6 +52,7 @@ class MemoryActions:
 
     def _append_audit(self, event: str, action: PreparedAction, now: datetime, extra: JsonObject | None = None) -> None:
         """Append authoritative memory audit before publishing the matching state change."""
+        origin = self._origins.get(action.id)
         self._audit.append(
             (
                 event,
@@ -60,6 +63,8 @@ class MemoryActions:
                     "container_id": action.container_id,
                     "operation": action.operation,
                     "occurred_at": now.isoformat(),
+                    "request_id": origin.request_id if origin else None,
+                    "turn_id": origin.turn_id if origin else None,
                     **(extra or {}),
                 },
             )
@@ -79,7 +84,7 @@ class MemoryActions:
             self._guards[(stored.action.host, stored.action.container_id)] = guard
         return _detached(stored)
 
-    async def add(self, action: PreparedAction, now: datetime) -> StoredAction:
+    async def add(self, action: PreparedAction, now: datetime, origin: ActionOrigin | None = None) -> StoredAction:
         """Retain preparation and audit without evicting claimed execution protection."""
         if action.id in self._entries:
             raise DockSightError("action_conflict", "Action already exists", ErrorKind.CONFLICT)
@@ -96,6 +101,8 @@ class MemoryActions:
         )
         if live >= self._capacity:
             raise DockSightError("action_capacity", "Action capacity reached; retry later", ErrorKind.UNAVAILABLE)
+        if origin is not None:
+            self._origins[action.id] = origin
         return self._save(StoredAction(replace(action), 0, "prepared"), "action.prepared", now)
 
     async def get(self, action_id: str, actor: str, now: datetime) -> StoredAction:
@@ -106,6 +113,11 @@ class MemoryActions:
         item = _detached(item)
         if item.action.expire(now):
             return self._save(replace(item, revision=item.revision + 1, phase="terminal"), "action.expired", now)
+        guard = self._guards.get((item.action.host, item.action.container_id), _Guard())
+        if item.action.state == ActionState.PREPARED and guard.blocked:
+            raise DockSightError(
+                "target_indeterminate", "Inspect Docker and reconcile the previous action", ErrorKind.CONFLICT
+            )
         return item
 
     async def claim(self, action_id: str, actor: str, key: str, confirmed: bool, now: datetime) -> ActionClaim:

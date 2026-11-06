@@ -11,6 +11,7 @@ from docksight.application.investigations.contracts import (
     WorkspacePatch,
 )
 from docksight.application.investigations.ports import InvestigationArchive
+from docksight.application.investigations.sanitization import sanitized_workspace
 from docksight.application.model_choices import ModelChoices
 from docksight.application.redaction import Redactor
 from docksight.domain.errors import DockSightError, ErrorKind
@@ -48,6 +49,10 @@ class Investigations:
         """Read saved content even when its former host configuration was removed."""
         return await self.archive.read(actor, investigation_id)
 
+    async def snapshot(self, actor: str, investigation_id: str) -> tuple[InvestigationView, TurnPage]:
+        """Restore metadata and its newest turn page from one owned archive snapshot."""
+        return await self.archive.snapshot(actor, investigation_id)
+
     async def turns(self, actor: str, investigation_id: str, limit: int = 20, cursor: str | None = None) -> TurnPage:
         """Page complete owned display history independently of bounded model context."""
         return await self.archive.turns(actor, investigation_id, limit, cursor)
@@ -58,8 +63,7 @@ class Investigations:
 
     async def patch_workspace(self, actor: str, investigation_id: str, patch: WorkspacePatch) -> InvestigationWorkspace:
         """Sanitize draft text while retaining explicit-field and optimistic revision semantics."""
-        if "draft" in patch.model_fields_set:
-            patch = patch.model_copy(update={"draft": self.redactor.text(patch.draft)})
+        patch = sanitized_workspace(patch, self.redactor)
         return await self.archive.patch_workspace(actor, investigation_id, patch, datetime.now(UTC))
 
     async def patch_actor_workspace(self, actor: str, patch: ActorWorkspacePatch) -> ActorWorkspace:

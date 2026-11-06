@@ -6,7 +6,7 @@ from uuid import uuid4
 
 from docksight.application.investigations.errors import StorageError
 from docksight.application.ports.runtime import RuntimeMutationPort, RuntimeReadPort
-from docksight.application.ports.state import ActionStore, AuditPort, StoredAction
+from docksight.application.ports.state import ActionOrigin, ActionStore, AuditPort, StoredAction
 from docksight.application.views.schemas import ActionView
 from docksight.domain.actions import ActionState, Operation, PreparedAction, allowed_operations
 from docksight.domain.diagnostics import JsonObject
@@ -45,7 +45,9 @@ class Actions:
         self._admissions: set[asyncio.Task[ActionView]] = set()
         self._accepting = True
 
-    async def prepare(self, actor: str, host: str, container_id: str, operation: Operation) -> ActionView:
+    async def prepare(
+        self, actor: str, host: str, container_id: str, operation: Operation, origin: ActionOrigin | None = None
+    ) -> ActionView:
         """Capture a permitted operation against one exact container fingerprint."""
         self._require_admission()
         if not re.fullmatch(r"[a-f0-9]{64}", container_id):
@@ -66,7 +68,7 @@ class Actions:
             snapshot.fingerprint,
             self.clock() + timedelta(seconds=self.ttl),
         )
-        stored = await self.store.add(action, self.clock())
+        stored = await self.store.add(action, self.clock(), origin)
         await self._mirror("action.prepared", stored.action)
         return action_view(stored.action)
 
