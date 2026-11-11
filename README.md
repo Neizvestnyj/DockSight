@@ -76,7 +76,8 @@ uv run --project backend uvicorn docksight.main:create_app --factory --host 127.
 ```
 
 **3. Keep the frontend running in another terminal** using the demo commands above. Choose **Connect API**, keep
-`/api/v1`, and enter the same token. Select a host and container, then ask what went wrong. Same-origin login exchanges
+the prefilled current-origin API address, and enter the same token. The relative `/api/v1` path also works.
+Select a host and container, then ask what went wrong. Same-origin login exchanges
 the token for an HttpOnly cookie and clears the input. Refresh restores the owned workspace through that cookie.
 **Saved chats** opens earlier answers. **Older chats** pages beyond the latest ten. **Draft saved** confirms text that
 can be restored. **Stop diagnosis** explicitly cancels accepted work. Closing or reloading a tab only detaches it.

@@ -29,6 +29,8 @@ Dates record merges into `master`. Version links show the corresponding changes.
 
 ### Fixed
 
+- The connection form prefills the current browser's API address and distinguishes rejected browser origins,
+  insecure-cookie configuration, and invalid tokens from an invalid API address.
 - Focus refresh and deliberate navigation preserve unsaved draft ownership and observe accepted work started in
   another tab.
   Removed-host archives remain last-active without changing configured host preferences.
@@ -59,6 +61,7 @@ Dates record merges into `master`. Version links show the corresponding changes.
   Reopened action review requires current server state and renewed confirmation without preparing a replacement.
 - Isolated HTTP-process and production-browser checks cover SQLite crash recovery, reloads, tab conflicts, and saved
   action protection. Opt-in checks use owned Docker resources and an existing local model for recovery and continuation.
+  HTTPS authentication fixtures keep their cookie policy independent of local HTTP configuration.
 - Configuration and contributor guides document exact browser origins, durable volume ownership, offline state recovery,
   and dedicated persistence checks. Native backend diagrams and English Demo screenshots match the saved-chat workflow.
 

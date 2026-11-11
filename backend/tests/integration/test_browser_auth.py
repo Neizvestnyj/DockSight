@@ -31,6 +31,7 @@ def browser_client(*, browser_session_store: BrowserSessionStore | None = None, 
             "api_token": TOKEN,
             "api_tokens": {"bob": BOB},
             "browser_origin": ORIGIN,
+            "cookie_secure": True,
             **overrides,
         }
     )
@@ -41,7 +42,12 @@ def browser_client(*, browser_session_store: BrowserSessionStore | None = None, 
     return TestClient(create_app(settings, components), base_url=ORIGIN)
 
 
-def test_login_restores_cookie_session_rotates_and_logs_out() -> None:
+@pytest.mark.parametrize("local_cookie_secure", ["true", "false"])
+def test_login_restores_cookie_session_rotates_and_logs_out(
+    monkeypatch: pytest.MonkeyPatch, local_cookie_secure: str
+) -> None:
+    """Keep the HTTPS fixture secure when the developer uses loopback HTTP cookies locally."""
+    monkeypatch.setenv("DOCKSIGHT_COOKIE_SECURE", local_cookie_secure)
     with browser_client() as api:
         response = api.post("/api/v1/auth/login", headers=LOGIN, json={})
         assert response.status_code == 200

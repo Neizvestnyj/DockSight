@@ -1,14 +1,27 @@
 import { useLocale } from './locale';
 import { useState } from 'react';
 import { ArrowRight, PlugZap } from 'lucide-react';
-import { ApiClient } from './api';
+import { ApiClient, ApiError } from './api';
 import { Modal } from './ui';
 import { isMessageKey, type MessageKey } from './messages';
+
+/** Explain backend authentication configuration separately from invalid endpoint input. */
+function connectionError(failure: unknown): MessageKey {
+  if (failure instanceof ApiError) {
+    if (failure.code === 'origin_not_allowed')
+      return 'The backend rejected this browser origin. Set DOCKSIGHT_BROWSER_ORIGIN={origin} and restart the backend.';
+    if (failure.code === 'insecure_browser_origin')
+      return 'For local HTTP, set DOCKSIGHT_COOKIE_SECURE=false and restart the backend. Use HTTPS in production.';
+    if (failure.code === 'unauthorized') return 'The API rejected the bearer token.';
+  }
+  const message = failure instanceof Error ? failure.message : '';
+  return isMessageKey(message) ? message : 'Check the API endpoint.';
+}
 
 /** Accept a browser API endpoint, never a Docker daemon URL or a compiled credential. */
 export function Connection({ close, connect }: { close: () => void; connect: (client: ApiClient) => void }) {
   const { t } = useLocale();
-  const [endpoint, setEndpoint] = useState('/api/v1');
+  const [endpoint, setEndpoint] = useState(() => new URL('/api/v1', window.location.origin).href);
   const [token, setToken] = useState('');
   const [error, setError] = useState<MessageKey | ''>('');
   const [busy, setBusy] = useState(false);
@@ -42,8 +55,7 @@ export function Connection({ close, connect }: { close: () => void; connect: (cl
               setBusy(false);
             }
           } catch (failure) {
-            const message = failure instanceof Error ? failure.message : '';
-            setError(isMessageKey(message) ? message : 'Check the API endpoint.');
+            setError(connectionError(failure));
           }
         }}
       >
@@ -51,6 +63,7 @@ export function Connection({ close, connect }: { close: () => void; connect: (cl
           {t('API base URL')}
           <input
             required
+            placeholder="/api/v1"
             value={endpoint}
             onChange={(event) => setEndpoint(event.target.value)}
             aria-describedby="api-help"
@@ -77,7 +90,7 @@ export function Connection({ close, connect }: { close: () => void; connect: (cl
         </p>
         {error && (
           <p className="inline-error" role="alert">
-            {t(error)}
+            {t(error, { origin: window.location.origin })}
           </p>
         )}
         <footer className="modal-actions">

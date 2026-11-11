@@ -21,7 +21,9 @@ Page load checks the first-party `/api/v1/auth/session` before opening a workspa
 An unauthorized response shows **Sign in to DockSight** with **Connect API** and **Explore Demo**. A failed network read
 shows **Could not restore your session.** and **Retry connection**. Demo always requires explicit entry.
 
-In **Connect API**, a same-origin base such as `/api/v1` exchanges the supplied bearer token once for an HttpOnly
+**Connect API** prefills the current page origin followed by `/api/v1`. The relative `/api/v1` path also works.
+Rejected browser origins, local HTTP cookie settings, and invalid tokens have separate connection errors.
+A same-origin base exchanges the supplied bearer token once for an HttpOnly
 cookie. The token input clears after the exchange attempt. JavaScript keeps the session identity and CSRF value in
 memory. The browser manages the opaque cookie. **Sign out** revokes that session without deleting history or stopping
 accepted diagnoses. Other tabs sharing the cookie lose authority on their next request or observer check.

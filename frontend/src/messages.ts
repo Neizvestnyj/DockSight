@@ -461,6 +461,10 @@ const russian = {
     'Адрес API должен заканчиваться на /api/v1 и не содержать учётные данные или параметры запроса.',
   'Enter a bearer token.': 'Введите Bearer-токен.',
   'Check the API endpoint.': 'Проверьте адрес API.',
+  'The backend rejected this browser origin. Set DOCKSIGHT_BROWSER_ORIGIN={origin} and restart the backend.':
+    'Сервер отклонил адрес этой страницы. Задайте DOCKSIGHT_BROWSER_ORIGIN={origin} и перезапустите сервер.',
+  'For local HTTP, set DOCKSIGHT_COOKIE_SECURE=false and restart the backend. Use HTTPS in production.':
+    'Для локального HTTP задайте DOCKSIGHT_COOKIE_SECURE=false и перезапустите сервер. Для production используйте HTTPS.',
   'The local Vite proxy forwards /api to 127.0.0.1:8000. A remote API must allow this browser origin through CORS.':
     'Локальный прокси Vite направляет /api на 127.0.0.1:8000. Удалённый API должен разрешать источник этой страницы через CORS.',
   "Kept only in this tab's memory. Refreshing disconnects the API and returns to demo.":
