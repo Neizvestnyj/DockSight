@@ -11,6 +11,7 @@ def test_provider_catalog_is_private_safe_and_keeps_default_without_metadata() -
     """Injected adapters retain the default path and never allocate provider clients implicitly."""
     token = "test-token-at-least-24-characters"
     settings = Settings(
+        state_backend="memory",
         api_token=token,
         model_base_url="http://private-endpoint",
         model_api_key="private-key",
@@ -47,7 +48,7 @@ def test_provider_catalog_is_private_safe_and_keeps_default_without_metadata() -
 def test_turn_selection_is_validated_before_streaming() -> None:
     """Unknown identities and private connection fields cannot reach model generation."""
     token = "test-token-at-least-24-characters"
-    settings = Settings(api_token=token, _env_file=None)
+    settings = Settings(state_backend="memory", api_token=token, _env_file=None)
     runtime, model = FakeRuntime(), ScriptedModel([])
     components = build_components(settings, reader=runtime, writer=runtime, model=model)
     selections = [
@@ -71,7 +72,7 @@ def test_turn_selection_is_validated_before_streaming() -> None:
 def test_unknown_status_host_is_rejected_before_selected_provider_work() -> None:
     """A caller cannot trigger provider metadata checks through an unconfigured Docker scope."""
     token = "test-token-at-least-24-characters"
-    settings = Settings(api_token=token, _env_file=None)
+    settings = Settings(state_backend="memory", api_token=token, _env_file=None)
     runtime = FakeRuntime()
     components = build_components(settings, reader=runtime, writer=runtime, model=ScriptedModel([]))
     assert components.models is not None

@@ -20,18 +20,49 @@ interface Props {
 export function ActionReview({ action, client, demo, name, close, update, keys }: Props) {
   const { t } = useLocale();
   const [current, setCurrent] = useState(action);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(true);
   const [error, setError] = useState<MessageKey | ''>('');
   const [now, setNow] = useState(Date.now);
   const sent = useRef(false);
   const [submitted, setSubmitted] = useState(false);
   const [checkedPrepared, setCheckedPrepared] = useState(false);
+  const [available, setAvailable] = useState(false);
+  useEffect(() => {
+    let attached = true;
+    void client
+      .action(action.id)
+      .then((result) => {
+        if (!attached) return;
+        if (
+          result.id !== action.id ||
+          result.host !== action.host ||
+          result.container_id !== action.container_id ||
+          result.operation !== action.operation
+        )
+          throw new Error('Action response is outside the selected scope.');
+        setCurrent(result);
+        update(result);
+        setAvailable(true);
+        setCheckedPrepared(result.state === 'prepared');
+      })
+      .catch(() => {
+        if (attached) setError('This saved action is unavailable. Run a new diagnosis for current evidence.');
+      })
+      .finally(() => {
+        if (attached) setBusy(false);
+      });
+    return () => {
+      attached = false;
+    };
+    // Reopening requires renewed authoritative state and a closed confirmation lifetime.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [action.id, client]);
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, []);
   const expired = current.state === 'prepared' && now >= Date.parse(current.expires_at);
-  const state = expired ? 'expired' : current.state;
+  const state = !available ? (busy ? 'checking' : 'unavailable') : expired ? 'expired' : current.state;
 
   /** Publish a server outcome without changing the card's historical observation. */
   function publish(result: Action) {
@@ -46,7 +77,7 @@ export function ActionReview({ action, client, demo, name, close, update, keys }
 
   /** Confirm once; preserve the execution key even if delivery becomes ambiguous. */
   async function confirm() {
-    if (busy || sent.current || state !== 'prepared') return;
+    if (busy || !available || !checkedPrepared || sent.current || state !== 'prepared') return;
     sent.current = true;
     setSubmitted(true);
     setBusy(true);
@@ -161,12 +192,16 @@ export function ActionReview({ action, client, demo, name, close, update, keys }
             {t('Check existing action')}
           </button>
         )}
-        {state === 'prepared' && !submitted && (!keys.has(current.id) || checkedPrepared) && (
-          <button className="primary" disabled={busy} onClick={() => void confirm()}>
-            {keys.has(current.id) ? t(`Retry confirmed ${current.operation}`) : t(`Confirm ${current.operation}`)}
-            <ArrowRight size={15} />
-          </button>
-        )}
+        {available &&
+          checkedPrepared &&
+          state === 'prepared' &&
+          !submitted &&
+          (!keys.has(current.id) || checkedPrepared) && (
+            <button className="primary" disabled={busy} onClick={() => void confirm()}>
+              {keys.has(current.id) ? t(`Retry confirmed ${current.operation}`) : t(`Confirm ${current.operation}`)}
+              <ArrowRight size={15} />
+            </button>
+          )}
         {busy && (
           <span role="status" className="muted">
             {t('Checking delivery…')}

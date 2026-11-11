@@ -1,3 +1,5 @@
+import { routeSavedApi } from './helpers/saved-server';
+import { openDemo } from './helpers/demo';
 import { chooseOption } from './helpers/select';
 import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
@@ -11,6 +13,7 @@ async function connectApi(page: Page) {
   } else await page.getByRole('button', { name: 'Connect API', exact: true }).click();
   await page.getByLabel('Bearer token').fill('browser-test-token');
   await page.getByRole('button', { name: 'Connect', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
 }
 
 test('checks model metadata independently and retains facts and timestamps through manual rechecks', async ({
@@ -27,10 +30,10 @@ test('checks model metadata independently and retains facts and timestamps throu
   const gate = new Promise<void>((resolve) => {
     finish = resolve;
   });
-  await page.route('**/api/v1/**', async (route) => {
+  await routeSavedApi(page, async (route) => {
     const request = route.request();
     expect(request.method()).toBe('GET');
-    expect(request.headers()['authorization']).toBe('Bearer browser-test-token');
+    expect(request.headers()['authorization']).toBeUndefined();
     const url = new URL(request.url());
     if (url.pathname.endsWith('/hosts'))
       return route.fulfill({
@@ -56,7 +59,7 @@ test('checks model metadata independently and retains facts and timestamps throu
     if (url.pathname.endsWith('/logs')) return route.fulfill({ json: { entries: [], truncated: false } });
     return route.fulfill({ json: snapshot });
   });
-  await page.goto('/');
+  await openDemo(page);
   await connectApi(page);
   await expect(
     page.getByText('The configured model is unavailable. You can still inspect Docker directly.'),
@@ -105,12 +108,12 @@ test('checks model metadata independently and retains facts and timestamps throu
 
 for (const failure of ['unauthorized', 'offline'] as const) {
   test(`reports ${failure} separately without generating an answer`, async ({ page }) => {
-    await page.route('**/api/v1/**', (route) =>
+    await routeSavedApi(page, (route) =>
       failure === 'offline'
         ? route.abort('connectionreset')
         : route.fulfill({ status: 401, json: { code: 'unauthorized', message: 'Authentication required' } }),
     );
-    await page.goto('/');
+    await openDemo(page);
     await connectApi(page);
     await page.getByRole('button', { name: /^System status/ }).click();
     const dialog = page.getByRole('dialog', { name: 'System status' });
@@ -130,17 +133,23 @@ test('rechecks stale status, recovers diagnosis automatically, and stops after r
   const healthy = demoSystemStatus('local');
   let failure: 'none' | 'docker' | 'authorization' = 'none';
   let calls = 0;
-  await page.route('**/api/v1/**', (route) => {
+  let releaseStaleCheck = () => {};
+  const staleCheckGate = new Promise<void>((resolve) => {
+    releaseStaleCheck = resolve;
+  });
+  await routeSavedApi(page, async (route) => {
     const url = new URL(route.request().url());
     expect(route.request().method()).toBe('GET');
     if (url.pathname.endsWith('/hosts')) return route.fulfill({ json: [{ id: 'local', name: 'Test host' }] });
     if (url.pathname.endsWith('/system/status')) {
       calls++;
-      if (failure === 'authorization')
+      const checkFailure = failure;
+      if (calls === 2) await staleCheckGate;
+      if (checkFailure === 'authorization')
         return route.fulfill({ status: 401, json: { code: 'unauthorized', message: 'Denied' } });
       return route.fulfill({
         json:
-          failure === 'docker'
+          checkFailure === 'docker'
             ? { ...healthy, docker: { ...healthy.docker, state: 'unavailable', code: 'runtime_unavailable' } }
             : healthy,
       });
@@ -148,7 +157,7 @@ test('rechecks stale status, recovers diagnosis automatically, and stops after r
     return route.fulfill({ json: [] });
   });
   await page.clock.install();
-  await page.goto('/');
+  await openDemo(page);
   await connectApi(page);
   await expect(page.locator('.composer-foot')).toContainText('local');
   const draft = page.getByRole('textbox');
@@ -162,7 +171,10 @@ test('rechecks stale status, recovers diagnosis automatically, and stops after r
   await page.clock.runFor(30_000);
   await trigger.click();
   await expect.poll(() => calls).toBe(2);
+  await expect(trigger).toHaveAttribute('aria-busy', 'true');
   await expect(dialog.getByRole('button', { name: 'Check again' })).toBeEnabled();
+  releaseStaleCheck();
+  await expect(trigger).toHaveAttribute('aria-busy', 'false');
   await page.keyboard.press('Escape');
   failure = 'docker';
   await page.clock.runFor(60_000);
@@ -200,7 +212,7 @@ test('keeps demo status checks localized and preserves an investigation and its 
   page.on('request', (request) => {
     if (request.url().includes('/api/v1/')) requests.push(request.url());
   });
-  await page.goto('/');
+  await openDemo(page);
   await page.getByRole('textbox').fill('Keep this follow-up');
   await page.getByRole('button', { name: 'Review stop' }).click();
   const action = await page.getByRole('dialog').locator('.confirmation-facts code').last().innerText();
@@ -219,5 +231,5 @@ test('keeps demo status checks localized and preserves an investigation and its 
   await expect(page.getByRole('textbox')).toHaveValue('Keep this follow-up');
   await page.getByRole('button', { name: 'Проверить остановку' }).click();
   expect(await page.getByRole('dialog').locator('.confirmation-facts code').last().innerText()).toBe(action);
-  expect(requests).toEqual([]);
+  expect(requests.every((url) => url.endsWith('/auth/session'))).toBe(true);
 });

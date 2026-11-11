@@ -60,8 +60,7 @@ class PreparedAction:
                 raise DockSightError("action_conflict", "Action uses another idempotency key", ErrorKind.CONFLICT)
 
             return False
-        if now >= self.expires_at:
-            self.state = ActionState.EXPIRED
+        if self.expire(now) or self.state == ActionState.EXPIRED:
             raise DockSightError("action_expired", "Action has expired", ErrorKind.CONFLICT)
         if self.state != ActionState.PREPARED:
             raise DockSightError("action_conflict", "Action cannot be executed", ErrorKind.CONFLICT)
@@ -80,3 +79,18 @@ class PreparedAction:
             raise DockSightError("invalid_transition", "Invalid action transition", ErrorKind.CONFLICT)
         self.state = state
         self.message = message
+
+    def expire(self, now: datetime) -> bool:
+        """Expire an unclaimed preparation once without changing retained execution outcomes."""
+        if self.state != ActionState.PREPARED or now < self.expires_at:
+            return False
+        self.state = ActionState.EXPIRED
+        self.message = "Action has expired"
+        return True
+
+    def invalidate(self) -> None:
+        """Invalidate an unclaimed preparation after explicit operator reconciliation."""
+        if self.state != ActionState.PREPARED or self.idempotency_key is not None:
+            raise DockSightError("invalid_transition", "Only a preparation can be invalidated", ErrorKind.CONFLICT)
+        self.state = ActionState.EXPIRED
+        self.message = "Action invalidated by operator reconciliation; prepare a new action"

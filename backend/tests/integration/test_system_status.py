@@ -16,7 +16,11 @@ def test_system_status_is_authenticated_scoped_and_never_generates_or_discloses_
 
     token = "test-token-at-least-24-characters"
     settings = Settings(
-        api_token=token, model_base_url="http://private-endpoint", model_api_key="private-key", _env_file=None
+        state_backend="memory",
+        api_token=token,
+        model_base_url="http://private-endpoint",
+        model_api_key="private-key",
+        _env_file=None,
     )
     runtime, model = FakeRuntime(), ScriptedModel([])
     components = build_components(settings, reader=runtime, writer=runtime, model=model, model_probe=MetadataProbe())

@@ -3,7 +3,6 @@ from dataclasses import replace
 
 import pytest
 
-from docksight.adapters.outbound.memory.sessions import MemorySessions
 from docksight.application.diagnostics.context import EvidenceContext
 from docksight.application.diagnostics.tools import DiagnosticTools
 from docksight.application.diagnostics.use_case import Diagnostics
@@ -13,6 +12,7 @@ from docksight.application.views.assembler import ViewAssembler
 from docksight.application.views.schemas import DiagnosisProposal, HostInspection, WidgetProposal
 from docksight.domain.errors import DockSightError, ErrorKind
 from docksight.domain.runtime import ContainerSnapshot, LogBatch, LogEntry, StackSummary
+from tests.diagnostics import diagnostic_stream
 from tests.fakes import FakeRuntime, ScriptedModel
 
 
@@ -91,9 +91,7 @@ def _assert_host_members(report: HostInspection) -> None:
 @pytest.mark.parametrize("query", ["What happened?", "Что случилось?"])
 async def test_bare_question_collects_a_host_overview_before_model_explanations(query: str) -> None:
     runtime, model = HostRuntime(), _model()
-    events = [
-        event async for event in Diagnostics(runtime, model, MemorySessions(), Redactor()).stream("a", "local", query)
-    ]
+    events = [event async for event in diagnostic_stream(Diagnostics(runtime, model, Redactor()), "a", "local", query)]
     assert events[-1]["type"] == "turn.completed", events[-1]
     assert not any(event["type"] == "clarification.required" for event in events)
     answer = next(event["answer"] for event in events if event["type"] == "answer.ready")
@@ -128,9 +126,7 @@ async def test_model_cannot_replace_host_overview_with_a_group_choice() -> None:
     )
     events = [
         event
-        async for event in Diagnostics(runtime, model, MemorySessions(), Redactor()).stream(
-            "a", "local", "What failed?"
-        )
+        async for event in diagnostic_stream(Diagnostics(runtime, model, Redactor()), "a", "local", "What failed?")
     ]
     assert events[-1]["type"] == "turn.completed", events[-1]
     assert not any(event["type"] == "clarification.required" for event in events)
@@ -145,9 +141,7 @@ async def test_failed_logs_keep_observed_status_and_swarm_failure_stays_explicit
     model = _model()
     events = [
         event
-        async for event in Diagnostics(runtime, model, MemorySessions(), Redactor()).stream(
-            "a", "local", "What happened?"
-        )
+        async for event in diagnostic_stream(Diagnostics(runtime, model, Redactor()), "a", "local", "What happened?")
     ]
     answer = next(event["answer"] for event in events if event["type"] == "answer.ready")
     report = answer["host_overview"]
@@ -254,9 +248,7 @@ async def test_host_projection_bounds_the_actual_unicode_tool_message() -> None:
     runtime.log_batch = LogBatch((LogEntry("Ошибка" * 300),))
     events = [
         event
-        async for event in Diagnostics(runtime, model, MemorySessions(), Redactor()).stream(
-            "a", "local", "What happened?"
-        )
+        async for event in diagnostic_stream(Diagnostics(runtime, model, Redactor()), "a", "local", "What happened?")
     ]
     assert events[-1]["type"] == "turn.completed", events[-1]
     projections = [message.content for message in model.requests[0][0] if message.tool_name == "inspect_host"]
@@ -285,9 +277,7 @@ async def test_host_finalization_keeps_evidence_without_replaying_the_unvalidate
     runtime, model = HostRuntime(), _model()
     events = [
         event
-        async for event in Diagnostics(runtime, model, MemorySessions(), Redactor()).stream(
-            "a", "local", "What happened?"
-        )
+        async for event in diagnostic_stream(Diagnostics(runtime, model, Redactor()), "a", "local", "What happened?")
     ]
     assert events[-1]["type"] == "turn.completed"
     messages, schema = model.requests[1]

@@ -1,15 +1,20 @@
 import asyncio
 import json
 from collections.abc import AsyncGenerator
+from datetime import UTC, datetime
+from uuid import uuid4
 
 import pytest
 
-from docksight.adapters.inbound.http.streaming import encode_events
-from docksight.adapters.outbound.memory.sessions import MemorySessions
+from docksight.adapters.inbound.http.legacy import legacy_events
+from docksight.adapters.inbound.http.streaming import EventResponse, encode_events
 from docksight.application.diagnostics.use_case import Diagnostics
+from docksight.application.investigations.contracts import SavedTurn
+from docksight.application.investigations.errors import StorageError
 from docksight.application.ports.models import ModelReply, ToolCall
 from docksight.application.redaction import Redactor
 from docksight.domain.diagnostics import JsonObject
+from tests.diagnostics import diagnostic_stream
 from tests.fakes import FakeRuntime
 
 
@@ -24,6 +29,58 @@ async def test_unexpected_source_failure_emits_one_safe_terminal_event() -> None
     text = "".join(chunks)
     assert text.count("event: turn.failed") == 1
     assert "private-sentinel" not in text
+
+
+async def test_expected_storage_failure_retains_public_code_without_an_unsaved_answer() -> None:
+    async def source():
+        """Fail observation because no next committed snapshot can be read."""
+        yield {"type": "turn.started", "turn_id": "t1", "session_id": "i1"}
+        raise StorageError()
+
+    chunks = [chunk async for chunk in encode_events(source(), "original-request")]
+    events = [json.loads(line[6:]) for chunk in chunks for line in chunk.splitlines() if line.startswith("data: ")]
+    assert events[-1]["code"] == "storage_unavailable"
+    assert events[-1]["request_id"] == "original-request"
+    assert all(event["type"] != "answer.ready" for event in events)
+
+
+async def test_legacy_response_closes_registered_observer_before_first_body_iteration() -> None:
+    closed = asyncio.Event()
+    initial = SavedTurn(
+        id=str(uuid4()),
+        investigation_id=str(uuid4()),
+        actor="operator",
+        host="local",
+        submission_id=str(uuid4()),
+        request_id="original",
+        query="Inspect",
+        state="running",
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+
+    async def source():
+        """Represent an observer that was already registered before response headers were sent."""
+        try:
+            yield initial
+            await asyncio.Event().wait()
+        finally:
+            closed.set()
+
+    async def send(message):
+        """Simulate an HTTP disconnect before Starlette asks for the first body chunk."""
+        raise asyncio.CancelledError()
+
+    async def receive():
+        """Keep the ASGI receive contract available for a modern disconnect-aware response."""
+        return {"type": "http.disconnect"}
+
+    observer = source()
+    assert await anext(observer) == initial
+    response = EventResponse(legacy_events(observer, initial), "original", observer=observer)
+    with pytest.raises(asyncio.CancelledError):
+        await response({"type": "http", "asgi": {"spec_version": "2.4"}}, receive, send)
+    assert closed.is_set()
 
 
 async def test_closing_heartbeat_stream_cancels_pending_work() -> None:
@@ -66,9 +123,8 @@ async def test_turn_deadline_survives_sse_task_boundaries(stage: str) -> None:
                 return ModelReply("", (ToolCall("c1", "inspect_container", {"container_id": "worker"}),))
             return ModelReply("Ready")
 
-    sessions = MemorySessions()
-    service = Diagnostics(SlowRuntime(), SlowModel(), sessions, Redactor(), timeout=0.02)
-    encoded = encode_events(service.stream("operator", "local", "Inspect worker"), "r1", heartbeat=0.005)
+    service = Diagnostics(SlowRuntime(), SlowModel(), Redactor(), timeout=0.02)
+    encoded = encode_events(diagnostic_stream(service, "operator", "local", "Inspect worker"), "r1", heartbeat=0.005)
     async with asyncio.timeout(0.5):
         chunks = [chunk async for chunk in encoded]
     events = [json.loads(line[6:]) for chunk in chunks for line in chunk.splitlines() if line.startswith("data: ")]
@@ -79,5 +135,5 @@ async def test_turn_deadline_survives_sse_task_boundaries(stage: str) -> None:
     assert step["state"] == "failed"
     assert step["code"] == "turn_timeout"
     assert step["duration_ms"] >= 0
-    async with sessions.lease(events[0]["session_id"], "operator", "local"):
-        pass
+    lease = await service.reserve()
+    await lease.close()

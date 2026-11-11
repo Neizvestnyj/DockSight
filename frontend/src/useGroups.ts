@@ -4,11 +4,11 @@ import type { GroupTarget, Stack, Transport } from './contracts';
 export type GroupKind = 'all' | GroupTarget['kind'];
 
 /** Keep explicit group selection independent of drafts, historical turns, and automatic inventory reads. */
-export function useGroups(client: Transport, host: string) {
-  const [kind, setKind] = useState<GroupKind>('all');
-  const [name, setName] = useState('');
+export function useGroups(client: Transport, host: string, initial?: GroupTarget) {
+  const [kind, setKind] = useState<GroupKind>(initial?.kind ?? 'all');
+  const [name, setName] = useState(initial?.name ?? '');
   const [groups, setGroups] = useState<Stack[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(Boolean(initial && host));
   const [error, setError] = useState(false);
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
@@ -47,7 +47,7 @@ export function useGroups(client: Transport, host: string) {
     loading,
     error,
     changeKind,
-    choose: setName,
+    choose: (value: string) => setName(value),
     refresh: () => {
       setLoading(true);
       setError(false);

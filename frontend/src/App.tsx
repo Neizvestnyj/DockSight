@@ -1,8 +1,8 @@
 import { LocaleProvider, LanguageSwitch } from './LocaleProvider';
 import { useLocale } from './locale';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ArrowRight, ChevronDown, ChevronRight, FlaskConical, Menu, MessageSquarePlus } from 'lucide-react';
-import type { Container, Host, Transport } from './contracts';
+import type { Container, DiagnosticTarget, Host, Transport } from './contracts';
 import { DemoClient, demoAnswer, demoHosts, scenarios, type ScenarioId } from './demo';
 import { DemoControls } from './DemoControls';
 import { Select } from './Select';
@@ -23,6 +23,10 @@ import { GroupScope } from './GroupScope';
 import type { ModelSelection } from './model-contracts';
 import { ModelPicker, ModelTrigger } from './ModelPicker';
 import { useModelCatalog } from './useModelCatalog';
+import { ApiClient, ApiError } from './api';
+import { useWorkspace } from './useWorkspace';
+import { useSavedInvestigations } from './useSavedInvestigations';
+import { SavedInvestigations } from './SavedInvestigations';
 
 interface ConnectionState {
   client: Transport;
@@ -32,32 +36,129 @@ interface ConnectionState {
 
 const hostPickerTriggerId = 'workspace-host-picker';
 
-/** Own the connection lifetime; a new backend or host gets a separate transient workspace. */
+/** Own connection authority and restore only the backend's acknowledged workspace. */
 export default function App() {
   return (
     <LocaleProvider>
-      <ConnectedApp />
+      <Bootstrap />
     </LocaleProvider>
   );
 }
 
 /** Keep the active connection stable while presentation language changes. */
-function ConnectedApp() {
+function Bootstrap() {
   const { t } = useLocale();
-  const [connection, setConnection] = useState<ConnectionState>(() => ({
-    client: new DemoClient(),
-    demo: true,
-    id: 0,
-  }));
-  const [hosts, setHosts] = useState<Host[]>(demoHosts);
-  const [host, setHost] = useState('demo-eu');
-  const [showExample, setShowExample] = useState(true);
+  const [connection, setConnection] = useState<ConnectionState>();
+  const [state, setState] = useState<'loading' | 'signed-out' | 'error'>('loading');
+  const [attempt, setAttempt] = useState(0);
+  const [connecting, setConnecting] = useState(false);
+  useEffect(() => {
+    const controller = new AbortController();
+    const client = new ApiClient();
+    void client
+      .session(controller.signal)
+      .then(() => {
+        if (!controller.signal.aborted) setConnection({ client, demo: false, id: 0 });
+      })
+      .catch((failure: unknown) => {
+        if (!controller.signal.aborted)
+          setState(failure instanceof ApiError && failure.httpStatus === 401 ? 'signed-out' : 'error');
+      });
+    return () => controller.abort();
+  }, [attempt]);
+  if (connection)
+    return (
+      <ConnectedApp
+        key={connection.id}
+        initialConnection={connection}
+        replaceConnection={(client, demo) =>
+          setConnection((previous) => ({ client, demo, id: (previous?.id ?? 0) + 1 }))
+        }
+        signOut={() => {
+          setConnection(undefined);
+          setState('signed-out');
+        }}
+      />
+    );
+  return (
+    <main className="session-entry">
+      <Logo />
+      <section>
+        <h1>
+          {t(
+            state === 'loading'
+              ? 'Restoring your workspace…'
+              : state === 'signed-out'
+                ? 'Sign in to DockSight'
+                : 'Could not restore your session.',
+          )}
+        </h1>
+        <p>{t('Saved chats stay on your DockSight backend. Sign in to reopen your workspace.')}</p>
+        {state !== 'loading' && (
+          <div className="entry-actions">
+            {state === 'error' && (
+              <button
+                className="secondary"
+                onClick={() => {
+                  setState('loading');
+                  setAttempt((value) => value + 1);
+                }}
+              >
+                {t('Retry connection')}
+              </button>
+            )}
+            <button className="primary" onClick={() => setConnecting(true)}>
+              {t('Connect API')}
+            </button>
+            <button
+              className="secondary"
+              onClick={() => setConnection({ client: new DemoClient(), demo: true, id: 0 })}
+            >
+              {t('Explore Demo')}
+            </button>
+          </div>
+        )}
+        <LanguageSwitch />
+      </section>
+      {connecting && (
+        <Connection
+          close={() => setConnecting(false)}
+          connect={(client) => {
+            setConnecting(false);
+            setConnection({ client, demo: false, id: Date.now() });
+          }}
+        />
+      )}
+    </main>
+  );
+}
+
+/** Keep the active connection stable while presentation language changes. */
+function ConnectedApp({
+  initialConnection,
+  signOut,
+  replaceConnection,
+}: {
+  initialConnection: ConnectionState;
+  signOut: () => void;
+  replaceConnection: (client: Transport, demo: boolean) => void;
+}) {
+  const { t } = useLocale();
+  const connection = initialConnection;
+  const [hosts, setHosts] = useState<Host[]>(initialConnection.demo ? demoHosts : []);
+  const [selectedHost, setHost] = useState(initialConnection.demo ? 'demo-eu' : '');
+  const [showExample, setShowExample] = useState(initialConnection.demo);
   const [hostError, setHostError] = useState('');
   const [hostLoading, setHostLoading] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [connecting, setConnecting] = useState(false);
   const [choosingHost, setChoosingHost] = useState(false);
   const [modelSelection, setModelSelection] = useState<ModelSelection>();
+  const saved = useWorkspace(connection.client.history);
+  const history = useSavedInvestigations(connection.client.history);
+  const host = connection.demo ? selectedHost : (saved.detail?.host ?? selectedHost);
+  const restored = useRef<number | undefined>(undefined);
+  const choseInitialHost = useRef(false);
   const displayHosts = connection.demo
     ? hosts.map((row) => ({ ...row, name: isMessageKey(row.name) ? t(row.name) : row.name }))
     : hosts;
@@ -72,7 +173,8 @@ function ConnectedApp() {
       .then((rows) => {
         if (controller.signal.aborted) return;
         setHosts(rows);
-        setHost((previous) => (rows.some((row) => row.id === previous) ? previous : (rows[0]?.id ?? '')));
+        if (connection.demo)
+          setHost((previous) => (rows.some((row) => row.id === previous) ? previous : (rows[0]?.id ?? '')));
         setHostError('');
         setHostLoading(false);
       })
@@ -85,17 +187,30 @@ function ConnectedApp() {
     return () => controller.abort();
   }, [connection, attempt]);
 
+  useEffect(() => {
+    if (!saved.ready || connection.demo || restored.current === connection.id) return;
+    restored.current = connection.id;
+    setHost(saved.detail?.host ?? saved.actor?.host ?? '');
+    setModelSelection(saved.actor?.model ?? undefined);
+  }, [saved.ready, saved.detail?.host, saved.actor, connection]);
+
+  useEffect(() => {
+    if (
+      connection.demo ||
+      !saved.ready ||
+      saved.detail ||
+      saved.actor?.host ||
+      hosts.length !== 1 ||
+      choseInitialHost.current
+    )
+      return;
+    choseInitialHost.current = true;
+    void saved.create(hosts[0]!.id).then(() => history.refresh());
+  }, [connection.demo, saved, hosts, history]);
+
   /** Drop old conversations and credentials when changing transport. */
   function changeConnection(client: Transport, demo: boolean) {
-    setConnection((previous) => ({ client, demo, id: previous.id + 1 }));
-    setHosts(demo ? demoHosts : []);
-    setHost(demo ? 'demo-eu' : '');
-    setHostError('');
-    setHostLoading(true);
-    setConnecting(false);
-    setChoosingHost(false);
-    setShowExample(demo);
-    setModelSelection(undefined);
+    replaceConnection(client, demo);
   }
 
   /** Retry discovery without dismissing an open host picker. */
@@ -104,17 +219,52 @@ function ConnectedApp() {
     setAttempt((value) => value + 1);
   }
 
+  /** Start a separate saved host scope without replacing any previous chat. */
+  function changeHost(value: string) {
+    if (value === host) return;
+    if (connection.demo) setHost(value);
+    setShowExample(false);
+    if (!connection.demo) void saved.create(value).then(() => history.refresh());
+  }
+
+  /** Revoke first-party authority or discard transient bearer authority explicitly. */
+  async function logout() {
+    try {
+      if (connection.client instanceof ApiClient && connection.client.authentication === 'cookie')
+        await connection.client.logout();
+      signOut();
+    } catch {
+      setHostError('Could not sign out. Retry the connection.');
+    }
+  }
+
+  if (!connection.demo && !saved.ready)
+    return (
+      <main className="session-entry">
+        <Logo />
+        <h1>{t('Restoring your workspace…')}</h1>
+        {saved.error && (
+          <>
+            <p role="alert">{t('Could not restore saved workspace. Retry the read.')}</p>
+            <button className="secondary" onClick={saved.retry}>
+              {t('Retry')}
+            </button>
+            <button className="text-button" onClick={() => void logout()}>
+              {t('Sign out')}
+            </button>
+          </>
+        )}
+      </main>
+    );
+
   return (
     <>
       <Workspace
-        key={`${connection.id}-${host}`}
+        key={`${connection.id}-${host}-${saved.detail?.id ?? 'new'}`}
         connection={connection}
         hosts={displayHosts}
         host={host}
-        changeHost={(value) => {
-          setHost(value);
-          setShowExample(false);
-        }}
+        changeHost={changeHost}
         showExample={showExample}
         hostError={translatedHostError}
         hostLoading={hostLoading}
@@ -123,7 +273,16 @@ function ConnectedApp() {
         connect={() => setConnecting(true)}
         returnDemo={() => changeConnection(new DemoClient(), true)}
         modelSelection={modelSelection}
-        chooseModel={setModelSelection}
+        chooseModel={(value) => {
+          if (connection.demo) setModelSelection(value);
+          else
+            void saved.savePreferences({ model: value }).then((acknowledged) => {
+              if (acknowledged) setModelSelection(value);
+            });
+        }}
+        saved={saved}
+        history={history}
+        logout={() => void logout()}
       />
       {choosingHost && (
         <HostPicker
@@ -137,8 +296,7 @@ function ConnectedApp() {
           choose={(value) => {
             setChoosingHost(false);
             if (value !== host) {
-              setHost(value);
-              setShowExample(false);
+              changeHost(value);
             }
           }}
           connect={() => {
@@ -155,6 +313,9 @@ function ConnectedApp() {
 }
 
 interface WorkspaceProps {
+  saved: ReturnType<typeof useWorkspace>;
+  history: ReturnType<typeof useSavedInvestigations>;
+  logout: () => void;
   modelSelection?: ModelSelection;
   chooseModel: (selection: ModelSelection) => void;
   connection: ConnectionState;
@@ -185,6 +346,9 @@ function Workspace({
   showExample,
   modelSelection,
   chooseModel,
+  saved,
+  history,
+  logout,
 }: WorkspaceProps) {
   const { t } = useLocale();
   const { client, demo } = connection;
@@ -192,8 +356,25 @@ function Workspace({
   const [initial] = useState(() =>
     demoClient && showExample && host === 'demo-eu' ? demoClient.remember(demoAnswer('crash_loop', host)) : undefined,
   );
-  const investigation = useInvestigation(client, host, initial, modelSelection);
-  const groupScope = useGroups(client, host);
+  const investigation = useInvestigation(
+    client,
+    host,
+    initial,
+    modelSelection,
+    demo
+      ? undefined
+      : {
+          ...saved,
+          enabled: !saved.loading,
+          conflict: saved.conflictWith,
+          changed: () => {
+            void history.refresh();
+          },
+        },
+  );
+  const [scopeTarget, setScopeTarget] = useState<DiagnosticTarget | null>(saved.detail?.workspace.target ?? null);
+  const initialGroup = scopeTarget && scopeTarget.kind !== 'container' ? scopeTarget : undefined;
+  const groupScope = useGroups(client, host, demo ? undefined : initialGroup);
   const availability = useSystemStatus(client, host, !hostLoading, !demo, modelSelection);
   const catalog = useModelCatalog(client);
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
@@ -208,12 +389,77 @@ function Workspace({
   );
   const [selected, setSelected] = useState<Container>();
   const [viewingContainer, setViewingContainer] = useState(false);
-  const [draft, setDraft] = useState('');
+  const [demoDraft, setDemoDraft] = useState('');
+  const draft = demo ? demoDraft : saved.draft;
+  const setDraft = demo ? setDemoDraft : saved.setDraft;
   const [scenario, setScenario] = useState<ScenarioId>(demoClient?.scenario ?? 'crash_loop');
   const [menu, setMenu] = useState(false);
   const [help, setHelp] = useState(false);
   const [composerVisible, setComposerVisible] = useState(false);
   const name = hosts.find((row) => row.id === host)?.name ?? host;
+  const configured = hosts.some((row) => row.id === host);
+  const [targetAvailable, setTargetAvailable] = useState(scopeTarget?.kind !== 'container');
+  const [selectionError, setSelectionError] = useState(false);
+  const modelAvailable =
+    !modelSelection ||
+    Boolean(
+      catalog.providers?.providers.some((row) => row.id === modelSelection.provider && row.configured) &&
+      catalog.catalogs[modelSelection.provider]?.data?.models.some((row) => row.id === modelSelection.model),
+    );
+  const groupAvailable = !scopeTarget || scopeTarget.kind === 'container' || Boolean(groupScope.group);
+  const continuingBlocked =
+    !demo &&
+    (!configured ||
+      !modelAvailable ||
+      !targetAvailable ||
+      !groupAvailable ||
+      saved.loading ||
+      !saved.detail ||
+      saved.saveState === 'conflict' ||
+      saved.saveState === 'error');
+
+  const { loadProviders, loadCatalog, providers } = catalog;
+  useEffect(() => {
+    if (demo || !modelSelection) return;
+    void loadProviders();
+    if (providers?.providers.some((row) => row.id === modelSelection.provider && row.configured))
+      void loadCatalog(modelSelection.provider);
+  }, [demo, modelSelection, providers, loadProviders, loadCatalog]);
+
+  useEffect(() => {
+    if (demo || scopeTarget?.kind !== 'container') return;
+    const controller = new AbortController();
+    void client
+      .container(host, scopeTarget.id, controller.signal)
+      .then(() => {
+        if (!controller.signal.aborted) setTargetAvailable(true);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setTargetAvailable(false);
+      });
+    return () => controller.abort();
+  }, [client, host, demo, scopeTarget]);
+
+  useEffect(() => {
+    if (demo || !saved.detail || saved.detail.workspace.view !== 'containers' || hostLoading) return;
+    const target = saved.detail.workspace.selected_container;
+    if (!target || !configured) return;
+    const controller = new AbortController();
+    void client
+      .container(host, target.id, controller.signal)
+      .then((value) => {
+        if (!controller.signal.aborted) {
+          setSelected(value);
+          setViewingContainer(true);
+        }
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setSelectionError(true);
+      });
+    return () => controller.abort();
+    // Restore exact selection only when this chat opens, never match by name.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client, host, saved.detail?.id, hostLoading]);
 
   useEffect(() => {
     const input = document.getElementById('query');
@@ -246,6 +492,12 @@ function Workspace({
     setSelected(container);
     setViewingContainer(true);
     setMenu(false);
+    setSelectionError(false);
+    if (!demo)
+      saved.patch({
+        selected_container: { kind: 'container', id: container.id, name: container.name },
+        view: 'containers',
+      });
     requestAnimationFrame(() => document.getElementById('container-title')?.focus({ preventScroll: true }));
   }
 
@@ -253,6 +505,7 @@ function Workspace({
   function openInvestigation(focusQuery = false) {
     setViewingContainer(false);
     setMenu(false);
+    if (!demo && saved.detail?.workspace.view !== 'diagnostics') saved.patch({ view: 'diagnostics' });
     requestAnimationFrame(() => document.getElementById(focusQuery ? 'query' : 'workspace-title')?.focus());
   }
 
@@ -271,6 +524,7 @@ function Workspace({
         id: container.id,
       }),
       true,
+      demo ? undefined : { kind: 'container', id: container.id, name: container.name },
     );
   }
 
@@ -317,8 +571,14 @@ function Workspace({
       setMenu(false);
     },
     newInvestigation: () => {
-      investigation.clear();
-      setDraft('');
+      if (demo) {
+        investigation.clear();
+        setDraft('');
+      } else if (configured)
+        void saved.create(host).then(() => {
+          void history.refresh();
+          requestAnimationFrame(() => document.getElementById('query')?.focus());
+        });
       openInvestigation(true);
     },
     openInvestigation: () => openInvestigation(),
@@ -326,6 +586,26 @@ function Workspace({
       setMenu(false);
       setHelp(true);
     },
+    savedChats: !demo ? (
+      <SavedInvestigations
+        {...history}
+        selected={saved.detail?.id}
+        open={(id) => {
+          setMenu(false);
+          void saved.open(id);
+        }}
+        remove={(id) => {
+          void history.remove(id).then((removed) => {
+            if (removed && saved.detail?.id === id) {
+              const next = history.items.find((row) => row.id !== id);
+              if (next) void saved.open(next.id);
+              else void saved.create(host);
+            }
+          });
+        }}
+      />
+    ) : undefined,
+    transient: client instanceof ApiClient && client.authentication === 'bearer',
   };
 
   return (
@@ -380,6 +660,11 @@ function Workspace({
             {t(demo ? 'Connect API' : 'Change connection')}
             <ArrowRight size={13} />
           </button>
+          {!demo && (
+            <button className="text-button" onClick={logout}>
+              {t('Sign out')}
+            </button>
+          )}
         </div>
       </header>
       <main id="main" className="sheet">
@@ -411,12 +696,106 @@ function Workspace({
             )}
           </div>
         </div>
-        {!viewingContainer && (
-          <GroupScope
-            scope={groupScope}
-            diagnose={diagnoseGroup}
-            blocked={investigation.running || Boolean(availability.blockedReason)}
-          />
+        {!demo && (!host || !configured) && (
+          <div className="dependency-notice" role="status">
+            <p>{t('Choose a configured host to continue. Saved evidence remains readable.')}</p>
+            <button className="secondary" onClick={openHostPicker}>
+              {t('Choose a host')}
+            </button>
+          </div>
+        )}
+        {!demo && !saved.detail && configured && (
+          <button className="secondary" onClick={() => void saved.create(host)}>
+            {t('New investigation')}
+          </button>
+        )}
+        {!demo && saved.loading && <p role="status">{t('Loading saved chat…')}</p>}
+        {!demo && saved.error && (
+          <p role="alert">
+            {t(isMessageKey(saved.error) ? saved.error : 'Could not refresh saved chat. Retry the read.')}
+          </p>
+        )}
+        {!demo && saved.detail && (
+          <div className="workspace-save" role="status">
+            <span>
+              {t(
+                saved.saveState === 'saved'
+                  ? 'Draft saved'
+                  : saved.saveState === 'saving'
+                    ? 'Saving draft…'
+                    : saved.saveState === 'conflict'
+                      ? 'This chat changed in another tab. Your draft is unsaved.'
+                      : 'Draft unsaved',
+              )}
+            </span>
+            {saved.saveState === 'conflict' && (
+              <>
+                <button className="text-button" onClick={saved.reloadConflict}>
+                  {t('Reload saved draft')}
+                </button>
+                <button className="secondary" onClick={() => void saved.useDraft()}>
+                  {t('Use this draft')}
+                </button>
+              </>
+            )}
+            {saved.saveState === 'error' && (
+              <button className="text-button" onClick={() => void saved.flush()}>
+                {t('Retry save')}
+              </button>
+            )}
+          </div>
+        )}
+        {!viewingContainer &&
+          (scopeTarget?.kind === 'container' && !demo ? (
+            <div className="dependency-notice">
+              <p>
+                {t('Saved container scope')}: {scopeTarget.name} · <code>{scopeTarget.id}</code>
+              </p>
+              <button
+                className="secondary"
+                onClick={() => {
+                  setScopeTarget(null);
+                  setTargetAvailable(true);
+                  saved.patch({ target: null });
+                }}
+              >
+                {t('Use host scope')}
+              </button>
+            </div>
+          ) : (
+            <GroupScope
+              scope={{
+                ...groupScope,
+                changeKind: (kind) => {
+                  groupScope.changeKind(kind);
+                  if (!demo) {
+                    setScopeTarget(null);
+                    setTargetAvailable(true);
+                    saved.patch({ target: null });
+                  }
+                },
+                choose: (name) => {
+                  groupScope.choose(name);
+                  if (!demo && groupScope.kind !== 'all') {
+                    const target = name ? { kind: groupScope.kind, name } : null;
+                    setScopeTarget(target);
+                    saved.patch({ target });
+                  }
+                },
+              }}
+              diagnose={diagnoseGroup}
+              blocked={continuingBlocked || investigation.running || Boolean(availability.blockedReason)}
+            />
+          ))}
+        {!demo && (!modelAvailable || !targetAvailable || !groupAvailable) && (
+          <p className="inline-warning" role="status">
+            {t('A saved model or target is unavailable. Choose a current model or scope to continue.')}
+          </p>
+        )}
+        {selectionError && (
+          <p className="inline-warning" role="status">
+            {t('The saved container selection is unavailable. Select a current container by its exact ID.')}
+          </p>
         )}
         {availability.blockedReason && (
           <div className="dependency-notice" role="status">
@@ -484,8 +863,9 @@ function Workspace({
             draft={draft}
             setDraft={setDraft}
             host={host}
-            blocked={Boolean(availability.blockedReason)}
+            blocked={continuingBlocked || Boolean(availability.blockedReason)}
             group={groupScope.group ? { kind: groupScope.group.kind, name: groupScope.group.name } : undefined}
+            target={!demo ? (scopeTarget ?? undefined) : undefined}
           />
         </div>
       </main>
@@ -535,14 +915,18 @@ function Workspace({
           </p>
           <p>
             {t(
-              "Changing hosts starts a separate session. Conversations are held in this tab's memory; the API has no past-dialogue listing. Backend sessions and actions disappear after a restart or expiry.",
+              demo
+                ? 'Demo chats are simulated and live only in this tab.'
+                : 'Saved chats and acknowledged drafts stay on your backend. Continuing a chat gathers fresh Docker evidence.',
             )}
           </p>
           <p>
             {demo
               ? t('All current observations are fixture-based examples. Connect an API for real Docker evidence.')
               : t(
-                  'Your bearer token is held only in this tab’s memory and is discarded when you disconnect or reload.',
+                  client instanceof ApiClient && client.authentication === 'cookie'
+                    ? 'Your browser session uses an HttpOnly cookie. CSRF authority stays only in memory.'
+                    : 'Your bearer token is held only in this tab’s memory and is discarded when you disconnect or reload.',
                 )}
           </p>
         </Modal>

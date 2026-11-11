@@ -1,15 +1,17 @@
+import { routeSavedApi } from './helpers/saved-server';
+import { openDemo } from './helpers/demo';
 import { chooseOption } from './helpers/select';
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 import { DemoClient, demoAnswer, demoContainer, demoSystemStatus } from '../src/demo';
 import { demoGroupAnswer } from '../src/demoGroup';
-import type { TurnInput } from '../src/contracts';
+import type { StartTurn } from '../src/investigation-contracts';
 
 for (const groupName of ['vintoria-infra', `vintoria-infra-${'x'.repeat(113)}`]) {
   test(`selects an observed group and retains draft, locale and history (${groupName.length} characters)`, async ({
     page,
   }, info) => {
-    const inputs: TurnInput[] = [];
+    const inputs: StartTurn[] = [];
     const rows = Array.from({ length: 6 }, (_, index) => demoContainer(index, 'local', '2026-10-29T10:00:00Z'));
     const groups = await new DemoClient().stacks('demo-eu', 'compose', new AbortController().signal);
     const group = { ...groups[0]!, name: groupName };
@@ -19,15 +21,15 @@ for (const groupName of ['vintoria-infra', `vintoria-infra-${'x'.repeat(113)}`])
     const selectionGate = new Promise<void>((resolve) => {
       finishSelection = resolve;
     });
-    await page.route('**/api/v1/**', async (route) => {
+    await routeSavedApi(page, async (route) => {
       const request = route.request();
       const url = new URL(request.url());
-      expect(request.headers()['authorization']).toBe('Bearer clarification-test-token');
+      expect(request.headers()['authorization']).toBeUndefined();
       if (url.pathname.endsWith('/hosts')) return route.fulfill({ json: [{ id: 'local', name: 'Test host' }] });
       if (url.pathname.endsWith('/system/status')) return route.fulfill({ json: demoSystemStatus('local') });
       if (url.pathname.endsWith('/containers')) return route.fulfill({ json: rows });
-      expect(url.pathname).toBe('/api/v1/chat/turns');
-      inputs.push(request.postDataJSON() as TurnInput);
+      expect(url.pathname.endsWith('/turns')).toBe(true);
+      inputs.push(request.postDataJSON() as StartTurn);
       if (inputs.length === 2) await selectionGate;
       const base = { schema_version: 1, request_id: `r-${inputs.length}`, turn_id: `t-${inputs.length}` };
       const events = [
@@ -53,7 +55,7 @@ for (const groupName of ['vintoria-infra', `vintoria-infra-${'x'.repeat(113)}`])
         body: events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join(''),
       });
     });
-    await page.goto('/');
+    await openDemo(page);
     if ((page.viewportSize()?.width ?? 1440) <= 560) {
       await page.getByRole('button', { name: 'Open host and containers' }).click();
       await page.getByRole('button', { name: 'Connect your API' }).click();
@@ -95,8 +97,14 @@ for (const groupName of ['vintoria-infra', `vintoria-infra-${'x'.repeat(113)}`])
     await expect(page.locator('.diagnostic-trace')).toHaveJSProperty('open', true);
     await expect(page.locator('.session-turns')).toHaveCount(0);
     expect(inputs).toHaveLength(2);
-    expect(inputs[1]?.query).toBe(question);
-    expect(inputs[1]?.group).toEqual({ kind: 'compose', name: groupName });
+    expect(inputs[1]).toMatchObject({
+      kind: 'clarification',
+      clarification_of: expect.any(String),
+      expected_parent_revision: expect.any(Number),
+    });
+    expect(inputs[1]).not.toHaveProperty('query');
+    expect(inputs[0]).toMatchObject({ kind: 'question', query: question });
+    expect(inputs[1]?.target).toEqual({ kind: 'compose', name: groupName });
     await expect(page.getByRole('textbox')).toHaveValue('Keep this follow-up draft');
     await page.getByRole('button', { name: 'Исследовать', exact: true }).click();
     await expect(page.locator('.session-turns')).toBeVisible();

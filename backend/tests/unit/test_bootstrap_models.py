@@ -16,6 +16,7 @@ from tests.fakes import FakeRuntime, ScriptedModel
 async def test_secondary_selections_share_clients_and_redact_all_configured_keys() -> None:
     """Model copies share one provider connection and all selected diagnoses share credential redaction."""
     settings = Settings(
+        state_backend="memory",
         api_token="test-token-at-least-24-characters",
         model_api_key="legacy-secret",
         openai_api_key="secondary-secret",
@@ -94,6 +95,7 @@ async def test_secondary_provider_uses_its_configured_tool_output_mode(
 
     monkeypatch.setattr("docksight.bootstrap.AsyncOpenAI", create_client)
     settings = Settings(
+        state_backend="memory",
         api_token="test-token-at-least-24-characters",
         compatible_base_url="http://compatible.example.test/v1/",
         gemini_api_key="fixture-gemini-key",

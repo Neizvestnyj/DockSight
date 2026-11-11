@@ -44,3 +44,29 @@ def test_completed_action_cannot_be_finished_again() -> None:
     with pytest.raises(DockSightError):
         item.finish(ActionState.FAILED, "Late failure")
     assert item.state == ActionState.SUCCEEDED
+
+
+def test_expiry_changes_only_unclaimed_preparations() -> None:
+    item = action()
+    assert item.expire(NOW) is False
+    assert item.expire(NOW + timedelta(minutes=5)) is True
+    assert item.state == ActionState.EXPIRED
+    assert item.expire(NOW + timedelta(minutes=6)) is False
+    running = action()
+    running.claim("operator", "request-1", True, NOW)
+    assert running.expire(NOW + timedelta(days=1)) is False
+    assert running.state == ActionState.RUNNING
+
+
+def test_reconciliation_invalidation_cannot_rewrite_a_claimed_outcome() -> None:
+    item = action()
+    item.invalidate()
+    assert item.state == ActionState.EXPIRED
+    with pytest.raises(DockSightError):
+        item.claim("operator", "request-1", True, NOW)
+    running = action()
+    running.claim("operator", "request-1", True, NOW)
+    running.finish(ActionState.INDETERMINATE, "Unknown")
+    with pytest.raises(DockSightError):
+        running.invalidate()
+    assert running.state == ActionState.INDETERMINATE

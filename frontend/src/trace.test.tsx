@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { eventSchema, type TraceStep } from './contracts';
 import { DemoClient } from './demo';
 import { useInvestigation } from './useInvestigation';
-import App from './App';
+import { renderDemoApp } from '../test-utils/demo';
 import { DiagnosticTrace } from './DiagnosticTrace';
 
 const envelope = { schema_version: 1, request_id: 'request-1', turn_id: 'turn-1' } as const;
@@ -25,8 +25,8 @@ const step: TraceStep = {
 
 afterEach(cleanup);
 
-describe('diagnostic trace transport and retention', () => {
-  it('shows the exploration response JSON in the evidence-collection model step', () => {
+describe('diagnostic trace transport and retention', async () => {
+  it('shows the exploration response JSON in the evidence-collection model step', async () => {
     render(
       <DiagnosticTrace
         host="local"
@@ -58,7 +58,7 @@ describe('diagnostic trace transport and retention', () => {
     );
   });
   it('keeps historical answers usable when no trace was recorded', async () => {
-    render(<App />);
+    await renderDemoApp();
     fireEvent.click(await screen.findByText('Diagnostic trace'));
     expect(
       screen
@@ -125,7 +125,7 @@ describe('diagnostic trace transport and retention', () => {
       vi.unstubAllGlobals();
     }
   });
-  it('validates bounded trace events and rejects arbitrary native fields', () => {
+  it('validates bounded trace events and rejects arbitrary native fields', async () => {
     expect(eventSchema.safeParse({ ...envelope, type: 'trace.step', step }).success).toBe(true);
     expect(
       eventSchema.safeParse({ ...envelope, type: 'trace.step', step: { ...step, native: { secret: 'hidden' } } })

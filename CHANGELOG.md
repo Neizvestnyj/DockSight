@@ -4,6 +4,69 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versions: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Dates record merges into `master`. Version links show the corresponding changes.
 
+## [0.8.0]
+
+### Added
+
+- Saved API chats retain cards, evidence, clarification attempts, and bounded progress. The browser pages older chats
+  and answers, restores acknowledged drafts and exact selections, and preserves local text on revision conflicts.
+  Explicit history deletion preserves submission receipts and action protection.
+- Local SQLite storage includes packaged forward migrations, exclusive process ownership, stopped-server status,
+  and byte-preserving backups that reject source-file and source-sidecar destinations. The backend image prepares
+  `/var/lib/docksight` for a durable directory mount.
+- Durable action claims, dispatch markers, outcomes, and audit retain idempotency and exact-target uncertainty guards
+  across restart. Cancelled callers retain an owned execution handoff.
+- Supervised diagnostic jobs survive observer loss, deduplicate submission receipts, and stop only through explicit
+  cancellation or shutdown. Startup marks abandoned work interrupted without resuming generation. Continuations use
+  bounded successful question/summary context and collect fresh runtime evidence independently of the display archive.
+- Offline state commands inspect, back up, migrate, and explicitly reconcile blocked targets under the backend lock.
+  Reconciliation requires a fresh Docker observation and operator acknowledgement, preserves the unknown outcome,
+  and invalidates old preparations without resending Docker commands.
+- First-party browser login restores actor-bound sessions through an HttpOnly cookie with hash-only SQLite storage,
+  absolute and idle expiry, credential-rotation revocation, and CSRF protection. Bearer API access remains available.
+- History and workspace endpoints restore saved turns, handle revision conflicts, and accept duplicate-safe submissions.
+  Snapshot streams reconnect without generation. Legacy chat streams share the retained diagnostic runner.
+
+### Fixed
+
+- System status browser checks wait for the stale response before advancing simulated time, avoiding timing failures.
+- Diagnostic services start on Python 3.12 and 3.13 when type-only annotations reference the diagnostic use case.
+- The connection form prefills the current browser's API address and distinguishes rejected browser origins,
+  insecure-cookie configuration, and invalid tokens from an invalid API address.
+- Focus refresh and deliberate navigation preserve unsaved draft ownership and observe accepted work started in
+  another tab.
+  Removed-host archives remain last-active without changing configured host preferences.
+  Stop addresses the current saved turn without resubmitting work or detaching a newer turn after a late response.
+- Active browser sessions remain refreshable at the supported minimum idle timeout. Session maintenance removes only
+  expired or revoked browser records in batches of at most 100 and preserves saved history and action protection.
+- Repeated Stop and shutdown requests share diagnostic cancellation without interrupting terminal cleanup or leaving
+  saved turns running after their worker exits. Disconnecting a Stop caller preserves the owned cleanup.
+- Creating a saved investigation enforces both byte quotas before saving its initial workspace and model context.
+  Rejected creation preserves existing archives and actor preferences.
+- A dispatch-marker commit that settles after its action deadline cannot send a late Docker command.
+- Offline reconciliation audits the executing OS account independently of inherited username environment variables.
+  An unavailable OS identity leaves the target blocked and its audit unchanged.
+- Sanitized draft bounds and target labels are checked before storage without disabling unrelated writes.
+  Archive reads withhold inconsistent snapshots and keep active turn metadata consistent with the initial turn page.
+- Action reads keep blocked exact targets unavailable. Durable audit retains originating request and diagnostic turn
+  correlation after history deletion and restart.
+- Backups reject existing destination journals and remove only partial files created by the failed invocation.
+
+### Changed
+
+- SQLite is the default state backend. Startup locks, migrates, and recovers state before readiness. Shutdown settles
+  diagnostic and action work before closing adapters. Explicit memory mode retains its session capacity and idle expiry.
+- Keep temporary agent plans and review artifacts out of version control.
+- Architecture checks keep SQLAlchemy, Alembic, and file-locking libraries inside adapters.
+- Browser startup restores first-party cookie sessions before offering explicit Demo entry. Separate-origin bearer
+  access remains transient. Detached diagnostic views recover accepted work through reads without resubmitting it.
+  Reopened action review requires current server state and renewed confirmation without preparing a replacement.
+- Isolated HTTP-process and production-browser checks cover SQLite crash recovery, reloads, tab conflicts, and saved
+  action protection. Opt-in checks use owned Docker resources and an existing local model for recovery and continuation.
+  HTTPS authentication fixtures keep their cookie policy independent of local HTTP configuration.
+- Configuration and contributor guides document exact browser origins, durable volume ownership, offline state recovery,
+  and dedicated persistence checks. Native backend diagrams and English Demo screenshots match the saved-chat workflow.
+
 ## [0.7.0]
 
 ### Added
@@ -73,8 +136,8 @@ Dates record merges into `master`. Version links show the corresponding changes.
   Repeated reads reuse current-turn evidence references. Redundant tool batches end exploration.
   Follow-ups label earlier questions and summaries as historical context and collect fresh facts.
   Ollama context-window exhaustion is distinguished from the response token limit, with localized guidance.
-- Docker log tails retain transport timeouts and abort at a fixed deadline. Stalled or slowly delivered responses release
-  worker capacity and cannot return partial logs as a successful read or prevent backend shutdown.
+- Docker log tails retain transport timeouts and abort at a fixed deadline. Stalled or slowly delivered responses
+  release worker capacity and cannot return partial logs as a successful read or prevent backend shutdown.
 
 ## [0.5.0] - 2026-10-31
 
@@ -95,8 +158,9 @@ Dates record merges into `master`. Version links show the corresponding changes.
   A noisy SQL-log follow-up covers exact-container evidence, card content, and response language.
 - Explicit container references preserve container scope when a Compose project has the same name,
   allowing dependency follow-ups to continue the existing conversation with fresh observations. Server tool scope keeps
-  earlier group context from adding unrelated container cards to the new answer. Exact-target status and bounded logs are
-  collected before model exploration. The server fills missing cards from those facts and retains status when logs fail.
+  earlier group context from adding unrelated container cards to the new answer. Exact-target status and bounded logs
+  are collected before model exploration. The server fills missing cards from those facts.
+  Status remains available when logs fail.
 - Untyped container/project name collisions ask which resource to investigate. The choice retains the question and
   conversation. Container reads use a freshly validated full Docker ID.
 - Diagnostics and New investigation open an empty conversation, clear the draft, and focus the question input.
@@ -136,8 +200,8 @@ Dates record merges into `master`. Version links show the corresponding changes.
   the original question with the selected scope, preserving the follow-up draft.
 - Each container's state, logs, and environment appear together with links to original observations. Action controls are
   more prominent. Log, trace, and observation disclosures animate while respecting reduced motion.
-- Backend hooks and CI enforce 90% combined line and branch coverage, with missing-line output and optional HTML reports.
-  Live Docker/model checks are selected by integration risk and remain opt-in.
+- Backend hooks and CI enforce 90% combined line and branch coverage, with missing-line output and optional HTML
+  reports. Live Docker/model checks are selected by integration risk and remain opt-in.
 - Numeric release versions stay aligned across backend metadata and the lockfile. Release notes use dated categories
   and summarize related outcomes across commits.
 
@@ -151,13 +215,15 @@ Dates record merges into `master`. Version links show the corresponding changes.
 
 ### Added
 
-- Compose-project and Swarm-stack diagnostics with participant states, service replica counts, and explicit coverage gaps.
-  Failure logs cover up to four local problem containers. Remote Swarm-node logs and group-wide mutations are unsupported.
+- Compose-project and Swarm-stack diagnostics with participant states, service replica counts, and explicit coverage
+  gaps. Failure logs cover up to four local problem containers. Remote Swarm-node logs and group-wide mutations are
+  unsupported.
 - Optional group selection and resource-grouped evidence sources with observation times and direct links from cards.
 
 ### Changed
 
-- Setup, configuration, examples, and contributor documentation are consolidated around refreshed English demo screenshots.
+- Setup, configuration, examples, and contributor documentation are consolidated around refreshed English demo
+  screenshots.
 - Local hooks reject commits and direct pushes to `master`. Contribution rules require ongoing release notes.
 
 ### Fixed
@@ -166,7 +232,8 @@ Dates record merges into `master`. Version links show the corresponding changes.
   containers retain factual cards even when the model omits them.
 - Evidence IDs cannot be used as Docker resource IDs. Explanations distinguish immediate failures from unresolved causes
   and follow the question's language.
-- Returning through the logo preserves the active diagnosis. The question shortcut appears only when its input is offscreen.
+- Returning through the logo preserves the active diagnosis. The question shortcut appears only when its input is
+  offscreen.
 
 ## [0.2.0] - 2026-10-28
 
@@ -176,8 +243,10 @@ Dates record merges into `master`. Version links show the corresponding changes.
 - Visibly separate demo scenarios for trying investigations and confirmed actions without Docker or a model.
 - Read-only container overview for state, metrics, logs, and allowlisted environment values, with automatic inventory
   refresh that preserves earlier diagnostic observations.
-- Authenticated streaming diagnoses with tool progress, cancellation, connection-error recovery, and linked evidence cards.
-- Independent API, Docker, provider, and model availability indicators, including checks that do not generate model answers.
+- Authenticated streaming diagnoses with tool progress, cancellation, connection-error recovery, and linked evidence
+  cards.
+- Independent API, Docker, provider, and model availability indicators, including checks that do not generate model
+  answers.
 - Temporary per-turn traces with durations, available token usage, sanitized model responses, tool calls,
   and validation errors.
 
@@ -199,13 +268,15 @@ Dates record merges into `master`. Version links show the corresponding changes.
 
 ### Added
 
-- Authenticated REST API and SSE diagnostics with typed UI cards and evidence references, plus public health and API docs.
+- Authenticated REST API and SSE diagnostics with typed UI cards and evidence references, plus public health and API
+  docs.
 - Docker inventory, state, logs, metrics, allowlisted environment values, and stack summaries over local, verified SSH,
   or mTLS connections.
 - Configurable Ollama, OpenAI, Anthropic, and OpenAI-compatible model adapters.
-- Host-scoped diagnostic sessions with bounded tool work, concurrency limits, and turn deadlines. Session and action state
-  is held in memory, resets on restart, and requires a single backend worker.
-- Expiring restart/stop proposals with explicit confirmation, target revalidation, idempotency, and execution audit events.
+- Host-scoped diagnostic sessions with bounded tool work, concurrency limits, and turn deadlines. Session and action
+  state is held in memory, resets on restart, and requires a single backend worker.
+- Expiring restart/stop proposals with explicit confirmation, target revalidation, idempotency, and execution audit
+  events.
 - Non-root Python 3.14 backend image, reproducible Compose failures, and an HTTP demo client.
 - Hexagonal backend boundaries, strict quality checks, API/architecture guides, and editable Draw.io diagrams.
 
@@ -216,6 +287,7 @@ Dates record merges into `master`. Version links show the corresponding changes.
 - Prepared actions are bound to the caller and exact target. Unknown mutation outcomes block conflicting actions.
   Runtime mutations are never retried automatically.
 
+[0.8.0]: https://github.com/Neizvestnyj/DockSight/compare/feature/security-fixes...feature/persistent-investigations
 [0.7.0]: https://github.com/Neizvestnyj/DockSight/compare/3c69d1ac9d2316bf84582ec230c5290779967cf7...feature/security-fixes
 [0.6.0]: https://github.com/Neizvestnyj/DockSight/compare/093f3c7e0a90251cfe73aba503576bd2280cca12...3c69d1ac9d2316bf84582ec230c5290779967cf7
 [0.5.0]: https://github.com/Neizvestnyj/DockSight/compare/83c8fa477bfc63aa4c0d4f21f33bf676c0649e41...093f3c7e0a90251cfe73aba503576bd2280cca12

@@ -5,6 +5,7 @@ from uuid import uuid4
 import pytest
 
 from docksight.application.diagnostics.context import EvidenceContext
+from docksight.application.ports.state import ActionOrigin
 from docksight.application.views.assembler import ViewAssembler
 from docksight.application.views.schemas import (
     ActionView,
@@ -73,7 +74,9 @@ async def test_identical_proposals_do_not_duplicate_cards_or_action_preparation(
     )
     prepared: list[Operation] = []
 
-    async def prepare(actor: str, host: str, container_id: str, operation: Operation) -> ActionView:
+    async def prepare(
+        actor: str, host: str, container_id: str, operation: Operation, origin: ActionOrigin | None
+    ) -> ActionView:
         """Track preparation once for each permitted operation on the observed target."""
         prepared.append(operation)
         return ActionView(
@@ -111,7 +114,9 @@ async def test_recommendation_links_only_the_explicit_model_operation_to_a_prepa
     context = EvidenceContext()
     context.record("container", "local", {}, item)
 
-    async def prepare(actor: str, host: str, container_id: str, operation: Operation) -> ActionView:
+    async def prepare(
+        actor: str, host: str, container_id: str, operation: Operation, origin: ActionOrigin | None
+    ) -> ActionView:
         """Issue opaque IDs using the real exact resource passed by the assembler."""
         assert (actor, host, container_id) == ("alice", "local", item.id)
         return ActionView(
@@ -223,7 +228,9 @@ async def test_added_group_status_uses_the_latest_observation_and_its_action_pol
         logs=[GroupLogResult(container_id=old.id, name=old.name, state="failed", code="runtime_unavailable")],
     )
 
-    async def prepare(actor: str, host: str, container_id: str, operation: Operation) -> ActionView:
+    async def prepare(
+        actor: str, host: str, container_id: str, operation: Operation, origin: ActionOrigin | None
+    ) -> ActionView:
         """Expose the operation selected by the observed state without executing a mutation."""
         return ActionView(
             id=str(uuid4()),

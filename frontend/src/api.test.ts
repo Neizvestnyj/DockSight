@@ -4,6 +4,30 @@ import { consumeEvents } from './stream';
 import { demoContainer } from './demo';
 
 describe('direct container reads', () => {
+  it('exchanges a first-party bearer once and keeps subsequent credentials in the cookie contract', async () => {
+    const calls: RequestInit[] = [];
+    const client = new ApiClient('/api/v1', '', async (_url, init) => {
+      calls.push(init!);
+      return Response.json({ actor: 'operator', expires_at: '2026-11-05T12:00:00Z', csrf_token: 'c'.repeat(43) });
+    });
+    await client.login('one-time-secret');
+    await client.session();
+    await client.logout();
+    expect(new Headers(calls[0]!.headers).get('Authorization')).toBe('Bearer one-time-secret');
+    expect(new Headers(calls[1]!.headers).has('Authorization')).toBe(false);
+    expect(new Headers(calls[2]!.headers).get('X-CSRF-Token')).toBe('c'.repeat(43));
+    expect(calls.every((call) => call.credentials === 'same-origin')).toBe(true);
+  });
+
+  it('omits browser credentials in transient bearer mode', async () => {
+    let credentials: RequestCredentials | undefined;
+    const client = new ApiClient('https://remote.example/api/v1', 'transient', async (_url, init) => {
+      credentials = init?.credentials;
+      return Response.json([]);
+    });
+    await client.hosts(new AbortController().signal);
+    expect(credentials).toBe('omit');
+  });
   it('authenticates, scopes, and validates state, bounded logs, and current metrics', async () => {
     const snapshot = demoContainer(0, 'test host', '2026-10-27T12:00:00Z');
     const fetcher = vi.fn(async (url: string | URL | Request) => {

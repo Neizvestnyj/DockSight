@@ -2,6 +2,8 @@ import logging
 import re
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
+from ipaddress import ip_address
+from pathlib import Path
 from typing import Final, Literal, Self
 from urllib.parse import urlparse
 
@@ -14,23 +16,30 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from docksight.adapters.outbound.audit import JsonAudit
 from docksight.adapters.outbound.docker.hosts import load_hosts
 from docksight.adapters.outbound.docker.runtime import DockerRuntime
-from docksight.adapters.outbound.memory.actions import MemoryActions
-from docksight.adapters.outbound.memory.sessions import MemorySessions
 from docksight.adapters.outbound.models.anthropic import AnthropicModel
 from docksight.adapters.outbound.models.compatible import CompatibleModel
 from docksight.adapters.outbound.models.ollama import OllamaModel
 from docksight.adapters.outbound.models.openai import OpenAIModel
 from docksight.adapters.outbound.models.status import ModelAvailability
+from docksight.adapters.outbound.persistence.database import PersistentDatabase
 from docksight.application.actions import Actions
+from docksight.application.browser_sessions import MAX_IDLE_TTL, MIN_IDLE_TTL, BrowserSessions
 from docksight.application.diagnostics.use_case import Diagnostics
+from docksight.application.investigations.ports import InvestigationArchive, SelectedDiagnostics, TurnStore
+from docksight.application.investigations.runner import TurnRunner
+from docksight.application.investigations.service import Investigations
+from docksight.application.model_catalog import ModelSelection
 from docksight.application.model_choices import ModelChoices
+from docksight.application.ports.browser_sessions import BrowserSessionStore
 from docksight.application.ports.models import ModelPort
 from docksight.application.ports.runtime import RuntimeMutationPort, RuntimeReadPort
+from docksight.application.ports.state import ActionStore
 from docksight.application.ports.status import ModelStatusPort
 from docksight.application.queries import RuntimeQueries
 from docksight.application.redaction import Redactor
 from docksight.application.system_status import SystemStatus
 from docksight.application.views.assembler import ViewAssembler
+from docksight.bootstrap_state import build_state
 
 DEFAULT_ACTOR: Final = "operator"
 ACTOR_PATTERN: Final = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}")
@@ -71,6 +80,10 @@ class Settings(BaseSettings):
     provider_fallback_models: dict[str, tuple[str, ...]] = Field(default_factory=dict, max_length=5)
     hosts_file: str | None = None
     cors_origins: tuple[str, ...] = ()
+    browser_origin: str | None = Field(default=None, min_length=1, max_length=2048)
+    cookie_secure: bool = True
+    browser_session_ttl: int = Field(default=28800, ge=60, le=28800)
+    browser_session_idle_ttl: int = Field(default=3600, ge=MIN_IDLE_TTL, le=MAX_IDLE_TTL)
     env_allowlist: tuple[str, ...] = ()
     max_model_calls: int = Field(default=6, ge=2, le=30)
     max_tool_calls: int = Field(default=12, ge=1, le=100)
@@ -83,6 +96,8 @@ class Settings(BaseSettings):
     docker_timeout: float = Field(default=15, gt=0, le=120)
     action_timeout: float = Field(default=30, gt=0, le=300)
     action_ttl: int = Field(default=300, ge=1, le=3600)
+    state_backend: Literal["sqlite", "memory"] = "sqlite"
+    state_path: Path = Path(".docksight/state.sqlite3")
     state_ttl: int = Field(default=1800, ge=60, le=86400)
     max_sessions: int = Field(default=100, ge=1, le=10000)
     max_actions: int = Field(default=1000, ge=1, le=100000)
@@ -104,6 +119,31 @@ class Settings(BaseSettings):
         if self.api_token.get_secret_value():
             credentials[DEFAULT_ACTOR] = self.api_token.get_secret_value()
         return credentials
+
+    @field_validator("browser_origin")
+    @classmethod
+    def validate_browser_origin(cls, value: str | None) -> str | None:
+        """Require an exact public HTTP(S) origin without path or embedded authority."""
+        if value is None:
+            return None
+        parsed = urlparse(value)
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username
+            or parsed.password
+            or value != f"{parsed.scheme}://{parsed.netloc}"
+        ):
+            raise ValueError("Browser origin must be an exact HTTP(S) origin without credentials or a path")
+        _ = parsed.port
+        return value
+
+    @model_validator(mode="after")
+    def validate_cookie_settings(self) -> Self:
+        """Limit insecure cookie issuance to explicitly configured loopback HTTP development."""
+        if not self.cookie_secure and not _loopback_http_origin(self.browser_origin):
+            raise ValueError("Insecure cookies require an explicit loopback HTTP browser origin")
+        return self
 
     @field_validator("provider_fallback_models")
     @classmethod
@@ -154,6 +194,19 @@ def _check_credentials(credentials: Mapping[str, str]) -> None:
         raise ValueError("Each actor requires a distinct API token")
 
 
+def _loopback_http_origin(origin: str | None) -> bool:
+    """Recognize configured loopback addresses without DNS lookup or forwarded headers."""
+    parsed = urlparse(origin or "")
+    if parsed.scheme != "http" or parsed.hostname is None:
+        return False
+    if parsed.hostname == "localhost":
+        return True
+    try:
+        return ip_address(parsed.hostname).is_loopback
+    except ValueError:
+        return False
+
+
 @dataclass
 class Components:
     """Own wired application services and the cleanup callbacks for their adapters."""
@@ -163,10 +216,25 @@ class Components:
     actions: Actions
     status: SystemStatus
     closers: list[Callable[[], Awaitable[None]]]
+    browser_sessions: BrowserSessions
+    investigations: Investigations
+    runner: TurnRunner
     models: ModelChoices | None = None
+    database: PersistentDatabase | None = None
+    ready: bool = False
+
+    async def start(self) -> None:
+        """Acquire storage ownership, migrate, and atomically recover before readiness."""
+        if self.ready:
+            return
+        if self.database is not None:
+            await self.database.initialize_server()
+        self.ready = True
 
     async def close(self) -> None:
         """Drain action work before closing adapters in reverse construction order."""
+        self.ready = False
+        await self.runner.close()
         await self.actions.close()
         if self.models is not None:
             await self.models.close()
@@ -288,6 +356,10 @@ def build_components(
     writer: RuntimeMutationPort | None = None,
     model: ModelPort | None = None,
     model_probe: ModelStatusPort | None = None,
+    browser_session_store: BrowserSessionStore | None = None,
+    archive_store: InvestigationArchive | None = None,
+    turn_store: TurnStore | None = None,
+    action_store: ActionStore | None = None,
 ) -> Components:
     """Wire hexagonal services with configured adapters or explicitly injected test ports."""
     configure_logging()
@@ -311,6 +383,9 @@ def build_components(
         secrets = (*secrets, effective_key)
     redactor = Redactor(secrets)
     closers: list[Callable[[], Awaitable[None]]] = []
+    state = build_state(settings, archive_store, turn_store, action_store, browser_session_store)
+    if state.database is not None:
+        closers.append(state.database.close)
     if reader is None:
         runtime = DockerRuntime(
             load_hosts(settings.hosts_file),
@@ -329,7 +404,7 @@ def build_components(
     actions = Actions(
         reader,
         writer,
-        MemoryActions(settings.max_actions, settings.state_ttl),
+        state.actions,
         JsonAudit(redactor),
         settings.action_ttl,
         settings.action_timeout,
@@ -337,7 +412,6 @@ def build_components(
     diagnostics = Diagnostics(
         reader,
         model,
-        MemorySessions(settings.max_sessions, settings.state_ttl),
         redactor,
         ViewAssembler(actions.prepare),
         settings.max_model_calls,
@@ -352,11 +426,35 @@ def build_components(
     from docksight.bootstrap_models import build_choices
 
     choices = build_choices(settings, model, model_probe, closers, _build_model)
+    investigations = Investigations(
+        state.archive,
+        lambda: {host.id for host in reader.hosts()},
+        redactor,
+        choices,
+    )
+
+    async def selected_diagnostics(selection: ModelSelection | None) -> SelectedDiagnostics:
+        """Validate new selections once while retaining shared diagnostic capacity and resolved identity."""
+        identity = selection or choices.providers.default
+        selected_model, _ = await choices.select(identity)
+        return SelectedDiagnostics(
+            diagnostics.with_model(selected_model, (identity.provider, identity.model)), identity
+        )
+
+    runner = TurnRunner(investigations, state.turns, selected_diagnostics, redactor)
     return Components(
         RuntimeQueries(reader, settings.log_lines, settings.log_bytes),
         diagnostics,
         actions,
         SystemStatus(reader, model_probe, settings.provider, settings.model),
         closers,
+        BrowserSessions(
+            state.browser_sessions,
+            settings.browser_session_ttl,
+            settings.browser_session_idle_ttl,
+        ),
+        investigations,
+        runner,
         choices,
+        state.database,
     )

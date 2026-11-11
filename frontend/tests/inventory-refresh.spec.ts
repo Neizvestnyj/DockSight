@@ -1,3 +1,5 @@
+import { routeSavedApi } from './helpers/saved-server';
+import { openDemo } from './helpers/demo';
 import { expect, test } from '@playwright/test';
 import { demoContainer, demoSystemStatus } from '../src/demo';
 
@@ -11,10 +13,10 @@ test('updates inventory and exact selected state while preserving a draft across
     release = resolve;
   });
   const paths: string[] = [];
-  await page.route('**/api/v1/**', async (route) => {
+  await routeSavedApi(page, async (route) => {
     const url = new URL(route.request().url());
     paths.push(url.pathname);
-    expect(route.request().headers()['authorization']).toBe('Bearer browser-test-token');
+    expect(route.request().headers()['authorization']).toBeUndefined();
     if (url.pathname.endsWith('/hosts')) return route.fulfill({ json: [{ id: 'test-host', name: 'Test host' }] });
     if (url.pathname.endsWith('/system/status'))
       return route.fulfill({ json: demoSystemStatus(url.searchParams.get('host')) });
@@ -30,7 +32,7 @@ test('updates inventory and exact selected state while preserving a draft across
       : route.fulfill({ json: container });
   });
   await page.clock.install();
-  await page.goto('/');
+  await openDemo(page);
   if ((page.viewportSize()?.width ?? 1440) <= 560) {
     await page.getByRole('button', { name: 'Open host and containers' }).click();
     await page.getByRole('button', { name: 'Connect your API' }).click();

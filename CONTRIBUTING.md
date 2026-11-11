@@ -14,7 +14,8 @@ uv run --project backend python scripts/git_hooks.py install
 ```
 
 Follow the [quick start](README.md#quick-start) to run the application. See [configuration](docs/configuration.md)
-for provider credentials and remote hosts. Never commit `.env` files, tokens, private keys, or raw Docker inspect output.
+for provider credentials and remote hosts. Never commit `.env` files, tokens, private keys, or raw Docker inspect
+output.
 The installer preserves custom hooks and stops if an active hook and its `.legacy` backup both exist.
 Resolve that conflict without deleting needed hooks before reinstalling.
 
@@ -61,12 +62,14 @@ Remove the override when ESLint and TypeScript ESLint require a fixed version.
 - Start feature branches from `master` with names matching `feature/<lowercase-kebab-case>`.
 - Never commit directly on `master` or push to remote `master`. Submit changes through a pull request.
   Hooks reject local commits on `master` and every outgoing update to `refs/heads/master`, including deletions.
-  Do not bypass these guards. Re-run the installation command after moving the checkout or recreating its Python environment.
+  Do not bypass these guards. Re-run the installation command after moving the checkout or recreating its Python
+  environment.
 - Keep changes focused. Explain the problem, resulting behavior, and relevant limitations in the pull request.
 - Use English Conventional Commit headers of at most 72 characters, such as `docs: simplify the quick start`.
 - Update [API contracts](docs/api.md) when transport behavior changes and [architecture](docs/architecture.md)
   when boundaries change.
-- Before finishing a task or committing, update [CHANGELOG.md](CHANGELOG.md), including documentation and workflow changes.
+- Before finishing a task or committing, update [CHANGELOG.md](CHANGELOG.md), including documentation and workflow
+  changes.
   Group related outcomes in the current version section. Use the intended numeric version, not `Unreleased`.
   Keep that section for ongoing work on the same branch.
   Choose PATCH for compatible fixes, MINOR for compatible additions, and MAJOR for breaking changes.
@@ -78,7 +81,8 @@ Remove the override when ESLint and TypeScript ESLint require a fixed version.
 ### Writing
 
 - Keep Python and Markdown prose within 120 characters per line. Use UTF-8 without BOM and LF line endings.
-- Write documentation, comments, docstrings, and runtime messages in English. Product copy belongs in the message catalog.
+- Write documentation, comments, docstrings, and runtime messages in English. Product copy belongs in the message
+  catalog.
 - Use short, direct sentences. Avoid semicolons in prose, rhetorical headings, repeated summaries, and narration about
   the document. Use steps for procedures and lists or tables for related facts.
 - Give production functions and classes brief docstrings, including private helpers. Test helpers and fixtures also
@@ -89,10 +93,16 @@ Remove the override when ESLint and TypeScript ESLint require a fixed version.
 - Backend code lives in `backend/src/docksight/`. Domain code uses the standard library. Application code owns ports
   and use cases. Adapters own HTTP, Docker, and provider integration. Bootstrap selects implementations.
 - Frontend code lives in `frontend/` and uses React with strict TypeScript. Validate API data at the transport boundary.
-- Models receive read-only tools. Runtime values, permissions, target validation, and action execution remain server-owned.
-- Keep credentials in browser memory and secrets out of logs. Never automatically retry an ambiguous Docker mutation.
+- Models receive read-only tools. Runtime values, permissions, target validation, and action execution remain
+  server-owned.
+- Keep bearer tokens and CSRF values in browser memory. First-party login may persist only its opaque HttpOnly cookie.
+  The locale is the only JavaScript browser-storage preference. Keep secrets out of logs.
+- Keep SQL and ORM details in outbound adapters. SQLite runs with one backend process/worker on a local filesystem.
+  Never hold a transaction across Docker or model calls and never silently fall back to memory.
+- Never automatically retry an ambiguous Docker mutation. Retain durable action protection after history deletion.
 
-See [backend architecture](docs/architecture.md) and [frontend contracts](docs/frontend.md) before changing those boundaries.
+See [backend architecture](docs/architecture.md) and [frontend contracts](docs/frontend.md) before changing those
+boundaries.
 
 ## Checks
 
@@ -102,8 +112,8 @@ Run the shared hooks before submitting changes:
 uv run --project backend pre-commit run --all-files
 ```
 
-Hooks cover formatting, Markdown, Dockerfile rules, secret detection, Python types, architecture, docstrings, complexity,
-tests, and fixture usage. The first run downloads hook environments. Keep `uv` on the Git process's PATH.
+Hooks cover formatting, Markdown, Dockerfile rules, secret detection, Python types, architecture, docstrings,
+complexity, tests, and fixture usage. The first run downloads hook environments. Keep `uv` on the Git process's PATH.
 
 For focused backend checks:
 
@@ -141,8 +151,44 @@ npm --prefix frontend run build
 npm --prefix frontend run test:browser
 ```
 
-Browser tests require installed Chrome and run against the production preview with mocked HTTP responses. Build first.
-Set `PLAYWRIGHT_PORT` if the default preview port is occupied. Reports and failure screenshots are temporary test artifacts.
+The ordinary browser suite requires installed Chrome and uses the production preview with mocked HTTP responses.
+Build first.
+Set `PLAYWRIGHT_PORT` if the default preview port is occupied. Reports and failure screenshots are temporary test
+artifacts.
+
+Persistence recovery checks use a real local backend and temporary SQLite with deterministic model/runtime ports.
+Mocked history endpoints alone cannot verify restart, active-turn reload, or cross-tab revisions. Isolate each state
+directory and backend process. Cover acknowledged drafts, conflict controls, saved clarification, exact Stop ownership,
+logout/actor isolation, and archived action reads without automatic submission or execution.
+Use separate processes for locking, migration, crash windows, and recovery. Explicit memory mode is temporary and loses
+history and execution protection on exit.
+See [state maintenance](docs/configuration.md#offline-status-backup-and-migration) for stopped-backend backup, restore,
+and reconciliation procedures.
+
+After building the client, run the dedicated real-SQLite browser suite:
+
+```sh
+npm --prefix frontend run test:browser:persistence
+uv run --project backend pytest backend/tests/integration/test_persistent_browser.py --no-cov
+```
+
+The browser suite owns temporary backend/preview processes, exact loopback origins, synthetic actor credentials, and
+isolated SQLite directories. It disables traces, videos, and screenshots. It does not mock history endpoints.
+The ordinary browser command excludes these cases. Default recovery checks use deterministic model/runtime ports.
+
+For the opt-in Docker and local-model recovery cases, start Docker and local Ollama with the existing `qwen3.5:9b`
+model and pull `python:3.12-alpine` before running:
+
+```powershell
+$env:DOCKSIGHT_PERSISTENCE_LIVE = '1'
+npm --prefix frontend run test:browser:persistence
+uv run --project backend pytest backend/tests/integration/persistence/test_live.py --no-cov
+Remove-Item Env:DOCKSIGHT_PERSISTENCE_LIVE
+```
+
+These cases use one uniquely named and labeled container, verify its full ID before mutation or cleanup, and keep
+local generation on loopback. They do not inspect unrelated workloads, download a model, or call cloud providers.
+The Docker case explicitly restarts its owned fixture to exercise lost delivery, retained keys, and crash protection.
 
 ## Protecting master on GitHub
 
@@ -175,8 +221,8 @@ Remove-Item Env:DOCKSIGHT_TEST_DOCKER
 ```
 
 Fixtures must use unique names and labels and remove only resources they create. Never use global prune.
-To check a built backend image, also set `DOCKSIGHT_TEST_BACKEND_IMAGE=docksight-backend:local` as an environment variable
-and run `backend/tests/integration/test_image.py` with the Docker test flag enabled.
+To check a built backend image, also set `DOCKSIGHT_TEST_BACKEND_IMAGE=docksight-backend:local` as an environment
+variable and run `backend/tests/integration/test_image.py` with the Docker test flag enabled.
 
 Live model tests require `DOCKSIGHT_TEST_LIVE_MODEL=1` and a configured provider. Cloud tests make paid API calls.
 Run them only with supplied credentials and explicit authorization. They are disabled in CI.
@@ -205,7 +251,8 @@ The workloads cover a refused database connection and invalid Grafana alerting c
 an actual memory-limited OOM kill, a crash loop, truncated logs, and an exit 137 without an OOM kill.
 Additional cases stop an owned Python process through Docker SIGTERM, observe a running HTTP server with an unhealthy
 503 probe, and retain old request errors while a process remains running. PostgreSQL-style histories are synthetic.
-These workloads do not host a database engine. The non-OOM exit 137 comes from an explicit process exit, without SIGKILL.
+These workloads do not host a database engine. The non-OOM exit 137 comes from an explicit process exit, without
+SIGKILL.
 
 Select a smaller matrix with repeated `--e2e-case` options: `compose-healthy`, `compose-explicit`, `compose-chat`,
 `compose-typo`, `compose-spaced`, `compose-cyrillic`, `compose-ambiguous`, `oom`, `crash-loop`, `truncated-logs`,
@@ -303,5 +350,6 @@ screens without private data and label simulated observations. Keep only screens
 needed to explain a distinct workflow. Replace outdated captures and delete unused ones. Breakpoint and locale checks
 belong in temporary test artifacts.
 
-Edit backend diagrams in [backend.drawio](docs/diagrams/backend.drawio), preserving named pages and the shared hand-drawn
-style. Update the PNG preview and its documentation link together. See [export commands](docs/diagrams/README.md).
+Edit backend diagrams in [backend.drawio](docs/diagrams/backend.drawio), preserving named pages and the shared
+hand-drawn style. Update the PNG preview and its documentation link together.
+See [export commands](docs/diagrams/README.md).

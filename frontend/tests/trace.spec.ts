@@ -1,3 +1,5 @@
+import { routeSavedApi } from './helpers/saved-server';
+import { openDemo } from './helpers/demo';
 import { chooseOption } from './helpers/select';
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
@@ -24,19 +26,19 @@ const modelStep = {
 /** Connect intercepted diagnostic events without reaching Docker or a model provider. */
 async function api(page: Page, events: object[]) {
   const snapshot = demoContainer(0, 'local', started);
-  await page.route('**/api/v1/**', (route) => {
+  const saved = await routeSavedApi(page, (route) => {
     const url = new URL(route.request().url());
     if (url.pathname.endsWith('/hosts')) return route.fulfill({ json: [{ id: 'local', name: 'Development' }] });
     if (url.pathname.endsWith('/system/status')) return route.fulfill({ json: demoSystemStatus('local') });
     if (url.pathname.endsWith('/containers')) return route.fulfill({ json: [snapshot] });
-    if (url.pathname.endsWith('/chat/turns'))
+    if (url.pathname.endsWith('/turns'))
       return route.fulfill({
         contentType: 'text/event-stream',
         body: events.map((event) => `data: ${JSON.stringify({ ...envelope, ...event })}\n\n`).join(''),
       });
     return route.abort();
   });
-  await page.goto('/');
+  await openDemo(page);
   if ((page.viewportSize()?.width ?? 1440) <= 560) {
     await page.getByRole('button', { name: 'Open host and containers' }).click();
     await page.getByRole('button', { name: 'Connect your API' }).click();
@@ -46,12 +48,13 @@ async function api(page: Page, events: object[]) {
   await expect(page.getByTitle('Workspace: choose host')).toContainText('Development');
   await page.getByRole('textbox').fill('Inspect worker');
   await page.getByRole('button', { name: 'Investigate', exact: true }).click();
+  return saved;
 }
 
 for (const motion of ['no-preference', 'reduce'] as const) {
   test(`keeps trace and observation disclosures usable with motion preference ${motion}`, async ({ page }) => {
     await page.emulateMedia({ reducedMotion: motion });
-    await page.goto('/');
+    await openDemo(page);
     await page.evaluate(() => document.fonts.ready);
     for (const selector of ['.diagnostic-trace', '.raw-evidence']) {
       const disclosure = page.locator(selector);
@@ -146,7 +149,7 @@ test('keeps a demo trace open across completion, supports keyboard selection and
       },
     });
   });
-  await page.goto('/');
+  await openDemo(page);
   await page.getByRole('textbox').fill('Inspect this container');
   await page.getByRole('button', { name: 'Investigate', exact: true }).click();
   const trace = page.locator('.diagnostic-trace');
@@ -184,13 +187,13 @@ test('keeps a demo trace open across completion, supports keyboard selection and
   expect(copied.simulated).toBe(true);
   expect(copied.steps).toHaveLength(7);
   expect(JSON.stringify(copied)).not.toContain('Inspect this container');
-  expect(apiRequests).toEqual([]);
+  expect(apiRequests.every((url) => url.endsWith('/auth/session'))).toBe(true);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await trace.scrollIntoViewIfNeeded();
   await page.screenshot({ path: `test-results/${info.project.name}-diagnostic-trace.png` });
 });
 
-test('shows failed validation and its retained model proposal as safe bounded text', async ({ page }, info) => {
+test('shows saved validation failure without retaining model output previews', async ({ page }, info) => {
   const response = JSON.stringify(
     { summary: '<img src=x onerror=alert(1)>', evidence_ids: ['unverified'], uncertain: true, widgets: [] },
     null,
@@ -240,9 +243,10 @@ test('shows failed validation and its retained model proposal as safe bounded te
   await expect(trace).toContainText('invalid_reference');
   if ((page.viewportSize()?.width ?? 1440) <= 1100) await trace.getByRole('button', { name: 'Back to steps' }).click();
   await trace.getByRole('button', { name: /Generating the final response/ }).click();
-  await expect(trace.locator('pre')).toContainText('<img src=x onerror=alert(1)>');
+  await expect(trace.locator('pre')).toHaveCount(0);
+  await expect(trace).toContainText('Proposal unavailable. Invalid or oversized response bodies are withheld.');
   await expect(page.locator('img[src=x]')).toHaveCount(0);
-  await expect(trace).toContainText('The displayed response is incomplete.');
+  await expect(trace.getByText('The displayed response is incomplete.')).toHaveCount(0);
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await trace.scrollIntoViewIfNeeded();
@@ -252,12 +256,14 @@ test('shows failed validation and its retained model proposal as safe bounded te
 test('retains interrupted steps after a lost stream and keeps them on the original historical turn', async ({
   page,
 }) => {
-  await api(page, [
+  const saved = await api(page, [
     { type: 'turn.started', session_id: '62f9fcc6-583e-4b3d-9678-10ffea8ae671' },
     { type: 'trace.started', provider: 'ollama', model: 'qwen3.5:9b', started_at: started },
     { type: 'trace.step', step: modelStep },
   ]);
-  await expect(page.getByRole('alert')).toContainText('Connection ended');
+  await expect(page.getByText('Observation disconnected. Reconnecting to the saved turn.')).toBeVisible();
+  saved.failRunning({ code: 'interrupted', message: 'Diagnostic work was interrupted' });
+  await expect(page.getByRole('alert')).toContainText('Diagnostic work was interrupted');
   const trace = page.locator('.diagnostic-trace');
   await trace.locator('summary').click();
   if ((page.viewportSize()?.width ?? 1440) <= 1100)

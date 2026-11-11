@@ -1,8 +1,10 @@
+import { routeSavedApi } from './helpers/saved-server';
+import { openDemo } from './helpers/demo';
 import { chooseOption } from './helpers/select';
 import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { demoAnswer, demoContainer, demoSystemStatus } from '../src/demo';
-import type { TurnInput } from '../src/contracts';
+import type { StartTurn } from '../src/investigation-contracts';
 
 /** Reach the same container from a persistent sidebar or the mobile navigation sheet. */
 async function chooseContainer(page: Page, name: string, russian = false) {
@@ -31,7 +33,7 @@ test('keeps reported health separate from lifecycle state across inventory and r
   let health: 'healthy' | 'unhealthy' | 'starting' | null = 'unhealthy';
   let state: 'running' | 'exited' = 'running';
   let exit_code = 0;
-  await page.route('**/api/v1/**', (route) => {
+  await routeSavedApi(page, (route) => {
     const request = route.request();
     expect(request.method()).toBe('GET');
     const url = new URL(request.url());
@@ -44,7 +46,7 @@ test('keeps reported health separate from lifecycle state across inventory and r
     if (url.pathname.endsWith('/logs')) return route.fulfill({ json: { entries: [], truncated: false } });
     return route.fulfill({ json: { ...snapshot, health, state, exit_code } });
   });
-  await page.goto('/');
+  await openDemo(page);
   await connectApi(page);
   if ((page.viewportSize()?.width ?? 1440) <= 1100)
     await page.getByRole('button', { name: 'Open host and containers' }).click();
@@ -95,11 +97,11 @@ test('reads and refreshes facts without LLM calls, then diagnoses in a separate 
   const answer = demoAnswer('crash_loop', snapshot.host);
   const status = answer.widgets.find((row) => row.widget_type === 'container_status')!;
   status.snapshot = snapshot;
-  const requests: TurnInput[] = [];
+  const requests: StartTurn[] = [];
   let reads = 0;
-  await page.route('**/api/v1/**', (route) => {
+  await routeSavedApi(page, (route) => {
     const request = route.request();
-    expect(request.headers()['authorization']).toBe('Bearer browser-test-token');
+    expect(request.headers()['authorization']).toBeUndefined();
     const path = new URL(request.url()).pathname;
     if (path.endsWith('/system/status'))
       return route.fulfill({ json: demoSystemStatus(new URL(request.url()).searchParams.get('host')) });
@@ -111,8 +113,8 @@ test('reads and refreshes facts without LLM calls, then diagnoses in a separate 
       reads++;
       return route.fulfill({ json: { ...snapshot, restart_count: 19, observed_at: '2026-10-27T12:00:00Z' } });
     }
-    expect(path).toBe('/api/v1/chat/turns');
-    requests.push(request.postDataJSON() as TurnInput);
+    expect(path.endsWith('/turns')).toBe(true);
+    requests.push(request.postDataJSON() as StartTurn);
     const envelope = { schema_version: 1, request_id: 'r', turn_id: `t-${requests.length}` };
     const events = [
       { ...envelope, type: 'turn.started', session_id: '4a59a145-0037-4934-92e0-f422105583b9' },
@@ -124,7 +126,7 @@ test('reads and refreshes facts without LLM calls, then diagnoses in a separate 
       body: events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join(''),
     });
   });
-  await page.goto('/');
+  await openDemo(page);
   await connectApi(page);
   await page.getByRole('textbox').fill('Original investigation');
   await page.getByRole('button', { name: 'Investigate', exact: true }).click();
@@ -147,13 +149,15 @@ test('reads and refreshes facts without LLM calls, then diagnoses in a separate 
   await expect.poll(() => reads).toBe(3);
   await facts.getByRole('button', { name: 'Diagnose', exact: true }).click();
   await expect.poll(() => requests.length).toBe(2);
-  expect(requests[1]).toEqual({
-    host: snapshot.host,
+  expect(requests[1]).toMatchObject({
+    kind: 'question',
+    target: { kind: 'container', id: snapshot.id, name: snapshot.name },
     query: `Investigate ${snapshot.name} (${snapshot.id}). What happened, and what evidence supports it?`,
   });
-  await expect(page.getByRole('heading', { name: requests[1]!.query, exact: true })).toBeVisible();
+  if (requests[1]?.kind !== 'question') throw new Error('Expected an explicit container question');
+  await expect(page.getByRole('heading', { name: requests[1].query, exact: true })).toBeVisible();
   await page.locator('.session-turns summary').click();
-  await page.getByRole('button', { name: /Original investigation/ }).click();
+  await page.locator('.history-row').filter({ hasText: 'Original investigation' }).click();
   await expect(historical.locator('footer time')).toHaveAttribute('datetime', snapshot.observed_at);
 });
 
@@ -165,7 +169,7 @@ test('keeps large untrusted observations bounded and retains successful data aft
   snapshot.environment = [['VERY_LONG_KEY_' + 'X'.repeat(60), '<script>alert(1)</script>' + 'x'.repeat(800)]];
   let logReads = 0;
   const calls: string[] = [];
-  await page.route('**/api/v1/**', (route) => {
+  await routeSavedApi(page, (route) => {
     const request = route.request();
     expect(request.method()).toBe('GET');
     const path = new URL(request.url()).pathname;
@@ -195,7 +199,7 @@ test('keeps large untrusted observations bounded and retains successful data aft
     }
     return route.fulfill({ json: snapshot });
   });
-  await page.goto('/');
+  await openDemo(page);
   await connectApi(page);
   await chooseContainer(page, snapshot.name);
   const facts = page.getByRole('region', { name: 'Container facts', exact: true });
@@ -238,7 +242,7 @@ test('keeps large untrusted observations bounded and retains successful data aft
 });
 
 test('keeps demo reads localized and keyboard accessible without translating log text', async ({ page }, info) => {
-  await page.goto('/');
+  await openDemo(page);
   await chooseOption(page.getByRole('combobox', { name: 'Language' }), 'ru');
   await chooseContainer(page, 'payments-api', true);
   const facts = page.getByRole('region', { name: 'Факты о контейнере', exact: true });

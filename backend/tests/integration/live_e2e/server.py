@@ -112,6 +112,7 @@ def live_api(lab: ComposeLab, model: str, model_url: str, origins: tuple[str, ..
     runtime = FixtureRuntime(lab)
     token = secrets.token_urlsafe(32)
     settings = Settings(
+        state_backend="memory",
         _env_file=None,
         _env_prefix=f"E2E_{lab.owner}_",
         api_token=token,

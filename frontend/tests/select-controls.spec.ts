@@ -1,7 +1,8 @@
+import { openDemo } from './helpers/demo';
 import { expect, test } from '@playwright/test';
 
 test.beforeEach(async ({ page }) => {
-  await page.goto('/');
+  await openDemo(page);
 });
 
 test('offers a styled scope menu and keeps tentative keyboard choices reversible', async ({ page }) => {

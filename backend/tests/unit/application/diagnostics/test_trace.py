@@ -1,10 +1,10 @@
 import json
 
-from docksight.adapters.outbound.memory.sessions import MemorySessions
 from docksight.application.diagnostics.use_case import Diagnostics
 from docksight.application.ports.models import ModelReply, ToolCall
 from docksight.application.redaction import Redactor
 from docksight.domain.errors import DockSightError, ErrorKind
+from tests.diagnostics import diagnostic_stream
 from tests.fakes import FakeRuntime, ScriptedModel
 
 
@@ -15,8 +15,8 @@ def final_proposal(summary: str = "Observed worker exit") -> str:
 
 async def trace_turn(model: ScriptedModel) -> list[dict]:
     """Run a real diagnostic use case with in-memory ports and a configured secret."""
-    service = Diagnostics(FakeRuntime(), model, MemorySessions(), Redactor(("configured-secret",)))
-    return [event async for event in service.stream("alice", "local", "Inspect worker")]
+    service = Diagnostics(FakeRuntime(), model, Redactor(("configured-secret",)))
+    return [event async for event in diagnostic_stream(service, "alice", "local", "Inspect worker")]
 
 
 async def test_trace_reports_ordered_measured_steps_without_intermediate_text_or_native_replay() -> None:
@@ -154,8 +154,8 @@ async def test_provider_failure_completes_the_running_trace_step_before_terminal
 async def test_trace_redacts_secret_values_before_json_escaping() -> None:
     secret = 'quoted"credential\nvalue'
     model = ScriptedModel([ModelReply("Ready"), ModelReply(final_proposal(f"Observed {secret}"))])
-    service = Diagnostics(FakeRuntime(), model, MemorySessions(), Redactor((secret,)))
-    events = [event async for event in service.stream("alice", "local", "Inspect")]
+    service = Diagnostics(FakeRuntime(), model, Redactor((secret,)))
+    events = [event async for event in diagnostic_stream(service, "alice", "local", "Inspect")]
     step = next(
         event["step"]
         for event in events
@@ -191,8 +191,8 @@ async def test_excess_tool_calls_keep_paired_budget_errors_without_executing_or_
             ModelReply(final_proposal()),
         ]
     )
-    service = Diagnostics(FakeRuntime(), model, MemorySessions(), Redactor(), max_tool_calls=1)
-    events = [event async for event in service.stream("alice", "local", "Inspect")]
+    service = Diagnostics(FakeRuntime(), model, Redactor(), max_tool_calls=1)
+    events = [event async for event in diagnostic_stream(service, "alice", "local", "Inspect")]
     results = [message for message in model.requests[-1][0] if message.role == "tool"]
     assert [message.tool_call_id for message in results] == ["c0", "c1", "c2"]
     assert [json.loads(message.content)["error"] for message in results[1:]] == ["tool_limit", "tool_limit"]

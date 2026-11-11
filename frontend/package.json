@@ -12,6 +12,7 @@
     "preview": "vite preview --host 127.0.0.1",
     "test": "vitest run",
     "test:browser": "playwright test",
+    "test:browser:persistence": "playwright test --config playwright.persistence.config.ts",
     "check": "tsc -b && eslint . && prettier --check ."
   },
   "dependencies": {

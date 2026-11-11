@@ -7,6 +7,95 @@ export type MessageValues = Record<string, string | number>;
 
 /** Keep product copy separate from verbatim Docker, model, and server content. */
 const russian = {
+  checking: 'Проверяем',
+  unavailable: 'Недоступно',
+  'Your browser session uses an HttpOnly cookie. CSRF authority stays only in memory.':
+    'Браузерный сеанс использует HttpOnly cookie. CSRF хранится только в памяти.',
+  'Saved container scope': 'Сохранённая область контейнера',
+  'Use host scope': 'Исследовать весь хост',
+  'A saved model or target is unavailable. Choose a current model or scope to continue.':
+    'Сохранённая модель или область недоступна. Выберите актуальную модель или область для продолжения.',
+  'The saved container selection is unavailable. Select a current container by its exact ID.':
+    'Сохранённый контейнер недоступен. Выберите актуальный контейнер по точному ID.',
+  'Restoring your workspace…': 'Восстанавливаем рабочее пространство…',
+  'Sign in to DockSight': 'Войти в DockSight',
+  'Could not restore your session.': 'Не удалось восстановить сеанс.',
+  'Saved chats stay on your DockSight backend. Sign in to reopen your workspace.':
+    'Сохранённые чаты хранятся на сервере DockSight. Войдите, чтобы продолжить работу.',
+  'Explore Demo': 'Открыть демо',
+  'Sign out': 'Выйти',
+  'Could not restore saved workspace. Retry the read.':
+    'Не удалось восстановить рабочее пространство. Повторите загрузку.',
+  'Choose a configured host to continue. Saved evidence remains readable.':
+    'Для продолжения выберите настроенный хост. Сохранённые наблюдения доступны для чтения.',
+  'Loading saved chat…': 'Загружаем сохранённый чат…',
+  'Could not refresh saved chat. Retry the read.': 'Не удалось обновить сохранённый чат. Повторите загрузку.',
+  'Could not open saved chat. Retry the read.': 'Не удалось открыть сохранённый чат. Повторите загрузку.',
+  'Could not create saved chat. Retry manually.': 'Не удалось создать сохранённый чат. Повторите вручную.',
+  'Workspace preferences could not be saved. Choose the preference again to retry.':
+    'Не удалось сохранить настройки. Повторите выбор.',
+  'Draft saved': 'Черновик сохранён',
+  'Saving draft…': 'Сохраняем черновик…',
+  'This chat changed in another tab. Your draft is unsaved.': 'Чат изменён в другой вкладке. Ваш черновик не сохранён.',
+  'Draft unsaved': 'Черновик не сохранён',
+  'Reload saved draft': 'Загрузить сохранённый черновик',
+  'Use this draft': 'Использовать этот черновик',
+  'Retry save': 'Повторить сохранение',
+  'Saved chats': 'Сохранённые чаты',
+  'Refresh saved chats': 'Обновить сохранённые чаты',
+  'Loading saved chats…': 'Загружаем сохранённые чаты…',
+  'No saved chats yet.': 'Сохранённых чатов пока нет.',
+  'Untitled chat': 'Чат без названия',
+  'Delete saved chat: {title}': 'Удалить сохранённый чат: {title}',
+  'Could not load saved chats.': 'Не удалось загрузить сохранённые чаты.',
+  'Could not delete chat. Running diagnoses must finish or be stopped first.':
+    'Не удалось удалить чат. Дождитесь завершения диагностики или остановите её.',
+  'Older chats': 'Предыдущие чаты',
+  'Delete saved chat': 'Удалить сохранённый чат',
+  'Delete “{title}” and its saved answers?': 'Удалить «{title}» и сохранённые ответы?',
+  'This cannot be undone. Existing action protection remains on the server.':
+    'Это нельзя отменить. Защита существующих действий останется на сервере.',
+  'Delete chat': 'Удалить чат',
+  'Demo chats live in this tab.': 'Демо-чаты хранятся в этой вкладке.',
+  'Reconnect after refreshing this tab.': 'После обновления вкладки подключитесь снова.',
+  'Saved chats stay on your backend.': 'Чаты хранятся на вашем сервере.',
+  'All operations are simulated.': 'Все операции симулируются.',
+  'Only acknowledged drafts are restored.': 'Восстанавливаются только сохранённые черновики.',
+  'Demo chats are simulated and live only in this tab.': 'Демо-чаты симулируются и хранятся только в этой вкладке.',
+  'Saved chats and acknowledged drafts stay on your backend. Continuing a chat gathers fresh Docker evidence.':
+    'Чаты и сохранённые черновики хранятся на сервере. При продолжении собираются новые наблюдения Docker.',
+  'Same-origin API login restores your session after refresh. A separate-origin API uses transient bearer access and requires reconnecting.':
+    'Вход через API на том же сайте восстанавливается после обновления. Для API на другом сайте нужно подключиться снова.',
+  'The token is cleared after login. Cookie and CSRF credentials are never stored in browser storage.':
+    'Токен очищается после входа. Cookie и CSRF не записываются в хранилище браузера.',
+  'Older answers': 'Предыдущие ответы',
+  '{count} saved questions': {
+    one: '{count} сохранённый вопрос',
+    few: '{count} сохранённых вопроса',
+    many: '{count} сохранённых вопросов',
+    other: '{count} сохранённого вопроса',
+  },
+  '{count} diagnostic attempts': {
+    one: '{count} попытка диагностики',
+    few: '{count} попытки диагностики',
+    many: '{count} попыток диагностики',
+    other: '{count} попытки диагностики',
+  },
+  'Saved {time} · historical evidence': 'Сохранено {time} · исторические наблюдения',
+  'This saved action is unavailable. Run a new diagnosis for current evidence.':
+    'Сохранённое действие недоступно. Запустите новую диагностику для актуальных наблюдений.',
+  'Observation disconnected. Reconnecting to the saved turn.':
+    'Наблюдение прервано. Подключаемся к сохранённой диагностике.',
+  'This saved turn is unavailable.': 'Сохранённая диагностика недоступна.',
+  'Sign in again to observe this saved turn.': 'Войдите снова для просмотра сохранённой диагностики.',
+  'Could not submit the question. Check saved history before trying again.':
+    'Не удалось отправить вопрос. Проверьте сохранённые чаты перед повторной попыткой.',
+  'Could not stop the diagnosis. Check the saved turn.':
+    'Не удалось остановить диагностику. Проверьте её сохранённое состояние.',
+  'Could not load older answers.': 'Не удалось загрузить предыдущие ответы.',
+  'Unsupported saved answer': 'Неподдерживаемый сохранённый ответ',
+  'This saved answer uses an unsupported schema.': 'Формат сохранённого ответа не поддерживается.',
+  interrupted: 'Прервано',
   'About investigation scope': 'Об области диагностики',
   'Leave Automatic to investigate the host. Name a project, stack, or container in your question to narrow the scope.':
     'Оставьте «Автоматически», чтобы проверить хост. Укажите проект, стек или контейнер в вопросе, чтобы сузить область.',
@@ -372,6 +461,10 @@ const russian = {
     'Адрес API должен заканчиваться на /api/v1 и не содержать учётные данные или параметры запроса.',
   'Enter a bearer token.': 'Введите Bearer-токен.',
   'Check the API endpoint.': 'Проверьте адрес API.',
+  'The backend rejected this browser origin. Set DOCKSIGHT_BROWSER_ORIGIN={origin} and restart the backend.':
+    'Сервер отклонил адрес этой страницы. Задайте DOCKSIGHT_BROWSER_ORIGIN={origin} и перезапустите сервер.',
+  'For local HTTP, set DOCKSIGHT_COOKIE_SECURE=false and restart the backend. Use HTTPS in production.':
+    'Для локального HTTP задайте DOCKSIGHT_COOKIE_SECURE=false и перезапустите сервер. Для production используйте HTTPS.',
   'The local Vite proxy forwards /api to 127.0.0.1:8000. A remote API must allow this browser origin through CORS.':
     'Локальный прокси Vite направляет /api на 127.0.0.1:8000. Удалённый API должен разрешать источник этой страницы через CORS.',
   "Kept only in this tab's memory. Refreshing disconnects the API and returns to demo.":

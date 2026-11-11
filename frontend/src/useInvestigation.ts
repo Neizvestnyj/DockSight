@@ -3,6 +3,8 @@ import { ApiError } from './api';
 import { targetKey } from './contracts';
 import type { Answer, DiagnosticTarget, TargetSelection, TraceStep, Transport, TurnEvent } from './contracts';
 import type { ModelSelection } from './model-contracts';
+import type { SavedTurn } from './investigation-contracts';
+import { useSavedTurns, type SavedContext } from './useSavedTurns';
 
 export interface TurnTrace {
   provider: string | null;
@@ -20,7 +22,7 @@ export interface Turn {
   query: string;
   target?: DiagnosticTarget;
   exampleQuery?: true;
-  state: 'running' | 'completed' | 'failed' | 'stopped' | 'awaiting_selection';
+  state: 'running' | 'completed' | 'failed' | 'stopped' | 'awaiting_selection' | 'interrupted';
   progress: ToolProgress[];
   answer?: Answer;
   selection?: TargetSelection;
@@ -30,10 +32,36 @@ export interface Turn {
   requestId?: string;
   serverTurnId?: string;
   trace?: TurnTrace;
+  createdAt?: string;
+  updatedAt?: string;
+  attempts?: SavedTurn[];
+}
+
+/** Select durable API recovery or explicitly ephemeral simulated turns by transport capability. */
+export function useInvestigation(
+  client: Transport,
+  host: string,
+  initial?: Answer,
+  selection?: ModelSelection,
+  saved?: SavedContext,
+) {
+  const durable = useSavedTurns(client, host, selection, saved);
+  const transient = useTransientInvestigation(client, host, initial, selection);
+  return client.history
+    ? durable
+    : {
+        ...transient,
+        error: '',
+        errorSource: 'client' as const,
+        observing: false,
+        older: async () => {},
+        nextCursor: null,
+        olderLoading: false,
+      };
 }
 
 /** Manage ephemeral turns and protect the workspace from late events after cancellation. */
-export function useInvestigation(client: Transport, host: string, initial?: Answer, selection?: ModelSelection) {
+function useTransientInvestigation(client: Transport, host: string, initial?: Answer, selection?: ModelSelection) {
   const [turns, setTurns] = useState<Turn[]>(() =>
     initial
       ? [
@@ -71,7 +99,9 @@ export function useInvestigation(client: Transport, host: string, initial?: Answ
 
   /** Begin a separate session without claiming a durable history exists. */
   function clear() {
-    stop();
+    generation.current++;
+    active.current?.abort();
+    active.current = null;
     session.current = undefined;
     setTurns([]);
   }

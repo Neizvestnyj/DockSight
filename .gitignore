@@ -18,6 +18,7 @@ build/
 dist/
 .idea/
 .superpowers/
+superpowers/
 *.log
 node_modules/
 .npm-cache/
@@ -27,3 +28,4 @@ frontend/playwright-report/
 *.tsbuildinfo
 frontend/lint-results.json
 .test-artifacts/
+.docksight/

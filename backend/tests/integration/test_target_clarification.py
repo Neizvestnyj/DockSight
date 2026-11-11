@@ -21,7 +21,7 @@ from tests.fakes import DiscoveryRuntime, FakeRuntime, ScriptedModel
 def test_selected_container_rejects_missing_short_or_conflicting_scope(target: dict[str, object], code: str) -> None:
     runtime = FakeRuntime()
     model = ScriptedModel([])
-    settings = Settings(api_token="target-integration-token-24", _env_file=None)
+    settings = Settings(state_backend="memory", api_token="target-integration-token-24", _env_file=None)
     components = build_components(settings, reader=runtime, writer=runtime, model=model)
     with TestClient(create_app(settings, components)) as api:
         result = api.post(
@@ -46,7 +46,7 @@ def test_container_project_clarification_can_continue_with_the_project() -> None
             ModelReply('{"summary":"Observed project","uncertain":true,"evidence_ids":[],"widgets":[]}'),
         ]
     )
-    settings = Settings(api_token="target-integration-token-24", _env_file=None)
+    settings = Settings(state_backend="memory", api_token="target-integration-token-24", _env_file=None)
     components = build_components(settings, reader=runtime, writer=runtime, model=model)
     headers = {"Authorization": "Bearer target-integration-token-24"}
     body = {"host": "local", "query": "Could other-project simply be stopped?"}

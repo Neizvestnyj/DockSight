@@ -4,8 +4,9 @@ from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
+from docksight.application.investigations.errors import StorageError
 from docksight.application.ports.runtime import RuntimeMutationPort, RuntimeReadPort
-from docksight.application.ports.state import ActionStore, AuditPort
+from docksight.application.ports.state import ActionOrigin, ActionStore, AuditPort, StoredAction
 from docksight.application.views.schemas import ActionView
 from docksight.domain.actions import ActionState, Operation, PreparedAction, allowed_operations
 from docksight.domain.diagnostics import JsonObject
@@ -19,7 +20,7 @@ def action_view(action: PreparedAction) -> ActionView:
 
 
 class Actions:
-    """Prepare scoped actions and execute confirmed mutations exactly once per claim."""
+    """Prepare scoped actions and durably protect each confirmed mutation claim."""
 
     def __init__(
         self,
@@ -41,9 +42,14 @@ class Actions:
         self.clock = clock
         self._tasks: dict[str, asyncio.Task[ActionView]] = {}
         self._mutations: set[asyncio.Task[None]] = set()
+        self._admissions: set[asyncio.Task[ActionView]] = set()
+        self._accepting = True
 
-    async def prepare(self, actor: str, host: str, container_id: str, operation: Operation) -> ActionView:
+    async def prepare(
+        self, actor: str, host: str, container_id: str, operation: Operation, origin: ActionOrigin | None = None
+    ) -> ActionView:
         """Capture a permitted operation against one exact container fingerprint."""
+        self._require_admission()
         if not re.fullmatch(r"[a-f0-9]{64}", container_id):
             raise DockSightError("invalid_target", "Actions require an exact full container ID", ErrorKind.VALIDATION)
         snapshot = await self.reader.inspect(host, container_id)
@@ -62,63 +68,102 @@ class Actions:
             snapshot.fingerprint,
             self.clock() + timedelta(seconds=self.ttl),
         )
-        await self.store.add(action)
-
-        return action_view(action)
+        stored = await self.store.add(action, self.clock(), origin)
+        await self._mirror("action.prepared", stored.action)
+        return action_view(stored.action)
 
     async def execute(self, action_id: str, actor: str, key: str, confirmed: bool) -> ActionView:
         """Claim once and shield execution from duplicate or disconnected callers."""
-        action, claimed = await self.store.claim(action_id, actor, key, confirmed, self.clock())
-        if claimed:
-            task = asyncio.create_task(self._run(action))
-            self._tasks[action.id] = task
-            task.add_done_callback(lambda _: self._tasks.pop(action.id, None))
-        else:
-            task = self._tasks.get(action.id)
-            if task is None:
-                return action_view(action)
+        self._require_admission()
+        admission = asyncio.create_task(self._admit(action_id, actor, key, confirmed))
+        self._admissions.add(admission)
+        admission.add_done_callback(self._admission_finished)
+        return await asyncio.shield(admission)
 
-        return await asyncio.shield(task)
+    def _require_admission(self) -> None:
+        """Reject new mutation work after shutdown or a storage failure."""
+        if not self._accepting:
+            raise StorageError()
+
+    def _admission_finished(self, task: asyncio.Task[ActionView]) -> None:
+        """Release admission ownership and retrieve failures after observer cancellation."""
+        self._admissions.discard(task)
+        if not task.cancelled():
+            task.exception()
+
+    async def _admit(self, action_id: str, actor: str, key: str, confirmed: bool) -> ActionView:
+        """Own the entire claim commit to execution-registration handoff through HTTP cancellation."""
+        try:
+            claim = await self.store.claim(action_id, actor, key, confirmed, self.clock())
+            stored = claim.stored
+            if claim.claimed:
+                task = await self._register(stored)
+            else:
+                task = self._tasks.get(action_id)
+                if task is None:
+                    return action_view(stored.action)
+            return await asyncio.shield(task)
+        except StorageError:
+            self._accepting = False
+            raise
+
+    async def _register(self, stored: StoredAction) -> asyncio.Task[ActionView]:
+        """Register the claimed workflow or persist a failed-before-dispatch result."""
+        workflow = self._run(stored)
+        try:
+            task = asyncio.create_task(workflow)
+        except Exception:
+            workflow.close()
+            await self.store.complete(
+                stored.action.id,
+                stored.revision,
+                ActionState.FAILED,
+                "Action could not start before dispatch",
+                self.clock(),
+            )
+            raise
+        self._tasks[stored.action.id] = task
+        task.add_done_callback(self._workflow_finished)
+        return task
+
+    def _workflow_finished(self, task: asyncio.Task[ActionView]) -> None:
+        """Retrieve workflow failures and remove only the corresponding retained owner."""
+        for action_id, current in tuple(self._tasks.items()):
+            if current is task:
+                del self._tasks[action_id]
+        if not task.cancelled():
+            task.exception()
 
     async def get(self, action_id: str, actor: str) -> ActionView:
         """Read the public action state within the requesting actor's scope."""
-        return action_view(await self.store.get(action_id, actor))
+        return action_view((await self.store.get(action_id, actor, self.clock())).action)
 
-    async def _run(self, action: PreparedAction) -> ActionView:
-        """Audit, revalidate, and execute a claimed action under the target lock."""
-        data: JsonObject = {
-            "action_id": action.id,
-            "actor": action.actor,
-            "host": action.host,
-            "container_id": action.container_id,
-            "operation": action.operation,
-        }
+    async def _run(self, stored: StoredAction) -> ActionView:
+        """Revalidate, persist dispatch intent, execute once, and explicitly save the terminal result."""
+        action = stored.action
+        await self._mirror("action.claimed", action)
         try:
-            await self.audit.record("action.started", data)
-        except Exception:
-            action.finish(ActionState.FAILED, "Audit output unavailable; action was not executed")
-
-            return action_view(action)
-        started = False
-        try:
-            async with (
-                asyncio.timeout(self.timeout),
-                self.store.target_lock(action.host, action.container_id),
-            ):
+            async with asyncio.timeout(self.timeout) as deadline:
                 current = await self.reader.inspect(action.host, action.container_id)
                 _validate_target(action, current)
+                stored = await self.store.mark_dispatch(action.id, stored.revision, self.clock())
+                if deadline.expired():
+                    raise TimeoutError
                 task = self._start_mutation(action)
-                started = True
                 await asyncio.shield(task)
-                action.finish(ActionState.SUCCEEDED, f"Container {action.operation} completed")
-        except (TimeoutError, DockSightError) as exc:
-            _finish_failure(action, exc, started)
-        except Exception:
-            action.finish(
-                ActionState.INDETERMINATE if started else ActionState.FAILED,
-                "Action outcome could not be confirmed" if started else "Action execution failed",
-            )
-        return await self._record_outcome(action, data)
+            state, message = ActionState.SUCCEEDED, f"Container {action.operation} completed"
+        except StorageError:
+            self._accepting = False
+            raise
+        except (Exception, asyncio.CancelledError) as error:
+            state, message = _failure(error, stored.phase == "dispatching")
+        try:
+            saved = await self.store.complete(action.id, stored.revision, state, message, self.clock())
+        except StorageError:
+            self._accepting = False
+            raise
+        await self._mirror(f"action.{state}", saved.action)
+        return action_view(saved.action)
 
     def _start_mutation(self, action: PreparedAction) -> asyncio.Task[None]:
         """Track a mutation independently of caller cancellation and timeouts."""
@@ -134,42 +179,40 @@ class Actions:
         if not job.cancelled():
             job.exception()
 
-    async def _record_outcome(self, action: PreparedAction, data: JsonObject) -> ActionView:
-        """Block ambiguous targets and append a best-effort terminal audit event."""
-        if action.state == ActionState.INDETERMINATE:
-            await self.store.block_target(action.host, action.container_id)
+    async def _mirror(self, event: str, action: PreparedAction) -> None:
+        """Mirror a committed lifecycle event without making logging authoritative."""
+        data: JsonObject = {
+            "action_id": action.id,
+            "actor": action.actor,
+            "host": action.host,
+            "container_id": action.container_id,
+            "operation": action.operation,
+            "state": action.state.value,
+        }
         try:
-            await self.audit.record(f"action.{action.state}", {**data, "state": action.state.value})
+            await self.audit.record(event, data)
         except Exception:
-            action.message += "; audit output is unavailable"
-
-        return action_view(action)
+            return
 
     async def close(self) -> None:
         """Wait for action workflows and mutations before shutting down adapters."""
-        pending: list[Awaitable[object]] = [*self._tasks.values(), *self._mutations]
-        if pending:
-            await asyncio.gather(*pending, return_exceptions=True)
+        self._accepting = False
+        while self._admissions or self._tasks or self._mutations:
+            pending: list[Awaitable[object]] = [*self._admissions, *self._tasks.values(), *self._mutations]
+            await asyncio.shield(asyncio.gather(*pending, return_exceptions=True))
 
 
 def _validate_target(action: PreparedAction, current: ContainerSnapshot) -> None:
     """Reject stale container identity, state, or prepared-action fingerprints."""
-    if current.id != action.container_id or current.fingerprint != action.fingerprint:
+    if current.host != action.host or current.id != action.container_id or current.fingerprint != action.fingerprint:
         raise DockSightError("stale_action", "Container changed; prepare a new action", ErrorKind.CONFLICT)
     if action.operation not in allowed_operations(current.state):
         raise DockSightError("action_unavailable", "Operation is unavailable for this state", ErrorKind.CONFLICT)
 
 
-def _finish_failure(action: PreparedAction, error: TimeoutError | DockSightError, started: bool) -> None:
-    """Distinguish a rejected action from a mutation whose Docker outcome is unknown."""
-    ambiguous = started and (
-        isinstance(error, TimeoutError) or error.code in {"runtime_timeout", "runtime_unavailable"}
-    )
-    if ambiguous:
-        action.finish(
-            ActionState.INDETERMINATE,
-            "Docker outcome is unknown; inspect the target before further changes",
-        )
-        return
-    message = error.message if isinstance(error, DockSightError) else "Action timed out before execution"
-    action.finish(ActionState.FAILED, message)
+def _failure(error: BaseException, dispatched: bool) -> tuple[ActionState, str]:
+    """Treat every unsettled post-marker failure conservatively without retrying Docker."""
+    if dispatched:
+        return ActionState.INDETERMINATE, "Docker outcome is unknown; inspect the target before further changes"
+    message = error.message if isinstance(error, DockSightError) else "Action failed before dispatch"
+    return ActionState.FAILED, message

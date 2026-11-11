@@ -1,3 +1,4 @@
+import { openDemo } from './helpers/demo';
 import { chooseOption } from './helpers/select';
 import { expect, test } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
@@ -7,7 +8,7 @@ test('switches simulated models without losing the investigation, draft or prepa
   page.on('request', (request) => {
     if (request.url().includes('/api/v1/')) requests.push(request.url());
   });
-  await page.goto('/');
+  await openDemo(page);
   await page.getByRole('textbox').fill('Keep this follow-up');
   await page.getByRole('button', { name: 'Review stop' }).click();
   const action = await page.getByRole('dialog').locator('.confirmation-facts code').last().innerText();
@@ -46,11 +47,11 @@ test('switches simulated models without losing the investigation, draft or prepa
   await expect(page.getByRole('dialog', { name: 'Выбрать модель' })).toContainText('gemini-demo');
   await page.keyboard.press('Escape');
   await expect(page.getByRole('textbox')).toHaveValue('Keep this follow-up');
-  expect(requests).toEqual([]);
+  expect(requests.every((url) => url.endsWith('/auth/session'))).toBe(true);
 });
 
 test('disables selection during a diagnostic turn and resets it after page reload', async ({ page }) => {
-  await page.goto('/');
+  await openDemo(page);
   const trigger = page.getByRole('button', { name: /Choose model/ });
   await trigger.click();
   await chooseOption(page.getByRole('dialog').getByRole('combobox', { name: 'Provider' }), 'gemini');
@@ -60,5 +61,6 @@ test('disables selection during a diagnostic turn and resets it after page reloa
   await expect(trigger).toBeDisabled();
   await expect(trigger).toBeEnabled({ timeout: 15_000 });
   await page.reload();
+  await page.getByRole('button', { name: 'Explore Demo' }).click();
   await expect(trigger).toContainText('qwen3.5:9b');
 });

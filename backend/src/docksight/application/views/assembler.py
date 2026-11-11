@@ -1,6 +1,7 @@
 from collections.abc import Awaitable, Callable
 
 from docksight.application.diagnostics.context import EvidenceContext
+from docksight.application.ports.state import ActionOrigin
 from docksight.application.views.schemas import (
     ActionRecommendation,
     ActionView,
@@ -17,7 +18,7 @@ from docksight.domain.actions import Operation, allowed_operations
 from docksight.domain.errors import DockSightError, ErrorKind
 from docksight.domain.runtime import ContainerSnapshot
 
-type PrepareAction = Callable[[str, str, str, Operation], Awaitable[ActionView]]
+type PrepareAction = Callable[[str, str, str, Operation, ActionOrigin | None], Awaitable[ActionView]]
 
 
 class ViewAssembler:
@@ -27,7 +28,9 @@ class ViewAssembler:
         """Optionally bind action preparation for permitted container operations."""
         self.prepare = prepare
 
-    async def build(self, proposal: DiagnosisProposal, context: EvidenceContext, actor: str) -> DiagnosisResponse:
+    async def build(
+        self, proposal: DiagnosisProposal, context: EvidenceContext, actor: str, origin: ActionOrigin | None = None
+    ) -> DiagnosisResponse:
         """Validate references and assemble cards without trusting model-supplied runtime values."""
         cards = _target_cards(proposal.widgets, context)
         report = context.host_overview or context.group
@@ -47,7 +50,7 @@ class ViewAssembler:
         )
         if any(ref not in context.evidence for ref in references):
             raise DockSightError("invalid_evidence", "Diagnosis references unknown evidence", ErrorKind.DEPENDENCY)
-        widgets = [await self._card(card, context, actor) for card in cards]
+        widgets = [await self._card(card, context, actor, origin) for card in cards]
 
         return DiagnosisResponse(
             summary=proposal.summary,
@@ -59,13 +62,15 @@ class ViewAssembler:
             widgets=widgets,
         )
 
-    async def _card(self, card: WidgetProposal, context: EvidenceContext, actor: str) -> Widget:
+    async def _card(
+        self, card: WidgetProposal, context: EvidenceContext, actor: str, origin: ActionOrigin | None
+    ) -> Widget:
         """Build a card using server-owned runtime values and prepared actions."""
         if card.widget_type == "compose_stack":
             return _stack_card(card.evidence_ids, context)
         snapshot = _container_snapshot(card.evidence_ids, context)
         if card.widget_type == "container_status":
-            actions, actions_code = await self._actions(actor, snapshot)
+            actions, actions_code = await self._actions(actor, snapshot, origin)
             suggested = next((action for action in actions if action.operation == card.action), None)
             return ContainerStatusCard(
                 snapshot=snapshot,
@@ -93,13 +98,15 @@ class ViewAssembler:
             evidence_ids=card.evidence_ids,
         )
 
-    async def _actions(self, actor: str, snapshot: ContainerSnapshot) -> tuple[list[ActionView], str | None]:
+    async def _actions(
+        self, actor: str, snapshot: ContainerSnapshot, origin: ActionOrigin | None
+    ) -> tuple[list[ActionView], str | None]:
         """Keep observed facts usable when optional action preparation returns a typed failure."""
         if self.prepare is None:
             return [], None
         try:
             actions = [
-                await self.prepare(actor, snapshot.host, snapshot.id, operation)
+                await self.prepare(actor, snapshot.host, snapshot.id, operation, origin)
                 for operation in allowed_operations(snapshot.state)
             ]
         except DockSightError as exc:

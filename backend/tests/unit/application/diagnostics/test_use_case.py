@@ -2,37 +2,88 @@ import json
 from collections.abc import Sequence
 from dataclasses import replace
 from unittest.mock import AsyncMock, patch
+from uuid import uuid4
 
 import pytest
 
-from docksight.adapters.outbound.memory.sessions import MemorySessions
 from docksight.application.diagnostics.use_case import Diagnostics
+from docksight.application.investigations.contracts import DiagnosticCommand
 from docksight.application.ports.models import ModelMessage, ModelReply, ToolCall
 from docksight.application.redaction import Redactor
-from docksight.application.views.schemas import GroupTarget
+from docksight.application.views.schemas import ContainerTarget, GroupTarget
 from docksight.domain.errors import DockSightError, ErrorKind
 from docksight.domain.runtime import ContainerSnapshot, LogBatch, StackSummary
+from tests.diagnostics import diagnostic_stream
 from tests.fakes import DiscoveryRuntime, FakeRuntime, ScriptedModel
+
+
+async def test_preallocated_diagnostic_run_keeps_plain_context_without_session_mutation() -> None:
+    model = ScriptedModel(
+        [
+            ModelReply("Ready"),
+            ModelReply('{"summary":"Current evidence","uncertain":true,"evidence_ids":[],"widgets":[]}'),
+        ]
+    )
+    diagnostics = Diagnostics(FakeRuntime(), model, Redactor(), concurrency=1)
+    command = DiagnosticCommand(
+        turn_id=str(uuid4()),
+        investigation_id=str(uuid4()),
+        actor="alice",
+        host="local",
+        query="Inspect",
+        context=(ModelMessage("user", "Earlier question"), ModelMessage("assistant", "Old summary")),
+    )
+    lease = await diagnostics.reserve()
+    try:
+        with pytest.raises(DockSightError) as rejected:
+            await diagnostics.reserve()
+        assert rejected.value.code == "turn_capacity"
+        events = [event async for event in lease.run(command)]
+        assert events[0]["turn_id"] == command.turn_id and events[-1]["type"] == "turn.completed"
+        assert "Earlier question" in model.requests[0][0][1].content
+        assert all("response" not in str(event) or event["type"] == "trace.step" for event in events)
+    finally:
+        await lease.close()
+    returned = await diagnostics.reserve()
+    await returned.close()
+    await returned.close()
+
+
+async def test_preallocated_run_revalidates_removed_exact_target_without_model_or_fallback() -> None:
+    model = ScriptedModel([])
+    diagnostics = Diagnostics(FakeRuntime(), model, Redactor())
+    command = DiagnosticCommand(
+        turn_id=str(uuid4()),
+        investigation_id=str(uuid4()),
+        actor="alice",
+        host="local",
+        query="Inspect",
+        target=ContainerTarget(id="f" * 64, name="removed"),
+    )
+    events = [event async for event in diagnostics.run(command)]
+    assert events[-1]["type"] == "turn.failed" and events[-1]["code"] == "container_not_found"
+    assert model.requests == []
 
 
 async def test_selected_diagnoses_share_global_capacity_and_preserve_turn_identity() -> None:
     """Two provider selections cannot bypass the original shared concurrency budget."""
     default = ScriptedModel([])
     first_model, second_model = ScriptedModel([]), ScriptedModel([])
-    diagnostics = Diagnostics(FakeRuntime(), default, MemorySessions(), Redactor(), concurrency=1)
+    diagnostics = Diagnostics(FakeRuntime(), default, Redactor(), concurrency=1)
     first = diagnostics.with_model(first_model, ("openai", "first"))
     second = diagnostics.with_model(second_model, ("anthropic", "second"))
-    stream = first.stream("alice", "local", "Inspect")
+    stream = diagnostic_stream(first, "alice", "local", "Inspect")
     try:
         assert (await anext(stream))["type"] == "turn.started"
         trace = await anext(stream)
         assert trace["type"] == "trace.started"
         assert trace["provider"] == "openai" and trace["model"] == "first"
-        rejected = [event async for event in second.stream("alice", "local", "Inspect")]
-        assert rejected[-1]["type"] == "turn.failed" and rejected[-1]["code"] == "turn_capacity"
+        with pytest.raises(DockSightError) as rejected:
+            await second.reserve()
+        assert rejected.value.code == "turn_capacity"
         assert diagnostics.model is default
         assert second_model.requests == []
-        assert first.sessions is second.sessions is diagnostics.sessions
+        assert first._slots is second._slots is diagnostics._slots
         assert first.assembler is second.assembler is diagnostics.assembler
         assert first.redactor is second.redactor is diagnostics.redactor
     finally:
@@ -44,13 +95,14 @@ async def test_switching_model_preserves_session_history_and_trace() -> None:
     answer = '{"summary":"Insufficient evidence","uncertain":true,"evidence_ids":[],"widgets":[]}'
     first_model = ScriptedModel([ModelReply("Ready"), ModelReply(answer)])
     second_model = ScriptedModel([ModelReply("Ready"), ModelReply(answer)])
-    diagnostics = Diagnostics(
-        FakeRuntime(), first_model, MemorySessions(), Redactor(), model_identity=("ollama", "one")
-    )
-    first = [event async for event in diagnostics.stream("alice", "local", "Inspect")]
+    diagnostics = Diagnostics(FakeRuntime(), first_model, Redactor(), model_identity=("ollama", "one"))
+    first = [event async for event in diagnostic_stream(diagnostics, "alice", "local", "Inspect")]
     session_id = next(event["session_id"] for event in first if event["type"] == "turn.started")
     second = diagnostics.with_model(second_model, ("openai", "two"))
-    events = [event async for event in second.stream("alice", "local", "What next?", session_id)]
+    context = (ModelMessage("user", "Inspect"), ModelMessage("assistant", "Insufficient evidence"))
+    events = [
+        event async for event in diagnostic_stream(second, "alice", "local", "What next?", session_id, context=context)
+    ]
     assert events[-1]["type"] == "turn.completed"
     history = second_model.requests[0][0]
     context = next(message for message in history if "previous_turns" in message.content)
@@ -86,10 +138,11 @@ async def test_final_generation_uses_tool_observations_without_replaying_a_prose
             ModelReply('{"summary":"The cause is unknown","uncertain":true,"evidence_ids":["e1"],"widgets":[]}'),
         ]
     )
-    diagnostics = Diagnostics(DiscoveryRuntime(), model, MemorySessions(), Redactor())
+    diagnostics = Diagnostics(DiscoveryRuntime(), model, Redactor())
     events = [
         event
-        async for event in diagnostics.stream(
+        async for event in diagnostic_stream(
+            diagnostics,
             "alice",
             "local",
             "Check the target",
@@ -110,8 +163,8 @@ async def test_final_generation_repeats_the_current_question_without_its_credent
     model = ScriptedModel([ModelReply("Ready"), ModelReply(proposal())])
     events = [
         event
-        async for event in Diagnostics(FakeRuntime(), model, MemorySessions(), Redactor()).stream(
-            "alice", "local", query, container_id="a" * 64
+        async for event in diagnostic_stream(
+            Diagnostics(FakeRuntime(), model, Redactor()), "alice", "local", query, container_id="a" * 64
         )
     ]
     assert events[-1]["type"] == "turn.completed"
@@ -133,8 +186,8 @@ async def test_repeated_successful_batch_finalizes_but_a_new_read_continues_expl
     model = ScriptedModel([*replies, ModelReply(answer)])
     events = [
         event
-        async for event in Diagnostics(DiscoveryRuntime(), model, MemorySessions(), Redactor()).stream(
-            "alice", "local", "Check the project", group=target
+        async for event in diagnostic_stream(
+            Diagnostics(DiscoveryRuntime(), model, Redactor()), "alice", "local", "Check the project", group=target
         )
     ]
     assert events[-1]["type"] == "turn.completed"
@@ -153,25 +206,28 @@ async def test_repeated_successful_batch_finalizes_but_a_new_read_continues_expl
 async def test_follow_up_keeps_prior_explanation_as_context_and_collects_the_new_target() -> None:
     answer = '{"summary":"Earlier backend failure","uncertain":true,"evidence_ids":["e1"],"widgets":[]}'
     model = ScriptedModel([ModelReply("Ready"), ModelReply(answer), ModelReply("Ready"), ModelReply(proposal())])
-    sessions = MemorySessions()
     runtime = DiscoveryRuntime()
-    service = Diagnostics(runtime, model, sessions, Redactor())
+    service = Diagnostics(runtime, model, Redactor())
     first_query = "Inspect backend-1 token=fixture-secret"
-    first = [event async for event in service.stream("alice", "local", first_query, container_id="1" * 64)]
+    first = [event async for event in diagnostic_stream(service, "alice", "local", first_query, container_id="1" * 64)]
     session_id = next(event["session_id"] for event in first if event["type"] == "turn.started")
     query = "Is this related to the previous failure?"
-    second = [event async for event in service.stream("alice", "local", query, session_id, container_id="3" * 64)]
+    context = (
+        ModelMessage("user", service.redactor.text(first_query)),
+        ModelMessage("assistant", "Earlier backend failure"),
+    )
+    second = [
+        event
+        async for event in diagnostic_stream(
+            service, "alice", "local", query, session_id, container_id="3" * 64, context=context
+        )
+    ]
     assert second[-1]["type"] == "turn.completed"
     for messages, _ in model.requests[2:]:
         _assert_follow_up_context(messages, query)
         scope = next(json.loads(row.content) for row in messages if '"selected_container_id"' in row.content)
         assert scope["selected_container_id"] == "3" * 64
     assert runtime.reads == ["1" * 64, "3" * 64]
-    async with sessions.lease(session_id, "alice", "local") as session:
-        assert [row.content for row in session.history[:2]] == [
-            "Inspect backend-1 token=[REDACTED]",
-            "Earlier backend failure",
-        ]
 
 
 def _assert_follow_up_context(messages: Sequence[ModelMessage], query: str) -> None:
@@ -199,7 +255,8 @@ async def test_selected_container_retains_its_status_when_prefetched_logs_are_un
     model = ScriptedModel([ModelReply("Ready"), ModelReply(proposal())])
     events = [
         event
-        async for event in Diagnostics(MissingLogs(), model, MemorySessions(), Redactor()).stream(
+        async for event in diagnostic_stream(
+            Diagnostics(MissingLogs(), model, Redactor()),
             "alice",
             "local",
             "Check container worker",
@@ -216,14 +273,11 @@ async def test_selected_container_retains_its_status_when_prefetched_logs_are_un
 
 async def test_conflicting_explicit_targets_fail_before_model_or_tool_execution() -> None:
     model = ScriptedModel([])
-    events = [
-        event
-        async for event in Diagnostics(FakeRuntime(), model, MemorySessions(), Redactor()).stream(
-            "alice", "local", "Inspect", group=GroupTarget(kind="compose", name="infra"), container_id="a" * 64
+    with pytest.raises(DockSightError) as rejected:
+        Diagnostics(FakeRuntime(), model, Redactor())._validate_turn(
+            "local", "Inspect", GroupTarget(kind="compose", name="infra"), "a" * 64
         )
-    ]
-    assert len(events) == 1
-    assert events[0]["type"] == "turn.failed" and events[0]["code"] == "invalid_target"
+    assert rejected.value.code == "invalid_target"
     assert not model.requests
 
 
@@ -233,7 +287,8 @@ async def test_observed_namespace_collision_requests_selection_without_calling_t
     with patch.object(runtime, "stacks", AsyncMock(return_value=(StackSummary("vintoria-infra", "swarm", 1, 0),))):
         events = [
             event
-            async for event in Diagnostics(runtime, model, MemorySessions(), Redactor()).stream(
+            async for event in diagnostic_stream(
+                Diagnostics(runtime, model, Redactor()),
                 "alice",
                 "local",
                 "What happened to vintoria-infra?",
@@ -260,8 +315,7 @@ async def test_agent_selects_an_observed_group_from_noncanonical_spelling(query:
         ]
     )
     events = [
-        event
-        async for event in Diagnostics(runtime, model, MemorySessions(), Redactor()).stream("alice", "local", query)
+        event async for event in diagnostic_stream(Diagnostics(runtime, model, Redactor()), "alice", "local", query)
     ]
     catalog = [message.content for message in model.requests[0][0] if '"available_groups"' in message.content]
     assert len(catalog) == 1
@@ -291,8 +345,8 @@ async def test_agent_group_selection_ends_without_finalization_or_later_tool_cal
     )
     events = [
         event
-        async for event in Diagnostics(runtime, model, MemorySessions(), Redactor()).stream(
-            "alice", "local", "Check that infrastructure project"
+        async for event in diagnostic_stream(
+            Diagnostics(runtime, model, Redactor()), "alice", "local", "Check that infrastructure project"
         )
     ]
     selections = [event for event in events if event["type"] == "clarification.required"]
@@ -313,8 +367,8 @@ async def test_diagnosis_uses_real_snapshots_and_never_exposes_write_tools() -> 
             ModelReply(proposal()),
         ]
     )
-    service = Diagnostics(runtime, model, MemorySessions(), Redactor())
-    events = [event async for event in service.stream("alice", "local", "Why did worker exit?")]
+    service = Diagnostics(runtime, model, Redactor())
+    events = [event async for event in diagnostic_stream(service, "alice", "local", "Why did worker exit?")]
     answer = next(event["answer"] for event in events if event["type"] == "answer.ready")
     assert answer["widgets"][0]["snapshot"]["state"] == "exited"
     assert not runtime.mutations
@@ -325,9 +379,7 @@ async def test_unknown_evidence_gets_one_repair_attempt() -> None:
     model = ScriptedModel([ModelReply("Ready"), ModelReply(proposal("invented")), ModelReply(proposal("invented"))])
     events = [
         event
-        async for event in Diagnostics(FakeRuntime(), model, MemorySessions(), Redactor()).stream(
-            "alice", "local", "Inspect"
-        )
+        async for event in diagnostic_stream(Diagnostics(FakeRuntime(), model, Redactor()), "alice", "local", "Inspect")
     ]
     assert len(model.requests) == 3
     assert events[-1]["type"] == "turn.failed"
@@ -338,12 +390,12 @@ async def test_final_and_repair_schemas_restrict_log_quotations_to_fresh_evidenc
     quoted = 'invalid input value for enum login_provider: "unknown"'
     model = ScriptedModel([ModelReply("Ready"), ModelReply(proposal(quoted)), ModelReply(proposal())])
     runtime = FakeRuntime()
-    service = Diagnostics(runtime, model, MemorySessions(), Redactor())
+    service = Diagnostics(runtime, model, Redactor())
     with patch.object(model, "complete", wraps=model.complete) as complete:
         events = [
             event
-            async for event in service.stream(
-                "alice", "local", "Could the database be stopped?", container_id=runtime.item.id
+            async for event in diagnostic_stream(
+                service, "alice", "local", "Could the database be stopped?", container_id=runtime.item.id
             )
         ]
     assert events[-1]["type"] == "turn.completed"
@@ -396,8 +448,8 @@ async def test_mixed_container_repair_explains_failure_and_valid_evidence_groups
     runtime = InventoryRuntime()
     events = [
         event
-        async for event in Diagnostics(runtime, model, MemorySessions(), Redactor()).stream(
-            "alice", "local", "Check the worker and database"
+        async for event in diagnostic_stream(
+            Diagnostics(runtime, model, Redactor()), "alice", "local", "Check the worker and database"
         )
     ]
     feedback = repair_feedback(model)
@@ -430,9 +482,7 @@ async def test_schema_repair_reports_field_errors_without_model_values() -> None
     model = ScriptedModel([ModelReply("Ready"), ModelReply(json.dumps(invalid)), ModelReply(json.dumps(corrected))])
     events = [
         event
-        async for event in Diagnostics(FakeRuntime(), model, MemorySessions(), Redactor()).stream(
-            "alice", "local", "Check"
-        )
+        async for event in diagnostic_stream(Diagnostics(FakeRuntime(), model, Redactor()), "alice", "local", "Check")
     ]
     feedback = repair_feedback(model)
     assert feedback["error"] == {
@@ -460,7 +510,8 @@ async def test_evidence_only_cause_gets_one_repair_before_becoming_a_public_answ
     )
     events = [
         event
-        async for event in Diagnostics(FakeRuntime(), model, MemorySessions(), Redactor()).stream(
+        async for event in diagnostic_stream(
+            Diagnostics(FakeRuntime(), model, Redactor()),
             "alice",
             "local",
             "Inspect worker",
@@ -497,7 +548,8 @@ async def test_action_schema_repair_supplies_null_constraints_without_echoing_th
     )
     events = [
         event
-        async for event in Diagnostics(FakeRuntime(), model, MemorySessions(), Redactor()).stream(
+        async for event in diagnostic_stream(
+            Diagnostics(FakeRuntime(), model, Redactor()),
             "alice",
             "local",
             "Inspect worker",
@@ -524,9 +576,7 @@ async def test_schema_repair_hides_extra_field_names(nested: bool, location: lis
     model = ScriptedModel([ModelReply("Ready"), ModelReply(json.dumps(invalid)), ModelReply(corrected)])
     events = [
         event
-        async for event in Diagnostics(FakeRuntime(), model, MemorySessions(), Redactor()).stream(
-            "alice", "local", "Inspect"
-        )
+        async for event in diagnostic_stream(Diagnostics(FakeRuntime(), model, Redactor()), "alice", "local", "Inspect")
     ]
     feedback = repair_feedback(model)
     assert feedback["error"] == {
@@ -570,9 +620,7 @@ async def test_repair_preserves_available_log_and_stack_evidence(
     )
     events = [
         event
-        async for event in Diagnostics(FakeRuntime(), model, MemorySessions(), Redactor()).stream(
-            "alice", "local", "Inspect"
-        )
+        async for event in diagnostic_stream(Diagnostics(FakeRuntime(), model, Redactor()), "alice", "local", "Inspect")
     ]
     feedback = repair_feedback(model)
     assert feedback["container_evidence_groups"] == groups
@@ -597,9 +645,7 @@ async def test_model_cannot_switch_hosts_through_tool_arguments() -> None:
     )
     events = [
         event
-        async for event in Diagnostics(FakeRuntime(), model, MemorySessions(), Redactor()).stream(
-            "alice", "local", "Inspect"
-        )
+        async for event in diagnostic_stream(Diagnostics(FakeRuntime(), model, Redactor()), "alice", "local", "Inspect")
     ]
     tool_result = next(
         message.content for messages, _ in model.requests for message in messages if message.role == "tool"
@@ -617,8 +663,8 @@ async def test_exploration_and_repairs_share_the_model_budget() -> None:
     ]
     replies = [ModelReply("", (call,)) for call in calls]
     model = ScriptedModel([*replies, ModelReply("invalid"), ModelReply("invalid")])
-    service = Diagnostics(FakeRuntime(), model, MemorySessions(), Redactor(), max_model_calls=6)
-    events = [event async for event in service.stream("alice", "local", "Inspect")]
+    service = Diagnostics(FakeRuntime(), model, Redactor(), max_model_calls=6)
+    events = [event async for event in diagnostic_stream(service, "alice", "local", "Inspect")]
     assert len(model.requests) == 6
     assert events[-1]["type"] == "turn.failed"
 
@@ -642,8 +688,7 @@ async def test_write_tool_injected_by_a_model_is_rejected() -> None:
         ]
     )
     events = [
-        event
-        async for event in Diagnostics(runtime, model, MemorySessions(), Redactor()).stream("alice", "local", "Inspect")
+        event async for event in diagnostic_stream(Diagnostics(runtime, model, Redactor()), "alice", "local", "Inspect")
     ]
     assert not runtime.mutations
     assert events[-1]["type"] == "turn.completed"

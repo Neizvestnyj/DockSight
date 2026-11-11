@@ -1,3 +1,5 @@
+import { routeSavedApi } from './helpers/saved-server';
+import { openDemo } from './helpers/demo';
 import { chooseOption } from './helpers/select';
 import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
@@ -22,7 +24,7 @@ function sse(type: string, values: object = {}) {
 }
 
 test.beforeEach(async ({ page }) => {
-  await page.goto('/');
+  await openDemo(page);
 });
 
 for (const name of ['vintoria-infra-grafana-1', `monitoring-${'grafana-'.repeat(18)}1`]) {
@@ -34,13 +36,13 @@ for (const name of ['vintoria-infra-grafana-1', `monitoring-${'grafana-'.repeat(
       widgets: original.widgets.filter((row) => row.widget_type === 'log_anomalies'),
       evidence: original.evidence.filter((row) => row.kind === 'logs').map((row) => ({ ...row, container_name: name })),
     };
-    await page.route('**/api/v1/**', (route) => {
+    await routeSavedApi(page, (route) => {
       const path = new URL(route.request().url()).pathname;
       if (path.endsWith('/hosts')) return route.fulfill({ json: [{ id: 'test-host', name: 'Test host' }] });
       if (path.endsWith('/system/status')) return route.fulfill({ json: demoSystemStatus('test-host') });
       if (path.endsWith('/containers'))
         return route.fulfill({ json: [demoContainer(2, 'test-host', '2026-10-30T10:00:00Z')] });
-      expect(path).toBe('/api/v1/chat/turns');
+      expect(path.endsWith('/turns')).toBe(true);
       return route.fulfill({
         contentType: 'text/event-stream',
         body:
@@ -85,7 +87,7 @@ test('retains host choice through a discovery retry and restores focus after the
   const gate = new Promise<void>((resolve) => {
     finish = resolve;
   });
-  await page.route('**/api/v1/**', async (route) => {
+  await routeSavedApi(page, async (route) => {
     if (!new URL(route.request().url()).pathname.endsWith('/hosts')) return route.fulfill({ json: [] });
     if (++hostReads === 1) return route.fulfill({ status: 503, json: { message: 'Discovery unavailable' } });
     await gate;
@@ -159,7 +161,7 @@ test('shows refresh progress and completion and retains the received list after 
   const gate = new Promise<void>((resolve) => {
     finish = resolve;
   });
-  await page.route('**/api/v1/**', async (route) => {
+  await routeSavedApi(page, async (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path.endsWith('/system/status'))
       return route.fulfill({ json: demoSystemStatus(new URL(route.request().url()).searchParams.get('host')) });
@@ -292,7 +294,7 @@ test('keeps large logs bounded and keyboard-scrollable', async ({ page }) => {
   };
   answer.widgets.find((row) => row.widget_type === 'log_anomalies')!.logs = data;
   answer.evidence.find((row) => row.kind === 'logs')!.data = data;
-  await page.route('**/api/v1/**', (route) => {
+  await routeSavedApi(page, (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path.endsWith('/system/status'))
       return route.fulfill({ json: demoSystemStatus(new URL(route.request().url()).searchParams.get('host')) });
@@ -359,24 +361,31 @@ test('contains focus in confirmation and explains an indeterminate operation', a
   await expect(dialog).toHaveCount(0);
 });
 
-test('connects to authenticated POST SSE and recovers action delivery by GET only', async ({ page }) => {
+test('submits one saved question and recovers action delivery by GET only', async ({ page }) => {
   const answer = demoAnswer('crash_loop', 'test-host');
   const container = demoContainer(0, 'test-host', new Date().toISOString());
   const status = answer.widgets.find((row) => row.widget_type === 'container_status')!;
   const action = status.actions[0]!;
   let posts = 0;
   let actionReads = 0;
-  await page.route('**/api/v1/**', async (route) => {
+  await routeSavedApi(page, async (route) => {
     const req = route.request();
-    expect(req.headers()['authorization']).toBe('Bearer browser-test-token');
+    expect(req.headers()['authorization']).toBeUndefined();
     const path = new URL(req.url()).pathname;
     if (path.endsWith('/system/status'))
       return route.fulfill({ json: demoSystemStatus(new URL(req.url()).searchParams.get('host')) });
     if (path.endsWith('/hosts')) return route.fulfill({ json: [{ id: 'test-host', name: 'Test host' }] });
     if (path.endsWith('/containers')) return route.fulfill({ json: [container] });
-    if (path.endsWith('/chat/turns')) {
+    if (path.endsWith('/turns')) {
       expect(req.method()).toBe('POST');
-      expect(req.postDataJSON()).toEqual({ host: 'test-host', query: 'Why did this container exit?' });
+      expect(req.postDataJSON()).toEqual({
+        kind: 'question',
+        query: 'Why did this container exit?',
+        target: null,
+        model: null,
+        submission_id: expect.any(String),
+        expected_revision: 1,
+      });
       return route.fulfill({
         contentType: 'text/event-stream',
         body:
@@ -392,7 +401,9 @@ test('connects to authenticated POST SSE and recovers action delivery by GET onl
       return route.abort('connectionreset');
     }
     actionReads++;
-    return route.fulfill({ json: { ...action, state: 'indeterminate', message: 'Docker result unknown' } });
+    return route.fulfill({
+      json: posts ? { ...action, state: 'indeterminate', message: 'Docker result unknown' } : action,
+    });
   });
   await connectApi(page);
   await expect(page.getByRole('heading', { name: 'Start an investigation' })).toBeVisible();
@@ -402,9 +413,9 @@ test('connects to authenticated POST SSE and recovers action delivery by GET onl
   await page.getByRole('button', { name: 'Confirm stop' }).click();
   await expect(page.getByText('indeterminate', { exact: true })).toBeVisible();
   expect(posts).toBe(1);
-  expect(actionReads).toBe(1);
+  expect(actionReads).toBe(2);
   await page.getByRole('button', { name: 'Check existing action' }).click();
-  await expect.poll(() => actionReads).toBe(2);
+  await expect.poll(() => actionReads).toBe(3);
   expect(posts).toBe(1);
 });
 
@@ -421,7 +432,7 @@ test('handles long untrusted logs, container names and environment as text', asy
     if (widget.widget_type === 'env_inspector')
       widget.variables = { VERY_LONG_KEY: '<script>alert(1)</script>' + 'x'.repeat(800) };
   }
-  await page.route('**/api/v1/**', (route) => {
+  await routeSavedApi(page, (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path.endsWith('/system/status'))
       return route.fulfill({ json: demoSystemStatus(new URL(route.request().url()).searchParams.get('host')) });

@@ -110,7 +110,9 @@ def test_real_docker_http_diagnosis_and_confirmed_restart() -> None:
             ],
         }
         model = ScriptedModel([ModelReply("Ready"), ModelReply(json.dumps(proposal))])
-        settings = Settings(api_token="integration-test-token-at-least-24-chars", _env_file=None)
+        settings = Settings(
+            state_backend="memory", api_token="integration-test-token-at-least-24-chars", _env_file=None
+        )
         headers = {"Authorization": f"Bearer {settings.api_token.get_secret_value()}"}
         with TestClient(create_app(settings, build_components(settings, model=model))) as api:
             response = api.post(
@@ -222,7 +224,7 @@ def test_real_running_unhealthy_container_reaches_api_evidence_and_recovers() ->
                 ),
             ]
         )
-        settings = Settings(api_token="health-integration-test-token-24", _env_file=None)
+        settings = Settings(state_backend="memory", api_token="health-integration-test-token-24", _env_file=None)
         headers = {"Authorization": "Bearer health-integration-test-token-24"}
         with TestClient(create_app(settings, build_components(settings, model=model))) as api:
             _assert_health_reads(api, headers, container.id, project)

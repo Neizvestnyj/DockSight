@@ -16,8 +16,11 @@ import {
 import type { Container, Host } from './contracts';
 import { Logo, ContainerStatus } from './ui';
 import { utc } from './format';
+import type { ReactNode } from 'react';
 
 interface Props {
+  savedChats?: ReactNode;
+  transient?: boolean;
   hosts: Host[];
   host: string;
   changeHost: (host: string) => void;
@@ -64,6 +67,8 @@ export function Sidebar({
   about,
   connect,
   returnDemo,
+  savedChats,
+  transient,
 }: Props) {
   const { t } = useLocale();
   const hostSelectId = useId();
@@ -123,6 +128,7 @@ export function Sidebar({
           <Plus size={17} />
         </button>
       </div>
+      {savedChats}
       <section className="inventory">
         <header>
           <h2>{t('Containers')}</h2>
@@ -198,9 +204,15 @@ export function Sidebar({
       </section>
       <div className="sidebar-bottom">
         <p>
-          {t('Sessions live in this tab.')}
+          {t(
+            demo
+              ? 'Demo chats live in this tab.'
+              : transient
+                ? 'Reconnect after refreshing this tab.'
+                : 'Saved chats stay on your backend.',
+          )}
           <br />
-          {t('Backend state is temporary.')}
+          {t(demo ? 'All operations are simulated.' : 'Only acknowledged drafts are restored.')}
         </p>
         <button className="text-button" onClick={about}>
           <CircleHelp size={15} />
