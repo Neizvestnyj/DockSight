@@ -133,17 +133,23 @@ test('rechecks stale status, recovers diagnosis automatically, and stops after r
   const healthy = demoSystemStatus('local');
   let failure: 'none' | 'docker' | 'authorization' = 'none';
   let calls = 0;
-  await routeSavedApi(page, (route) => {
+  let releaseStaleCheck = () => {};
+  const staleCheckGate = new Promise<void>((resolve) => {
+    releaseStaleCheck = resolve;
+  });
+  await routeSavedApi(page, async (route) => {
     const url = new URL(route.request().url());
     expect(route.request().method()).toBe('GET');
     if (url.pathname.endsWith('/hosts')) return route.fulfill({ json: [{ id: 'local', name: 'Test host' }] });
     if (url.pathname.endsWith('/system/status')) {
       calls++;
-      if (failure === 'authorization')
+      const checkFailure = failure;
+      if (calls === 2) await staleCheckGate;
+      if (checkFailure === 'authorization')
         return route.fulfill({ status: 401, json: { code: 'unauthorized', message: 'Denied' } });
       return route.fulfill({
         json:
-          failure === 'docker'
+          checkFailure === 'docker'
             ? { ...healthy, docker: { ...healthy.docker, state: 'unavailable', code: 'runtime_unavailable' } }
             : healthy,
       });
@@ -165,7 +171,10 @@ test('rechecks stale status, recovers diagnosis automatically, and stops after r
   await page.clock.runFor(30_000);
   await trigger.click();
   await expect.poll(() => calls).toBe(2);
+  await expect(trigger).toHaveAttribute('aria-busy', 'true');
   await expect(dialog.getByRole('button', { name: 'Check again' })).toBeEnabled();
+  releaseStaleCheck();
+  await expect(trigger).toHaveAttribute('aria-busy', 'false');
   await page.keyboard.press('Escape');
   failure = 'docker';
   await page.clock.runFor(60_000);

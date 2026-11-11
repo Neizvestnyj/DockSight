@@ -29,6 +29,7 @@ Dates record merges into `master`. Version links show the corresponding changes.
 
 ### Fixed
 
+- System status browser checks wait for the stale response before advancing simulated time, avoiding timing failures.
 - Diagnostic services start on Python 3.12 and 3.13 when type-only annotations reference the diagnostic use case.
 - The connection form prefills the current browser's API address and distinguishes rejected browser origins,
   insecure-cookie configuration, and invalid tokens from an invalid API address.
