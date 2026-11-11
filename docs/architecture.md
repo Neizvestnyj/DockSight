@@ -24,15 +24,18 @@ contracts. The composition root may import both to construct the application.
 
 ![Allowed source-code dependencies and application-owned ports](diagrams/code-dependencies.png)
 
-| Component | Responsibility |
-|-----------|----------------|
-| `RuntimeQueries` | Docker reads |
-| `Diagnostics` | Model calls, tools, and evidence collection |
-| `ViewAssembler` | Typed responses built from model proposals and collected facts |
-| `Actions` | Action preparation and confirmed execution |
-| `SystemStatus` | Docker and provider metadata checks |
-| `ModelChoices` | Provider/model selection against server-owned catalogs |
-| `CatalogCache` | Shared metadata fetches, freshness, failure cooldown, and cancellation |
+| Component         | Responsibility                                                                |
+|-------------------|-------------------------------------------------------------------------------|
+| `RuntimeQueries`  | Docker reads                                                                  |
+| `Diagnostics`     | Model calls, tools, and evidence collection                                   |
+| `ViewAssembler`   | Typed responses built from model proposals and collected facts                |
+| `Actions`         | Action preparation and confirmed execution                                    |
+| `SystemStatus`    | Docker and provider metadata checks                                           |
+| `ModelChoices`    | Provider/model selection against server-owned catalogs                        |
+| `CatalogCache`    | Shared metadata fetches, freshness, failure cooldown, and cancellation        |
+| `Investigations`  | Actor-owned archive reads, deletion, and revisioned workspace preferences     |
+| `TurnRunner`      | Durable acceptance, retained diagnostic workers, Stop, and snapshot observers |
+| `BrowserSessions` | Cookie authority, expiry, credential rotation, and bounded cleanup            |
 
 - `domain` uses the standard library only. It owns values and business rules.
 - `application` owns use cases, ports, tool orchestration, and output contracts. Pydantic may validate application DTOs
@@ -45,16 +48,18 @@ contracts. The composition root may import both to construct the application.
   duplicates each use-case method.
 - Outbound ports are application-owned `Protocol` types. Return owned values, not Docker SDK objects, HTTP responses, or
   provider message classes.
+- `InvestigationArchive`, `TurnStore`, `ActionStore`, and `BrowserSessionStore` isolate storage. SQLite is the default
+  adapter. PostgreSQL or Oracle adapters could implement these ports but are not included.
 
 ### Diagnostic turns
 
 - Scope discovery supplies observed Compose/Swarm identities to the model tool loop.
 - Broad incident questions collect a bounded local-host overview before model exploration. Counts, member state,
   collection limits, and fact cards belong to the server. A model cannot replace the overview with a group chooser.
-- Narrowing to a group or exact container starts a separate investigation with fresh observations.
-- Ambiguous names require a choice validated against discovery. That turn ends without a diagnosis or history entry.
-  Container/group collisions include the container's exact identity. The client continues the same question and session
-  with an explicit target, revalidated against fresh Docker data.
+- Narrowing to a group or exact container starts an explicitly scoped turn with fresh observations.
+- Ambiguous names save an `awaiting_selection` turn with validated candidates. A clarification names that parent and
+  its revision. The server accepts one exact candidate and retains the original question.
+  It revalidates the selected target against fresh Docker data.
 - Each turn owns a bounded evidence context and read-result memo. Repeated successful reads with the same arguments and
   scope return existing evidence references. Failures are not cached. A batch of only reused reads ends exploration.
 - Final generation omits unvalidated prose drafts and includes a bounded recap of the latest lifecycle facts.
@@ -64,13 +69,53 @@ contracts. The composition root may import both to construct the application.
 
 ### Status and model connections
 
-`SystemStatus` uses `RuntimeReadPort.ping` and `ModelStatusPort`, with independent deadlines, public reason codes, and UTC
-check times. It never calls `ModelPort.complete` or changes diagnostic or action state.
+`SystemStatus` uses `RuntimeReadPort.ping` and `ModelStatusPort`, with independent deadlines, public reason codes,
+and UTC check times. It never calls `ModelPort.complete` or changes diagnostic or action state.
 The metadata adapter owns provider-specific HTTP routes and credentials.
 
 The catalog adapter owns pagination and HTTP handling. Bootstrap creates one reusable connection per configured
-provider on demand. Selected adapters share those clients. `Diagnostics` instances share sessions, redaction, action
+provider on demand. Selected adapters share those clients. `Diagnostics` instances share redaction, action
 assembly, and the concurrency semaphore. Each turn keeps its own model and trace identity.
+
+### Persistent state and retained work
+
+![Persistence ownership, startup recovery, and offline maintenance](diagrams/persistence-recovery.png)
+
+One `PersistentDatabase` owns a local SQLite file, one connection on a dedicated database thread, and a lifetime OS
+sidecar lock at the canonical path. Run one backend process with one worker. Shared network filesystems and multiple
+writers are unsupported. SQLAlchemy ORM rows, sessions, SQL, Alembic, and transaction callbacks stay inside the outbound
+persistence adapter. Ports return detached owned values. No transaction spans Docker, model, or catalog calls.
+
+The adapter serializes short transactions, bounds admission to 32 operations with a two-second wait, and sets a
+two-second SQLite busy timeout. It enables foreign keys, rollback `DELETE` journaling, and `synchronous=FULL`.
+Accepted writes settle through caller cancellation. A failed commit closes write admission and returns
+`storage_unavailable`. Successful reads may remain available. There is no silent memory fallback.
+Sanitized draft and target input is validated before storage admission. Invalid redaction expansion returns a typed
+input failure without closing unrelated writes. Container display labels are redacted. Sensitive group identities are
+rejected instead of changing an exact lookup.
+
+`Components.start` initializes storage before readiness. Initialization acquires the lock, checks integrity/schema,
+applies packaged forward migrations, and atomically recovers abandoned turns/actions and obsolete browser sessions.
+Running turns become `interrupted`, release reservations, and never resume generation automatically. Claims without a
+dispatch marker become failed. Dispatch markers become indeterminate and retain their target blocks. Unsupported
+schemas or failed migration/recovery refuse readiness. Maintenance opens separately without server initialization.
+
+`TurnRunner` owns shielded acceptance and worker registration independently of HTTP requests. Acceptance saves the
+submission receipt, running turn, actor/host scope, workspace revision, and storage reservation together. One diagnostic
+per actor/host may run. Progress commits before observer notification. A terminal answer is published only after commit.
+Up to four observers receive coalesced committed snapshots. Disconnect detaches observation. Explicit Stop settles the
+retained worker and saves the winning terminal state. Shutdown drains workers before closing runtime and storage.
+
+The complete display archive differs from model context. Only successful question/validated-summary pairs enter plain
+model messages, bounded to ten whole pairs and 32,000 characters. Continued turns collect fresh runtime evidence.
+Saved traces omit response previews, prompts, reasoning, and provider-native replay data.
+Archive detail reads metadata and its initial turn page in one transaction. Public and internal turn reads share the
+same snapshot ownership and lifecycle validator. Unsupported items retain their row IDs without exposing their content.
+Action preparation carries server-owned request and diagnostic turn correlation into retained lifecycle audit.
+
+SQLite has no age-based investigation eviction. The latest-ten list is pagination. Explicit deletion removes inactive
+history/context/workspace but preserves action protection, audit, and content-free submission tombstones. Explicit
+`memory` mode loses all state on restart. Only that mode applies `MAX_SESSIONS` and `STATE_TTL` to inactive history.
 
 ## Layout
 
@@ -88,7 +133,9 @@ backend/src/docksight/
       runtime.py         # Separate runtime read and mutation protocols
       models.py          # Provider-neutral model protocol and messages
       status.py          # Non-generative provider metadata checks
-      state.py           # Session/action stores and audit sink
+      state.py           # Action storage and reconciliation values
+      browser_sessions.py # Browser authority storage
+    investigations/      # Archive/turn ports, snapshots, acceptance, retained workers
     diagnostics/         # Turn orchestration, bounded trace, tools, context, prompts
     actions.py           # Prepare and execute workflows
     queries.py           # Host/container read workflows
@@ -102,8 +149,9 @@ backend/src/docksight/
     outbound/
       docker/            # SDK connections, mapping, port implementations
       models/            # Ollama, OpenAI, Anthropic, Gemini/compatible API adapters
-      memory/            # Bounded session and action stores
-      audit.py           # Structured action audit output
+      memory/            # Explicit transient history, actions, and browser sessions
+      persistence/       # SQLite ORM, migrations, lock, recovery, authoritative action audit
+      audit.py           # Best-effort structured action audit mirror
 ```
 
 ## DDD elements
@@ -125,10 +173,12 @@ backend/src/docksight/
 
 ![Prepared action states and permitted transitions](diagrams/action-lifecycle.png)
 
-`prepared` awaits confirmation. `running` records acceptance of an execution request. Expiry is recorded
-when the first execution request arrives at or after the deadline. The same idempotency key reuses an existing
-execution or retained outcome without another transition. An `indeterminate` outcome blocks further commands for that
-target for the backend process lifetime. See the [execution sequence](api.md#actions).
+`prepared` awaits confirmation. `running` records acceptance of an execution request. Expiry is calculated on reads
+and enforced before execution. The same idempotency key reuses an existing
+execution or retained outcome without another transition, including after SQLite restart. `running` has internal
+`claimed` and `dispatching` phases. The dispatch marker commits before the SDK send. An `indeterminate` outcome blocks
+further commands for the exact target until explicit offline reconciliation. Reconciliation retains the unknown old
+outcome. See the [execution sequence](api.md#actions) and [operator procedure](configuration.md#action-reconciliation).
 
 ## Runtime boundaries
 
@@ -143,12 +193,15 @@ target for the backend process lifetime. See the [execution sequence](api.md#act
   encoding belong to the inbound adapter. Neither belongs in `domain`. Schema conversion for a model provider belongs in
   that provider's outbound adapter.
 - Diagnostics call action preparation directly to attach permitted actions to cards.
-- Claim an action and deduplicate execution atomically. Serialize mutations for the same host/container. Enforce those
-  guarantees in the state adapter, while keeping authorization and action rules in the core.
-- Cancel diagnostic work when its client disconnects. Once a mutation starts, track it to a known or indeterminate
-  outcome even if its caller disconnects. A timed-out worker-thread call is not proof that Docker cancelled the action.
-- An indeterminate action blocks new mutations for that target for this process lifetime. Inspect Docker and reconcile
-  its outcome before restarting the backend. In-memory state provides no guarantee across an abrupt process loss.
+- Claim, guard, idempotency key, and authoritative audit commit atomically. Dispatch and terminal state use revision
+  checks. Serialize mutations for the same host/full container ID in the state adapter. Keep action rules in the core.
+- Disconnect detaches a diagnostic observer. Explicit Stop cancels diagnostic work. Track a started mutation to a known
+  or indeterminate outcome even if its caller disconnects. A timed-out thread call does not prove Docker cancellation.
+- Persist the dispatch marker before sending. A crash after that marker conservatively blocks the target even when
+  Docker may never have received the command. A late SDK result cannot rewrite an indeterminate outcome. Never retry
+  a mutation automatically. Docker and SQLite do not provide a distributed exactly-once execution guarantee.
+- Restart, archive deletion, token rotation, and preparation expiry do not clear durable indeterminate guards.
+  Offline reconciliation rereads Docker and records the native OS operator plus configured actor without a mutation.
 - Inject a clock callable for time-based rules. Core tests use small fake ports without Docker or model SDKs.
 
 ## Verification

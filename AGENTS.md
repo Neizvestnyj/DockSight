@@ -9,7 +9,8 @@ actions. Models provide explanations and select from approved tools and widgets.
 - Follow `docs/architecture.md` and keep `docs/api.md` aligned with the implementation.
 - Stay on the current branch unless the user explicitly approves a branch switch. Never run `git switch`,
   `git checkout`, or any equivalent branch-changing operation without that approval. Backend or frontend ownership
-  does not authorize switching branches. Commit task changes on the current feature branch unless the user directs otherwise.
+  does not authorize switching branches. Commit task changes on the current feature branch unless the user directs
+  otherwise.
 - Never commit directly on `master` or push any ref to remote `master`, including explicit refspecs and deletions.
   If the current branch is `master`, ask for approval to create or switch to a feature branch before committing.
   Do not bypass branch guards with `--no-verify`, `SKIP`, alternate hook paths, or disabled hooks.
@@ -74,6 +75,9 @@ actions. Models provide explanations and select from approved tools and widgets.
 - Keep provider-specific requests, responses, and schema conversions inside provider adapters. Application code must not
   depend on a model name or SDK.
 - Do not add a database, queue, cache server, or agent framework without a concrete requirement.
+- Keep SQLite and ORM details inside outbound persistence adapters. Application ports use owned values.
+- Run one backend process/worker with SQLite on a local filesystem. Keep the entire state directory on a durable volume.
+  Never hold a transaction across Docker, model, or catalog calls. Storage failures must not fall back to memory.
 
 ## Code
 
@@ -120,27 +124,30 @@ actions. Models provide explanations and select from approved tools and widgets.
   `pytest --dup-fixtures`. Duplicate return values are review hints, not proof that fixtures have the same purpose.
 - Mock provider HTTP calls in automated tests. Live model calls are opt-in. Cloud smoke tests require supplied
   credentials and explicit authorization.
-- Choose live Docker/local-model end-to-end runs and additional scenarios according to integration risk. Frontend-only
-  presentation changes normally need relevant browser checks, not live model runs. Reconsider live coverage when changing
-  provider/tool orchestration, evidence assembly, API contracts, or client behavior that affects real diagnoses. State
-  which live checks were run or omitted and why. A backend change alone does not require the whole live matrix.
+- Choose live Docker/local-model end-to-end runs and additional scenarios according to integration risk.
+  Frontend-only presentation changes normally need relevant browser checks, not live model runs.
+  Reconsider live coverage for provider/tool orchestration, evidence assembly, API contracts, or client behavior that
+  affects real diagnoses. State which live checks were run or omitted and why.
+  A backend change alone does not require the whole live matrix.
 - Isolate Docker integration fixtures with labels and unique names. Cleanup must address only resources created by that
   fixture. Never use global prune.
-- Install pre-commit, commit-msg, and pre-push hooks with `uv run --project backend python scripts/git_hooks.py install`.
+- Install pre-commit, commit-msg, and pre-push hooks with
+  `uv run --project backend python scripts/git_hooks.py install`.
   Run `uv run --project backend pre-commit run --all-files` before committing implementation work.
   Hooks enforce branch protection, formatting, types, architecture, docstrings, complexity, tests, Dockerfile rules,
   secret detection, and Conventional Commits. CI runs the code checks through `uv`. Branch guards apply locally.
-- Update `CHANGELOG.md` at the end of every task that changes repository files, before committing or reporting completion.
-  Cover the delivered behavior, documentation, or development workflow. Consolidate related changes and avoid duplicates.
-- Keep updating the same version section while work continues on the same feature branch. Do not create a version per task
-  or commit. Use the intended numeric version immediately instead of `Unreleased`.
+- Update `CHANGELOG.md` at the end of every task that changes repository files, before committing or reporting
+  completion. Cover the delivered behavior, documentation, or development workflow. Consolidate related changes and
+  avoid duplicates.
+- Keep updating the same version section while work continues on the same feature branch. Do not create a version per
+  task or commit. Use the intended numeric version immediately instead of `Unreleased`.
 - Choose versions using Semantic Versioning: PATCH for compatible fixes, MINOR for compatible additions, and MAJOR for
   breaking changes. Keep `backend/pyproject.toml` and its lockfile aligned with the current changelog version.
 - Keep release notes short, specific, and understandable to users. Group changes by outcome rather than listing commits.
   Documentation and workflow changes require a changelog update but do not by themselves require a version bump.
 - Follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/): use applicable `Added`, `Changed`, `Deprecated`, `Removed`,
-  `Fixed`, and `Security` sections, omitting empty categories. Cover notable outcomes across commits rather than one entry
-  per commit. For merged versions, use linked `[version] - YYYY-MM-DD` headings dated by the merge into `master`,
+  `Fixed`, and `Security` sections, omitting empty categories. Cover notable outcomes across commits rather than one
+  entry per commit. For merged versions, use linked `[version] - YYYY-MM-DD` headings dated by the merge into `master`,
   unless a separate release date is recorded. Keep version links tied to the corresponding changes.
 
 ## Frontend
@@ -148,14 +155,28 @@ actions. Models provide explanations and select from approved tools and widgets.
 - Keep the React, strict TypeScript, and Vite client in `frontend/`. Branch changes require explicit user approval.
 - Treat the backend widget schemas, runtime values, SSE events, and action lifecycle as the client contracts.
   Validate API data at the transport boundary. Render logs and environment values as text.
-- Keep API credentials in browser memory. Never put tokens in source, browser storage, URLs, or `VITE_*` variables.
-- Resolve the interface locale from browser language preferences unless the operator explicitly chooses a display language.
-  Persist only the locale preference. Switching language must preserve active investigations and prepared actions.
+- Keep API bearer tokens and CSRF values in browser memory. First-party login may persist an opaque HttpOnly cookie.
+  Never put API/provider tokens in browser storage, source, URLs, or `VITE_*` variables.
+- Resolve the interface locale from browser language preferences unless the operator explicitly chooses a display
+  language.
+  The locale is the only JavaScript browser-storage preference. Presentation changes must preserve active investigations
+  and prepared actions.
 - Keep demo transport visibly separate from API transport. Derive demo inventory totals from fixture rows.
-- Keep diagnosis sessions scoped to one host. Do not imply durable conversation history or replayable streams.
+- Probe the first-party cookie session before choosing API, signed-out, or explicit Demo entry. Network failures offer
+  retry. Separate-origin bearer mode omits cookies and requires reconnecting after refresh. Do not persist its endpoint.
+- Keep saved API investigations actor-owned and scoped to one host. Latest ten is a page size, not retention.
+  Restore last-active only at bootstrap. Focus refresh must not follow another tab's navigation.
+- Save drafts after 300 ms using serialized revisioned writes. Restore acknowledged state only. Preserve dirty text on
+  conflict and require explicit reload/use-this-draft. Focus reads must not silently rebase dirty workspace revisions.
+- Refresh/reconnect reads and observes the same accepted turn without resubmitting. Detach on navigation or disconnect.
+  Only explicit Stop cancels the exact active owner. A late old Stop must not detach a newer turn.
+- Keep removed-host/model archives readable and require explicit valid scope before continuation. Never match
+  replacement resources by name. Historical evidence and traces stay snapshots. Continuing collects fresh observations.
+- Reopened action review starts closed and requires a matching authoritative action read before confirmation.
+  Missing, foreign, expired, or indeterminate actions stay unavailable. Never prepare a replacement automatically.
 - Keep one idempotency key per action execution. Recover lost responses by reading the existing action.
   Never retry a Docker mutation automatically. Require separate confirmation of the exact server-prepared target.
 - Run `rtk proxy npm --prefix frontend run check`, `rtk proxy npm --prefix frontend test`, and
   `rtk proxy npm --prefix frontend run build`. Run browser checks against the production preview with
-  `rtk proxy npm --prefix frontend run test:browser` when changing layout or user flows. Select relevant specs for focused
-  changes and broaden the run when shared behavior or unresolved failures justify it.
+  `rtk proxy npm --prefix frontend run test:browser` when changing layout or user flows. Select relevant specs for
+  focused changes and broaden the run when shared behavior or unresolved failures justify it.
