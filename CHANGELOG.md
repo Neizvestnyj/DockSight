@@ -4,6 +4,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versions: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Dates record merges into `master`. Version links show the corresponding changes.
 
+## [0.8.1]
+
+### Changed
+
+- Organize the frontend by product capability, shared contracts, transport adapters, and application assembly while
+  retaining investigation, session, and action behavior.
+- Measure frontend coverage for all production TypeScript files and check module dependency boundaries.
+
 ## [0.8.0]
 
 ### Added
@@ -287,6 +295,7 @@ Dates record merges into `master`. Version links show the corresponding changes.
 - Prepared actions are bound to the caller and exact target. Unknown mutation outcomes block conflicting actions.
   Runtime mutations are never retried automatically.
 
+[0.8.1]: https://github.com/Neizvestnyj/DockSight/compare/master...feature/frontend-modular-architecture
 [0.8.0]: https://github.com/Neizvestnyj/DockSight/compare/feature/security-fixes...feature/persistent-investigations
 [0.7.0]: https://github.com/Neizvestnyj/DockSight/compare/3c69d1ac9d2316bf84582ec230c5290779967cf7...feature/security-fixes
 [0.6.0]: https://github.com/Neizvestnyj/DockSight/compare/093f3c7e0a90251cfe73aba503576bd2280cca12...3c69d1ac9d2316bf84582ec230c5290779967cf7

@@ -5,8 +5,8 @@ import {
   type ActorWorkspace,
   type InvestigationDetail,
   type SavedTurn,
-} from '../../src/investigation-contracts';
-import type { TurnEvent } from '../../src/contracts';
+} from '../../src/shared/contracts/investigation-contracts';
+import type { TurnEvent } from '../../src/shared/contracts/contracts';
 
 type Scenario = (route: Route) => unknown | Promise<unknown>;
 

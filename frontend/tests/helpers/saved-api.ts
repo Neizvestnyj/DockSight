@@ -1,7 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import type { Page } from '@playwright/test';
-import { demoAnswer, demoContainer, demoSystemStatus } from '../../src/demo';
-import type { ActorWorkspace, InvestigationDetail, SavedTurn, StartTurn } from '../../src/investigation-contracts';
+import { demoAnswer, demoContainer, demoSystemStatus } from '../../src/infrastructure/demo/demo';
+import type {
+  ActorWorkspace,
+  InvestigationDetail,
+  SavedTurn,
+  StartTurn,
+} from '../../src/shared/contracts/investigation-contracts';
 
 /** Supply HTTP contract fixtures only; this helper does not prove database persistence. */
 export async function savedApi(page: Page) {

@@ -3,7 +3,7 @@ import { openDemo } from './helpers/demo';
 import { chooseOption } from './helpers/select';
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { demoAnswer, demoContainer, demoSystemStatus } from '../src/demo';
+import { demoAnswer, demoContainer, demoSystemStatus } from '../src/infrastructure/demo/demo';
 
 /** Connect to intercepted API reads without executing a real runtime operation. */
 async function connect(page: Page) {

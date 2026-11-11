@@ -3,7 +3,7 @@ import { openDemo } from './helpers/demo';
 import { chooseOption } from './helpers/select';
 import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-import { demoContainer, demoSystemStatus } from '../src/demo';
+import { demoContainer, demoSystemStatus } from '../src/infrastructure/demo/demo';
 
 /** Connect the UI to intercepted requests without reaching a real provider or Docker host. */
 async function connectApi(page: Page) {

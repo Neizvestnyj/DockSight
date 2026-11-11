@@ -3,7 +3,7 @@ import { openDemo } from './helpers/demo';
 import { chooseOption } from './helpers/select';
 import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-import { demoAnswer, demoContainer, demoSystemStatus } from '../src/demo';
+import { demoAnswer, demoContainer, demoSystemStatus } from '../src/infrastructure/demo/demo';
 
 /** Open connection settings through the visible control at each breakpoint. */
 async function connectApi(page: Page, waitForDiscovery = true) {

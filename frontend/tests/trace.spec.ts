@@ -3,7 +3,7 @@ import { openDemo } from './helpers/demo';
 import { chooseOption } from './helpers/select';
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { demoContainer, demoSystemStatus } from '../src/demo';
+import { demoContainer, demoSystemStatus } from '../src/infrastructure/demo/demo';
 
 const envelope = { schema_version: 1, request_id: 'request-trace-test', turn_id: 'turn-trace-test' };
 const started = '2026-10-28T09:00:00Z';

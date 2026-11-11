@@ -5,7 +5,7 @@ import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { InvestigationDetail, SavedTurn } from '../../src/investigation-contracts';
+import type { InvestigationDetail, SavedTurn } from '../../src/shared/contracts/investigation-contracts';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const python = resolve(

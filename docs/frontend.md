@@ -12,6 +12,21 @@
 - Demo: separate, labeled transport with fictional hosts and fixtures matching backend contracts. No Docker or model
   calls. Scenario and error controls are disabled during collection.
 
+The modular migration uses product owners under `src/modules/`, concrete transports under `src/infrastructure/`,
+application assembly under `src/app/`, and reusable contracts and presentation under `src/shared/`.
+The architecture check rejects cycles and these forbidden dependency directions:
+
+| Consumer | Allowed dependencies |
+| --- | --- |
+| App | Public module entries, infrastructure, shared |
+| Investigations | Shared, actions and runtime public entries |
+| Other product modules | Shared and their own internals |
+| Infrastructure | Shared contracts and neutral helpers |
+| Shared | Shared only |
+
+Cross-module consumers import public entries. Product modules never import application assembly or concrete transports.
+During migration, flat source files are a temporary scope and new modules cannot depend on them.
+
 Demo logs are fixed. Browser tests use mocked API responses for longer log scrolling.
 See [contributor checks](../CONTRIBUTING.md#checks).
 

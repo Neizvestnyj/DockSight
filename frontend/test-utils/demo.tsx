@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import App from '../src/App';
+import App from '../src/app/App';
 
 /** Enter simulated data explicitly after the session bootstrap decision. */
 export async function renderDemoApp() {

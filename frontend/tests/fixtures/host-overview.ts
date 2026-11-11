@@ -1,4 +1,4 @@
-import { answerSchema } from '../../src/contracts';
+import { answerSchema } from '../../src/shared/contracts/contracts';
 
 /** Build bounded intercepted observations with distinct missing and collected log coverage. */
 export function hostAnswer() {

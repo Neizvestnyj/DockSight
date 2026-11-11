@@ -1,6 +1,6 @@
 import { writeFile } from 'node:fs/promises';
 import { expect, test, type Page, type Response } from '@playwright/test';
-import { answerSchema, targetSelectionSchema, type Answer, type TurnInput } from '../src/contracts';
+import { answerSchema, targetSelectionSchema, type Answer, type TurnInput } from '../src/shared/contracts/contracts';
 import { chooseOption } from '../tests/helpers/select';
 
 interface Input {

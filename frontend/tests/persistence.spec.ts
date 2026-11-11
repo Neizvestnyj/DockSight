@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { test, expect } from './fixtures/persistent-api';
-import type { SavedTurn } from '../src/investigation-contracts';
+import type { SavedTurn } from '../src/shared/contracts/investigation-contracts';
 import type { Page } from '@playwright/test';
 
 /** Open the archived card's ordinary operations before reviewing the exact server action. */
