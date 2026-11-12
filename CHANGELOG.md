@@ -12,6 +12,10 @@ Dates record merges into `master`. Version links show the corresponding changes.
   retaining investigation, session, and action behavior.
 - Measure frontend coverage for all production TypeScript files and check module dependency boundaries.
 
+### Fixed
+
+- Keep text entered during initial chat creation visible and save it after the chat is acknowledged.
+
 ## [0.8.0]
 
 ### Added

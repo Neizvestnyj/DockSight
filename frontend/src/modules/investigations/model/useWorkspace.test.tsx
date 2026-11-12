@@ -24,6 +24,370 @@ afterEach(() => {
 });
 
 describe('revisioned workspace', () => {
+  it('retains an initial draft and saves it 300 ms after chat acknowledgement', async () => {
+    const api = new ApiClient();
+    vi.spyOn(api, 'actorWorkspace').mockResolvedValue({
+      revision: 0,
+      last_investigation_id: null,
+      host: null,
+      model: null,
+    });
+    vi.spyOn(api, 'saveActorWorkspace').mockResolvedValue({
+      revision: 1,
+      last_investigation_id: id,
+      host: 'local',
+      model: null,
+    });
+    let acknowledge: (value: typeof detail) => void = () => {};
+    vi.spyOn(api, 'createInvestigation').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          acknowledge = resolve;
+        }),
+    );
+    const writes = vi.spyOn(api, 'saveWorkspace').mockImplementation(async (_id, revision, changes) => ({
+      ...empty,
+      revision: revision + 1,
+      draft: changes.draft ?? '',
+    }));
+    const { result } = renderHook(() => useWorkspace(api));
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    vi.useFakeTimers();
+    let creating: Promise<void>;
+    act(() => {
+      creating = result.current.create('local');
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    act(() => result.current.setDraft('Typed during startup'));
+    expect(result.current.draft).toBe('Typed during startup');
+    expect(result.current.saveState).toBe('unsaved');
+    expect(writes).not.toHaveBeenCalled();
+    await act(async () => {
+      acknowledge(detail);
+      await creating!;
+    });
+    expect(result.current.draft).toBe('Typed during startup');
+    expect(result.current.saveState).toBe('unsaved');
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(299);
+    });
+    expect(writes).not.toHaveBeenCalled();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(writes).toHaveBeenCalledWith(id, 0, { draft: 'Typed during startup' });
+    expect(result.current.saveState).toBe('saved');
+  });
+
+  it('retains an initial draft on creation failure and saves it on a same-host retry', async () => {
+    const api = new ApiClient();
+    vi.spyOn(api, 'actorWorkspace').mockResolvedValue({
+      revision: 0,
+      last_investigation_id: null,
+      host: null,
+      model: null,
+    });
+    vi.spyOn(api, 'saveActorWorkspace').mockResolvedValue({
+      revision: 1,
+      last_investigation_id: id,
+      host: 'local',
+      model: null,
+    });
+    let rejectCreate: (error: Error) => void = () => {};
+    vi.spyOn(api, 'createInvestigation')
+      .mockImplementationOnce(
+        () =>
+          new Promise((_resolve, reject) => {
+            rejectCreate = reject;
+          }),
+      )
+      .mockResolvedValueOnce(detail);
+    const writes = vi.spyOn(api, 'saveWorkspace').mockImplementation(async (_id, revision, changes) => ({
+      ...empty,
+      revision: revision + 1,
+      draft: changes.draft ?? '',
+    }));
+    const { result } = renderHook(() => useWorkspace(api));
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    let creating: Promise<void>;
+    act(() => {
+      creating = result.current.create('local');
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    act(() => result.current.setDraft('Keep after failure'));
+    await act(async () => {
+      rejectCreate(new Error('offline'));
+      await creating!;
+    });
+    expect(result.current.draft).toBe('Keep after failure');
+    expect(result.current.saveState).toBe('unsaved');
+    expect(result.current.error).toBe('Could not create saved chat. Retry manually.');
+    expect(writes).not.toHaveBeenCalled();
+    await act(async () => {
+      await result.current.create('local');
+    });
+    expect(result.current.draft).toBe('Keep after failure');
+    await act(async () => {
+      await result.current.flush();
+    });
+    expect(writes).toHaveBeenCalledWith(id, 0, { draft: 'Keep after failure' });
+  });
+
+  it('does not install an initial draft into a different chat after a late creation reply', async () => {
+    const api = new ApiClient();
+    const other = {
+      ...detail,
+      id: '22222222-2222-4222-8222-222222222222',
+      workspace: { ...empty, draft: 'Other chat' },
+    };
+    vi.spyOn(api, 'actorWorkspace').mockResolvedValue({
+      revision: 0,
+      last_investigation_id: null,
+      host: null,
+      model: null,
+    });
+    vi.spyOn(api, 'saveActorWorkspace').mockResolvedValue({
+      revision: 1,
+      last_investigation_id: other.id,
+      host: 'local',
+      model: null,
+    });
+    vi.spyOn(api, 'investigation').mockResolvedValue(other);
+    let acknowledge: (value: typeof detail) => void = () => {};
+    vi.spyOn(api, 'createInvestigation').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          acknowledge = resolve;
+        }),
+    );
+    const writes = vi.spyOn(api, 'saveWorkspace');
+    const { result } = renderHook(() => useWorkspace(api));
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    let creating: Promise<void>;
+    act(() => {
+      creating = result.current.create('local');
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    act(() => result.current.setDraft('First scope only'));
+    expect(result.current.draft).toBe('First scope only');
+    await act(async () => {
+      await result.current.open(other.id);
+    });
+    await act(async () => {
+      acknowledge(detail);
+      await creating!;
+    });
+    expect(result.current.detail?.id).toBe(other.id);
+    expect(result.current.draft).toBe('Other chat');
+    expect(writes).not.toHaveBeenCalled();
+  });
+
+  it('retains the initial draft if navigation to another chat fails', async () => {
+    const api = new ApiClient();
+    vi.spyOn(api, 'actorWorkspace').mockResolvedValue({
+      revision: 0,
+      last_investigation_id: null,
+      host: null,
+      model: null,
+    });
+    vi.spyOn(api, 'investigation').mockRejectedValue(new Error('offline'));
+    vi.spyOn(api, 'saveActorWorkspace').mockResolvedValue({
+      revision: 1,
+      last_investigation_id: id,
+      host: 'local',
+      model: null,
+    });
+    const creates = vi.spyOn(api, 'createInvestigation').mockResolvedValue(detail);
+    const writes = vi.spyOn(api, 'saveWorkspace').mockImplementation(async (_id, revision, changes) => ({
+      ...empty,
+      revision: revision + 1,
+      draft: changes.draft ?? '',
+    }));
+    const { result } = renderHook(() => useWorkspace(api));
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    act(() => result.current.setDraft('Keep after failed navigation'));
+    await act(async () => {
+      await result.current.open(id);
+    });
+    expect(result.current.draft).toBe('Keep after failed navigation');
+    expect(result.current.saveState).toBe('unsaved');
+    expect(creates).not.toHaveBeenCalled();
+    await act(async () => {
+      await result.current.create('local');
+      await result.current.flush();
+    });
+    expect(writes).toHaveBeenCalledWith(id, 0, { draft: 'Keep after failed navigation' });
+  });
+
+  it('does not carry an unacknowledged initial draft into another connection', async () => {
+    const first = new ApiClient();
+    const second = new ApiClient();
+    vi.spyOn(first, 'actorWorkspace').mockResolvedValue({
+      revision: 0,
+      last_investigation_id: null,
+      host: null,
+      model: null,
+    });
+    let acknowledge: (value: typeof detail) => void = () => {};
+    vi.spyOn(first, 'createInvestigation').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          acknowledge = resolve;
+        }),
+    );
+    vi.spyOn(second, 'actorWorkspace').mockResolvedValue({
+      revision: 0,
+      last_investigation_id: id,
+      host: 'local',
+      model: null,
+    });
+    vi.spyOn(second, 'investigation').mockResolvedValue({ ...detail, workspace: { ...empty, draft: 'Second actor' } });
+    const writes = vi.spyOn(second, 'saveWorkspace');
+    const { result, rerender } = renderHook(({ api }) => useWorkspace(api), { initialProps: { api: first } });
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    let creating: Promise<void>;
+    act(() => {
+      creating = result.current.create('local');
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    act(() => result.current.setDraft('First actor only'));
+    expect(result.current.draft).toBe('First actor only');
+    rerender({ api: second });
+    await waitFor(() => expect(result.current.draft).toBe('Second actor'));
+    await act(async () => {
+      acknowledge(detail);
+      await creating!;
+    });
+    expect(result.current.draft).toBe('Second actor');
+    expect(result.current.loading).toBe(false);
+    expect(writes).not.toHaveBeenCalled();
+  });
+
+  it('retains an initial draft as unsaved when its first revisioned write fails', async () => {
+    const api = new ApiClient();
+    vi.spyOn(api, 'actorWorkspace').mockResolvedValue({
+      revision: 0,
+      last_investigation_id: null,
+      host: null,
+      model: null,
+    });
+    vi.spyOn(api, 'saveActorWorkspace').mockResolvedValue({
+      revision: 1,
+      last_investigation_id: id,
+      host: 'local',
+      model: null,
+    });
+    vi.spyOn(api, 'createInvestigation').mockResolvedValue(detail);
+    const writes = vi.spyOn(api, 'saveWorkspace').mockRejectedValueOnce(new Error('offline'));
+    const { result } = renderHook(() => useWorkspace(api));
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    act(() => result.current.setDraft('Keep until saved'));
+    await act(async () => {
+      await result.current.create('local');
+    });
+    await act(async () => {
+      await result.current.flush();
+    });
+    expect(writes).toHaveBeenCalledWith(id, 0, { draft: 'Keep until saved' });
+    expect(result.current.draft).toBe('Keep until saved');
+    expect(result.current.saveState).toBe('error');
+    expect(result.current.detail?.workspace.draft).toBe('');
+    expect(result.current.revision()).toBe(0);
+  });
+
+  it('does not send an earlier initial draft to a later creation on another host', async () => {
+    const api = new ApiClient();
+    vi.spyOn(api, 'actorWorkspace').mockResolvedValue({
+      revision: 0,
+      last_investigation_id: null,
+      host: null,
+      model: null,
+    });
+    vi.spyOn(api, 'saveActorWorkspace').mockResolvedValue({
+      revision: 1,
+      last_investigation_id: id,
+      host: 'remote',
+      model: null,
+    });
+    let acknowledge: (value: typeof detail) => void = () => {};
+    vi.spyOn(api, 'createInvestigation')
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            acknowledge = resolve;
+          }),
+      )
+      .mockResolvedValueOnce({ ...detail, host: 'remote' });
+    const writes = vi.spyOn(api, 'saveWorkspace');
+    const { result } = renderHook(() => useWorkspace(api));
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    let first: Promise<void>;
+    act(() => {
+      first = result.current.create('local');
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    act(() => result.current.setDraft('Local host only'));
+    expect(result.current.draft).toBe('Local host only');
+    await act(async () => {
+      await result.current.create('remote');
+    });
+    await act(async () => {
+      acknowledge(detail);
+      await first!;
+    });
+    expect(result.current.detail?.host).toBe('remote');
+    expect(result.current.draft).toBe('');
+    expect(writes).not.toHaveBeenCalled();
+  });
+
+  it('does not restore an initial draft that was never acknowledged after reconnecting', async () => {
+    const api = new ApiClient();
+    vi.spyOn(api, 'actorWorkspace').mockResolvedValue({
+      revision: 0,
+      last_investigation_id: null,
+      host: null,
+      model: null,
+    });
+    let acknowledge: (value: typeof detail) => void = () => {};
+    vi.spyOn(api, 'createInvestigation').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          acknowledge = resolve;
+        }),
+    );
+    const writes = vi.spyOn(api, 'saveWorkspace');
+    const first = renderHook(() => useWorkspace(api));
+    await waitFor(() => expect(first.result.current.ready).toBe(true));
+    let creating: Promise<void>;
+    act(() => {
+      creating = first.result.current.create('local');
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    act(() => first.result.current.setDraft('Not acknowledged'));
+    expect(first.result.current.draft).toBe('Not acknowledged');
+    first.unmount();
+    const restored = renderHook(() => useWorkspace(api));
+    await waitFor(() => expect(restored.result.current.ready).toBe(true));
+    await act(async () => {
+      acknowledge(detail);
+      await creating!;
+    });
+    expect(restored.result.current.draft).toBe('');
+    expect(writes).not.toHaveBeenCalled();
+  });
+
   it.each(['same', 'other', 'new'])('saves edits typed while %s navigation is reading', async (navigation) => {
     const api = new ApiClient();
     vi.spyOn(api, 'actorWorkspace').mockResolvedValue({

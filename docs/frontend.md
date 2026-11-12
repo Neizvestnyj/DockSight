@@ -62,6 +62,8 @@ protection remains. Server capacity can reject new work without removing older S
 Drafts save after 300 ms of inactivity. **Saving draft…**, **Draft saved**, and **Draft unsaved** show acknowledgement.
 Refresh restores only acknowledged text. Unsent keystrokes can be lost. Workspace changes and actor preferences use
 independent revisions and serialized writes.
+Text entered while the first chat is being created stays in the current tab and is saved after the chat is acknowledged.
+Refreshing before that save is acknowledged can lose the text.
 Opening a saved row, including the selected row, or starting a new chat or host waits for pending saves. A save failure
 or unresolved conflict retains the current workspace and draft.
 

@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiError } from '../../../shared/contracts/errors';
 import {
   actorWorkspaceSchema,
-  investigationWorkspaceSchema,
   type ActorChanges,
   type ActorWorkspace,
   type HistoryTransport,
@@ -11,7 +10,7 @@ import {
   type WorkspaceChanges,
 } from '../../../shared/contracts/investigation-contracts';
 
-type SaveState = 'saved' | 'unsaved' | 'saving' | 'conflict' | 'error';
+import { useWorkspaceWrites, type InitialCreation, type InitialDraft, type SaveState } from './workspace-writes';
 
 /** Keep acknowledged server revisions separate from unsent text and serialize local writes. */
 export function useWorkspace(history?: HistoryTransport) {
@@ -34,6 +33,10 @@ export function useWorkspace(history?: HistoryTransport) {
   const accountGeneration = useRef(0);
   const active = useRef<AbortController | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const initialDraft = useRef<InitialDraft | null>(null);
+  const initialCreation = useRef<InitialCreation | null>(null);
+  const historyOwner = useRef(history);
+  const clearPendingSave = useCallback(() => clearTimeout(timer.current), []);
 
   /** Install only a server-acknowledged workspace for the selected chat. */
   const install = useCallback((value: InvestigationDetail) => {
@@ -83,103 +86,28 @@ export function useWorkspace(history?: HistoryTransport) {
     }
   }
 
-  /** Commit pending local changes, stopping on conflicts and retaining dirty text. */
-  async function flush(): Promise<boolean> {
-    clearTimeout(timer.current);
-    if (!history || !current.current) return true;
-    if (conflict.current) return false;
-    if (writing.current) {
-      await writing.current;
-      return flush();
-    }
-    const id = current.current.id;
-    const epoch = generation.current;
-    const operation = (async () => {
-      while (Object.keys(pending.current).length && current.current?.id === id) {
-        const patch = pending.current;
-        pending.current = {};
-        setSaveState('saving');
-        try {
-          const result = await history.saveWorkspace(id, current.current.workspace.revision, patch);
-          if (generation.current !== epoch || current.current?.id !== id) return false;
-          current.current = { ...current.current, workspace: result };
-          setDetail(current.current);
-          if (patch.draft !== undefined && pending.current.draft === undefined) showDraft(result.draft);
-        } catch (failure) {
-          if (generation.current !== epoch || current.current?.id !== id) return false;
-          pending.current = { ...patch, ...pending.current };
-          const parsed = investigationWorkspaceSchema.safeParse(failure instanceof ApiError ? failure.current : null);
-          if (failure instanceof ApiError && failure.code === 'workspace_conflict' && parsed.success) {
-            conflict.current = parsed.data;
-            setSaveState('conflict');
-          } else setSaveState('error');
-          return false;
-        }
-      }
-      if (generation.current === epoch) setSaveState('saved');
-      return true;
-    })();
-    writing.current = operation;
-    try {
-      return await operation;
-    } finally {
-      if (writing.current === operation) writing.current = null;
-    }
-  }
-
-  /** Queue a bounded draft or exact selection, with one debounce shared by local changes. */
-  function patch(changes: WorkspaceChanges) {
-    if (!current.current) return;
-    pending.current = { ...pending.current, ...changes };
-    if (changes.draft !== undefined) showDraft(changes.draft);
-    if (!conflict.current) {
-      setSaveState('unsaved');
-      clearTimeout(timer.current);
-      timer.current = setTimeout(() => {
-        void flush();
-      }, 300);
-    }
-  }
-
-  /** Discard dirty local changes only through the explicit conflict control. */
-  function reloadConflict() {
-    if (current.current && conflict.current) install({ ...current.current, workspace: conflict.current });
-  }
-
-  /** Rebase only the operator's draft onto the current safe server workspace. */
-  async function useDraft() {
-    if (!current.current || !conflict.current) return;
-    const local = pending.current.draft ?? draft;
-    current.current = { ...current.current, workspace: conflict.current };
-    conflict.current = null;
-    pending.current = { draft: local };
-    await flush();
-  }
-
-  /** Preserve the submitted local text when another tab wins submission admission. */
-  function conflictWith(value: unknown) {
-    const parsed = investigationWorkspaceSchema.safeParse(value);
-    if (!parsed.success) {
-      setSaveState('error');
-      return;
-    }
-    conflict.current = parsed.data;
-    pending.current = { ...pending.current, draft: pending.current.draft ?? draft };
-    clearTimeout(timer.current);
-    setSaveState('conflict');
-  }
-
-  /** Retain an unrelated composer draft after an explicit card-originated question. */
-  async function restoreDraft(value: string) {
-    if (pending.current.draft !== undefined || conflict.current || writing.current) return;
-    patch({ draft: value });
-    await flush();
-  }
+  const { flush, patch, reloadConflict, useDraft, conflictWith, restoreDraft } = useWorkspaceWrites({
+    history,
+    current,
+    pending,
+    writing,
+    conflict,
+    generation,
+    timer,
+    initialDraft,
+    initialCreation,
+    draft,
+    showDraft,
+    setSaveState,
+    setDetail,
+    install,
+  });
 
   /** Detach old reads before opening another owned archive. */
   async function open(id: string) {
     if (!history) return;
     if (!(await flush())) return;
+    const openingInitial = !current.current;
     active.current?.abort();
     const controller = new AbortController();
     active.current = controller;
@@ -191,14 +119,23 @@ export function useWorkspace(history?: HistoryTransport) {
       if (generation.current !== epoch || controller.signal.aborted) return;
       if (!(await flush()) || generation.current !== epoch || controller.signal.aborted) return;
       const acknowledged = current.current?.id === id ? current.current.workspace : result.workspace;
+      if (openingInitial) {
+        initialDraft.current = null;
+        initialCreation.current = null;
+      }
       install({
         ...result,
         workspace: acknowledged.revision > result.workspace.revision ? acknowledged : result.workspace,
       });
       await savePreferences({ last_investigation_id: id });
     } catch {
-      if (generation.current === epoch && !controller.signal.aborted)
+      if (generation.current === epoch && !controller.signal.aborted) {
+        if (openingInitial && !current.current) {
+          initialCreation.current = null;
+          if (initialDraft.current) initialDraft.current = { ...initialDraft.current, epoch: null };
+        }
         setError('Could not open saved chat. Retry the read.');
+      }
     } finally {
       if (generation.current === epoch) setLoading(false);
     }
@@ -209,7 +146,21 @@ export function useWorkspace(history?: HistoryTransport) {
     if (!history || !host) return;
     if (!(await flush())) return;
     active.current?.abort();
+    const initial = !current.current;
+    if (
+      initial &&
+      initialDraft.current &&
+      (initialCreation.current || (initialDraft.current.host && initialDraft.current.host !== host))
+    ) {
+      initialDraft.current = null;
+      showDraft('');
+      setSaveState('saved');
+    }
     const epoch = ++generation.current;
+    if (initial) {
+      initialCreation.current = { host, epoch };
+      if (initialDraft.current) initialDraft.current = { ...initialDraft.current, host, epoch };
+    }
     clearTimeout(timer.current);
     setLoading(true);
     setError('');
@@ -217,10 +168,22 @@ export function useWorkspace(history?: HistoryTransport) {
       const result = await history.createInvestigation(crypto.randomUUID(), host);
       if (generation.current !== epoch) return;
       if (!(await flush()) || generation.current !== epoch) return;
+      const retained = initial && initialDraft.current?.epoch === epoch ? initialDraft.current.value : undefined;
+      if (initial) {
+        initialDraft.current = null;
+        initialCreation.current = null;
+      }
       install({ ...result, turns: { items: [], next_cursor: null } });
+      if (retained !== undefined) patch({ draft: retained });
       await savePreferences({ last_investigation_id: result.id, host });
     } catch {
-      if (generation.current === epoch) setError('Could not create saved chat. Retry manually.');
+      if (generation.current === epoch) {
+        if (initial && initialCreation.current?.epoch === epoch) {
+          initialCreation.current = null;
+          if (initialDraft.current?.epoch === epoch) initialDraft.current = { ...initialDraft.current, epoch: null };
+        }
+        setError('Could not create saved chat. Retry manually.');
+      }
     } finally {
       if (generation.current === epoch) setLoading(false);
     }
@@ -273,8 +236,28 @@ export function useWorkspace(history?: HistoryTransport) {
     const controller = new AbortController();
     const epoch = ++generation.current;
     const accountEpoch = ++accountGeneration.current;
+    const changedHistory = historyOwner.current !== history;
+    if (changedHistory) {
+      historyOwner.current = history;
+      current.current = undefined;
+      principal.current = undefined;
+      pending.current = {};
+      actorPending.current = {};
+      writing.current = null;
+      actorWriting.current = null;
+      conflict.current = null;
+      initialDraft.current = null;
+      initialCreation.current = null;
+    }
     queueMicrotask(() => {
       if (!controller.signal.aborted) {
+        if (changedHistory) {
+          setLoading(false);
+          setActor(undefined);
+          setDetail(undefined);
+          showDraft('');
+          setSaveState('saved');
+        }
         setReady(!history);
         setError('');
       }
@@ -298,11 +281,11 @@ export function useWorkspace(history?: HistoryTransport) {
     return () => {
       controller.abort();
       active.current?.abort();
-      clearTimeout(timer.current);
+      clearPendingSave();
       generation.current = epoch + 1;
       accountGeneration.current = accountEpoch + 1;
     };
-  }, [history, attempt, install]);
+  }, [history, attempt, install, clearPendingSave]);
 
   return {
     ready,
