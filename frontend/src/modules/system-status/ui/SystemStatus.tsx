@@ -1,3 +1,6 @@
+import feedbackStyles from '../../../shared/ui/Feedback.module.css';
+import sharedStyles from '../../../shared/ui/Shared.module.css';
+import controlStyles from '../../../shared/ui/Controls.module.css';
 import { Activity, LoaderCircle, RefreshCw, ArrowRight } from 'lucide-react';
 import type { CheckState, DependencyCheck } from '../../../shared/contracts/contracts';
 import { utc } from '../../../shared/lib/format';
@@ -5,6 +8,9 @@ import { useLocale } from '../../../shared/i18n/locale';
 import type { MessageKey } from '../../../shared/i18n/messages';
 import { Modal } from '../../../shared/ui/ui';
 import { checkReasons, type useSystemStatus } from '../model/useSystemStatus';
+import styles from './SystemStatus.module.css';
+import checkStyles from '../../../shared/ui/CheckIndicator.module.css';
+import modalStyles from '../../../shared/ui/Modal.module.css';
 
 type Availability = ReturnType<typeof useSystemStatus>;
 const labels: Record<CheckState, MessageKey> = {
@@ -28,7 +34,7 @@ export function SystemStatusTrigger({ status, open }: { status: Availability; op
   const summary = rows.map(([name, state]) => `${t(name)}: ${t(labels[state])}`).join(' · ');
   return (
     <button
-      className="system-status-trigger"
+      className={`${styles['system-status-trigger']}`}
       id="system-status-trigger"
       title={`${t('System status')}: ${summary}`}
       aria-description={summary}
@@ -36,13 +42,20 @@ export function SystemStatusTrigger({ status, open }: { status: Availability; op
       aria-busy={status.loading}
       onClick={open}
     >
-      <span className="sr-only">{t('System status')}</span>
-      {status.loading ? <LoaderCircle size={16} className="spin" /> : <Activity size={16} />}
-      <span className={`check-dot check-${worst} system-status-compact`} aria-hidden="true" />
-      <span className="system-status-signals">
+      <span className={`sr-only ${sharedStyles['sr-only']}`}>{t('System status')}</span>
+      {status.loading ? (
+        <LoaderCircle size={16} className={`spin ${feedbackStyles['spin']}`} />
+      ) : (
+        <Activity size={16} />
+      )}
+      <span
+        className={`${checkStyles['check-dot']} ${checkStyles[`check-${worst}`]} ${styles['system-status-compact']}`}
+        aria-hidden="true"
+      />
+      <span className={`${styles['system-status-signals']}`}>
         {rows.map(([name, state]) => (
           <span key={name}>
-            <span className={`check-dot check-${state}`} />
+            <span className={`${checkStyles['check-dot']} ${checkStyles[`check-${state}`]}`} />
             {t(name)}{' '}
           </span>
         ))}
@@ -94,7 +107,7 @@ export function SystemStatusPanel({
   ];
   return (
     <Modal title={t('System status')} close={close} returnFocusId="system-status-trigger">
-      <div className="system-status-scope">
+      <div className={`${styles['system-status-scope']}`}>
         <div>
           <span>{t('Host')}</span>
           <strong>{host || t('No host selected')}</strong>
@@ -112,17 +125,23 @@ export function SystemStatusPanel({
           </strong>
         </div>
       </div>
-      {demo && <p className="status-demo-note">{t('Demo statuses are simulated. No connections are checked.')}</p>}
+      {demo && (
+        <p className={`${styles['status-demo-note']}`}>
+          {t('Demo statuses are simulated. No connections are checked.')}
+        </p>
+      )}
       {data && status.api.state !== 'available' && (
-        <p className="status-stale-note">{t('Dependency results are from the previous successful check.')}</p>
+        <p className={`${styles['status-stale-note']}`}>
+          {t('Dependency results are from the previous successful check.')}
+        </p>
       )}
       <div className="system-checks" aria-busy={status.loading}>
         {rows.map((row) => (
-          <section className="system-check" aria-label={t(row.name)} key={row.name}>
-            <div className="system-check-heading">
+          <section className={`${styles['system-check']}`} aria-label={t(row.name)} key={row.name}>
+            <div className={`${styles['system-check-heading']}`}>
               <h3>{t(row.name)}</h3>
-              <span className={`check-label check-${row.state}`}>
-                <span className="check-dot" />
+              <span className={`${styles['check-label']} ${checkStyles[`check-${row.state}`]}`}>
+                <span className={checkStyles['check-dot']} />
                 {t(labels[row.state])}
               </span>
             </div>
@@ -135,27 +154,29 @@ export function SystemStatusPanel({
           </section>
         ))}
       </div>
-      <p className="status-limit">
+      <p className={`${styles['status-limit']}`}>
         {t('Tools and structured output have not been tested.')}{' '}
         {t('This check reads metadata only and never generates an answer.')}
       </p>
-      <p className="section-note">{t('Provider and model settings are managed on the server.')}</p>
-      <footer className="modal-actions status-actions">
-        <span className="status-check-feedback" role="status">
+      <p className={`section-note ${controlStyles['section-note']}`}>
+        {t('Provider and model settings are managed on the server.')}
+      </p>
+      <footer className={`${modalStyles['modal-actions']} modal-actions ${styles['status-actions']}`}>
+        <span className={`${styles['status-check-feedback']}`} role="status">
           {status.loading ? t('Checking dependencies…') : t(feedback)}
         </span>
         {status.api.state === 'unavailable' && !demo && (
-          <button className="text-button" onClick={connect}>
+          <button className={`text-button ${controlStyles['text-button']}`} onClick={connect}>
             {t('Change connection')}
             <ArrowRight size={14} />
           </button>
         )}
         <button
-          className="primary"
+          className={`primary ${controlStyles['primary']}`}
           disabled={status.loading && (status.interactive || !status.api.checkedAt)}
           onClick={status.refresh}
         >
-          <RefreshCw size={14} className={status.loading ? 'spin' : undefined} />
+          <RefreshCw size={14} className={status.loading ? `spin ${feedbackStyles['spin']}` : undefined} />
           {t('Check again')}
         </button>
       </footer>

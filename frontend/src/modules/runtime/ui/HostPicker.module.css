@@ -1,0 +1,50 @@
+.host-picker-description {
+  color: var(--muted);
+  margin-bottom: 20px;
+}
+.host-picker-list {
+  display: grid;
+  gap: 10px;
+}
+.host-picker-row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  text-align: left;
+}
+.host-picker-row[aria-pressed='true'] {
+  background: var(--raised);
+}
+.host-picker-row:hover {
+  border-color: var(--control);
+}
+.host-picker-row strong,
+.host-picker-row code {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.host-picker-row strong {
+  font-size: 14px;
+  font-weight: 500;
+}
+.host-picker-row code {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 4px;
+}
+.host-current {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.host-picker-connect {
+  margin-top: 20px;
+}

@@ -11,6 +11,7 @@ Dates record merges into `master`. Version links show the corresponding changes.
 - Organize the frontend by product capability, shared contracts, transport adapters, and application assembly while
   retaining investigation, session, and action behavior.
 - Measure frontend coverage for all production TypeScript files and check module dependency boundaries.
+- Keep frontend presentation styles with their owning controls and product modules.
 
 ### Fixed
 

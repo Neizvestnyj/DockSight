@@ -1,0 +1,51 @@
+.action-operation {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0;
+}
+.action-operation > span:first-child {
+  font-size: 18px;
+  font-weight: 500;
+}
+.confirmation-facts {
+  background: var(--raised);
+  padding: 10px 14px;
+  border-radius: var(--radius-card);
+  margin-top: 20px;
+}
+.confirmation-facts > div {
+  padding: 7px 0;
+}
+.confirmation-facts dt {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 3px;
+}
+.confirmation-facts dd {
+  overflow-wrap: anywhere;
+}
+.confirmation-facts code {
+  font-size: 12px;
+}
+.operation-message {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+@media (max-width: 560px) {
+  .action-operation {
+    gap: 12px;
+  }
+  .confirmation-facts code {
+    font-size: 12px;
+  }
+}
+.demo-notice {
+  font-size: 12px;
+  color: var(--muted);
+  background: var(--raised);
+  padding: 8px 10px;
+  border-radius: var(--radius-control);
+}

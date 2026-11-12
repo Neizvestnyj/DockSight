@@ -1,0 +1,16 @@
+.positive {
+  color: var(--positive);
+}
+.negative {
+  color: var(--negative);
+}
+.warning {
+  color: var(--warning);
+}
+.neutral {
+  color: var(--muted);
+}
+.spin,
+.refreshing svg {
+  animation: var(--spin-animation);
+}

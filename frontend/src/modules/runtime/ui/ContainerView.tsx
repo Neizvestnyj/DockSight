@@ -1,3 +1,5 @@
+import feedbackStyles from '../../../shared/ui/Feedback.module.css';
+import controlStyles from '../../../shared/ui/Controls.module.css';
 import type { ReactNode } from 'react';
 import { ArrowLeft, ArrowRight, Box, Cpu, LockKeyhole, RefreshCw, Terminal } from 'lucide-react';
 import type { Container, Transport } from '../../../shared/contracts/contracts';
@@ -7,6 +9,9 @@ import { useLocale } from '../../../shared/i18n/locale';
 import { EnvironmentContent, LogContent } from './RuntimeContent';
 import { HealthFact, Status } from '../../../shared/ui/ui';
 import { useContainerRead, type RuntimeRead } from '../model/useContainerRead';
+import widgetStyles from '../../../shared/ui/Widget.module.css';
+import factStyles from '../../../shared/ui/FactStrip.module.css';
+import styles from './ContainerView.module.css';
 
 interface Props {
   client: Transport;
@@ -41,14 +46,14 @@ export function ContainerView({
   const state = snapshot.data;
   const measure = metrics.data;
   return (
-    <section className="container-view" aria-label={t('Container facts')}>
-      <div className="container-view-nav">
-        <button className="text-button" onClick={back}>
+    <section className={`${styles['container-view']}`} aria-label={t('Container facts')}>
+      <div className={`${styles['container-view-nav']}`}>
+        <button className={`text-button ${controlStyles['text-button']}`} onClick={back}>
           <ArrowLeft size={14} />
           {t('Back to investigation')}
         </button>
       </div>
-      <div className="container-view-heading">
+      <div className={`${styles['container-view-heading']}`}>
         <div>
           <h2 id="container-title" tabIndex={-1}>
             {state?.name ?? container.name}
@@ -59,9 +64,9 @@ export function ContainerView({
             <code>{container.id}</code>
           </p>
         </div>
-        <div className="container-view-actions">
+        <div className={`${styles['container-view-actions']}`}>
           <button
-            className={`secondary${fetching ? ' refreshing' : ''}`}
+            className={`secondary ${controlStyles['secondary']}${fetching ? ` refreshing ${feedbackStyles['refreshing']}` : ''}`}
             onClick={refresh}
             disabled={loading}
             aria-busy={fetching}
@@ -70,7 +75,7 @@ export function ContainerView({
             {t('Refresh data')}
           </button>
           <button
-            className="primary"
+            className={`primary ${controlStyles['primary']}`}
             disabled={running || blocked || !state || snapshot.loading || Boolean(snapshot.error)}
             onClick={() => state && diagnose(state)}
           >
@@ -79,7 +84,7 @@ export function ContainerView({
           </button>
         </div>
       </div>
-      <p className="runtime-feedback" role="status" aria-live="polite">
+      <p className={`${styles['runtime-feedback']}`} role="status" aria-live="polite">
         {t(
           loading
             ? 'Refreshing container data…'
@@ -89,13 +94,13 @@ export function ContainerView({
         )}
       </p>
       {snapshot.missing && (
-        <div className="runtime-error" role="alert">
+        <div className={`${styles['runtime-error']}`} role="alert">
           <p>{t('This container no longer exists on the selected host.')}</p>
           {state && <p>{t('Showing the last successful observation.')}</p>}
         </div>
       )}
-      <div className="container-view-grid">
-        <div className="container-view-column">
+      <div className={`${styles['container-view-grid']}`}>
+        <div className={`${styles['container-view-column']}`}>
           <ReadPanel
             title="Container status"
             source="Docker inspect"
@@ -108,15 +113,21 @@ export function ContainerView({
           >
             {state && (
               <>
-                <div className="runtime-state">
+                <div className={`${styles['runtime-state']} runtime-state`}>
                   <Status state={state.state} />
                   <code>{state.image}</code>
                 </div>
                 <HealthFact state={state.state} health={state.health} />
-                <dl className="fact-strip runtime-lifecycle">
+                <dl className={`${factStyles['fact-strip']} fact-strip ${styles['runtime-lifecycle']}`}>
                   <div>
                     <dt>{t('Exit code')}</dt>
-                    <dd className={state.state === 'exited' && state.exit_code !== 0 ? 'negative' : undefined}>
+                    <dd
+                      className={
+                        state.state === 'exited' && state.exit_code !== 0
+                          ? `negative ${feedbackStyles['negative']}`
+                          : undefined
+                      }
+                    >
                       {state.exit_code}
                     </dd>
                   </div>
@@ -129,7 +140,7 @@ export function ContainerView({
                     <dd>{state.restart_count}</dd>
                   </div>
                 </dl>
-                <dl className="runtime-metadata">
+                <dl className={`${styles['runtime-metadata']}`}>
                   <div>
                     <dt>{t('Started')}</dt>
                     <dd>
@@ -160,7 +171,7 @@ export function ContainerView({
             {logs.data && <LogContent logs={logs.data} />}
           </ReadPanel>
         </div>
-        <div className="container-view-column">
+        <div className={`${styles['container-view-column']}`}>
           <ReadPanel
             title="Current metrics"
             source="Docker stats"
@@ -172,7 +183,7 @@ export function ContainerView({
           >
             {measure && (
               <>
-                <dl className="runtime-metrics">
+                <dl className={`${styles['runtime-metrics']}`}>
                   <div>
                     <dt>{t('CPU')}</dt>
                     <dd className={measure.cpu_percent === null ? 'unavailable' : ''}>
@@ -194,7 +205,9 @@ export function ContainerView({
                     </dd>
                   </div>
                 </dl>
-                <p className="section-note">{t('One measurement · no metric history')}</p>
+                <p className={`section-note ${controlStyles['section-note']}`}>
+                  {t('One measurement · no metric history')}
+                </p>
               </>
             )}
           </ReadPanel>
@@ -240,8 +253,12 @@ function ReadPanel({
 }) {
   const { t } = useLocale();
   return (
-    <section className="widget runtime-panel" aria-label={t(title)} aria-busy={read.loading}>
-      <header className="widget-head">
+    <section
+      className={`${widgetStyles.widget} widget ${styles['runtime-panel']}`}
+      aria-label={t(title)}
+      aria-busy={read.loading}
+    >
+      <header className={`${widgetStyles['widget-head']} widget-head`}>
         <h3>
           {icon}
           {t(title)}
@@ -249,10 +266,10 @@ function ReadPanel({
         <span>{t(source)}</span>
       </header>
       {read.error && (
-        <div className="runtime-error">
+        <div className={`${styles['runtime-error']}`}>
           <p role="alert">{t(error)}</p>
           {read.data !== undefined && <p>{t('Showing the last successful observation.')}</p>}
-          <button className="text-button" onClick={refresh} disabled={busy}>
+          <button className={`text-button ${controlStyles['text-button']}`} onClick={refresh} disabled={busy}>
             {t('Retry data')}
             <ArrowRight size={13} />
           </button>
@@ -265,14 +282,14 @@ function ReadPanel({
       {read.data !== undefined ? (
         children
       ) : read.loading ? (
-        <div className="runtime-loading" aria-hidden="true">
+        <div className={`${styles['runtime-loading']}`} aria-hidden="true">
           <span />
           <span />
           <span />
         </div>
       ) : null}
       {(observedAt || read.receivedAt) && (
-        <footer className="widget-foot">
+        <footer className={`${widgetStyles['widget-foot']} widget-foot`}>
           <span>{t(observedAt ? 'Observed' : 'Received')}</span>
           <time dateTime={observedAt ?? read.receivedAt}>{timestamp((observedAt ?? read.receivedAt)!)}</time>
         </footer>

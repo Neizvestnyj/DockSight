@@ -1,8 +1,10 @@
+import controlStyles from '../../../shared/ui/Controls.module.css';
 import { ArrowRight, Layers } from 'lucide-react';
 import { targetKey } from '../../../shared/contracts/contracts';
 import type { DiagnosticTarget, TargetSelection } from '../../../shared/contracts/contracts';
 import { useLocale } from '../../../shared/i18n/locale';
 import { targetKindLabel } from '../../../shared/i18n/messages';
+import styles from './GroupClarification.module.css';
 
 /** Distinguish resource namespaces before continuing the original question with an exact observed target. */
 export function GroupClarification({
@@ -19,8 +21,11 @@ export function GroupClarification({
   const { t } = useLocale();
   const mixed = selection.candidates.some((target) => target.kind === 'container');
   return (
-    <section className="group-clarification" aria-label={t(mixed ? 'Resource clarification' : 'Group clarification')}>
-      <div className="clarification-heading">
+    <section
+      className={styles['group-clarification']}
+      aria-label={t(mixed ? 'Resource clarification' : 'Group clarification')}
+    >
+      <div className={styles['clarification-heading']}>
         <Layers size={18} aria-hidden="true" />
         <h2>{t(mixed ? 'Which resource do you mean?' : 'Choose a group to continue')}</h2>
         <span>{host}</span>
@@ -32,12 +37,12 @@ export function GroupClarification({
             : 'Select the observed group you meant. The original question will continue with that exact scope.',
         )}
       </p>
-      <div className="group-choices">
+      <div className={styles['group-choices']}>
         {selection.candidates.map((target) => {
           const kind = targetKindLabel(target.kind, t);
           return (
             <button
-              className="secondary"
+              className={`secondary ${controlStyles['secondary']}`}
               key={targetKey(target)}
               type="button"
               disabled={disabled}

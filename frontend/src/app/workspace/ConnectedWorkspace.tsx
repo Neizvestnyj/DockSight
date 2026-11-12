@@ -1,3 +1,4 @@
+import controlStyles from '../../shared/ui/Controls.module.css';
 import { useLocale } from '../../shared/i18n/locale';
 import { useEffect, useRef, useState } from 'react';
 import type { Host, Transport } from '../../shared/contracts/contracts';
@@ -13,6 +14,7 @@ import { useSavedInvestigations } from '../../modules/investigations';
 import { connectApi } from '../bootstrap/connectApi';
 import { WorkspacePage } from './WorkspacePage';
 import { hostPickerTriggerId, type ConnectionState } from './types';
+import sessionStyles from '../bootstrap/SessionEntry.module.css';
 
 /** Keep the active connection stable while presentation language changes. */
 export function ConnectedWorkspace({
@@ -121,16 +123,16 @@ export function ConnectedWorkspace({
 
   if (!connection.demo && !saved.ready)
     return (
-      <main className="session-entry">
+      <main className={sessionStyles['session-entry']}>
         <Logo />
         <h1>{t('Restoring your workspace…')}</h1>
         {saved.error && (
           <>
             <p role="alert">{t('Could not restore saved workspace. Retry the read.')}</p>
-            <button className="secondary" onClick={saved.retry}>
+            <button className={`secondary ${controlStyles['secondary']}`} onClick={saved.retry}>
               {t('Retry')}
             </button>
-            <button className="text-button" onClick={() => void logout()}>
+            <button className={`text-button ${controlStyles['text-button']}`} onClick={() => void logout()}>
               {t('Sign out')}
             </button>
           </>

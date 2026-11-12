@@ -1,0 +1,104 @@
+.widget {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  overflow: hidden;
+}
+.widget:global(.embedded) .widget-head {
+  flex-wrap: wrap;
+}
+.widget:global(.embedded) .widget-head h4 {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.widget:global(.embedded) .widget-head h4 > svg {
+  color: var(--muted);
+}
+.widget:global(.embedded) :global(.source-link) {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.widget:global(.embedded) :global(.log-toggle) {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+@media (max-width: 560px) {
+  .widget:global(.embedded):global(.widget-log_anomalies) .widget-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .widget:global(.embedded):global(.widget-log_anomalies) :global(.source-link) {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .widget:global(.embedded) :global(.log-toggle) {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-self: start;
+    margin-left: 0;
+    min-height: 44px;
+  }
+}
+.widget:global(.linked) {
+  border-color: var(--border);
+}
+.widget:global(.linked) .widget-head {
+  background: var(--accent-soft);
+}
+.widget:global(.linked) :global(.source-link) {
+  color: var(--accent);
+}
+.widget-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 13px 16px;
+}
+.widget-head h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.widget-head h3 > svg {
+  color: var(--muted);
+}
+.widget-foot {
+  border-top: 1px solid var(--rule);
+  padding: 10px 16px;
+  color: var(--muted);
+  font-size: 11px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+:global(.observation) .widget-head {
+  padding: 12px 14px 8px;
+}
+@media (max-width: 560px) {
+  .widget-head {
+    padding: 12px;
+  }
+  .widget-head h3 {
+    font-size: 14px;
+    gap: 7px;
+  }
+  .widget-foot {
+    padding: 10px 12px;
+    font-size: 12px;
+  }
+  .widget-foot :global(.small) {
+    min-height: 44px;
+    font-size: 12px;
+  }
+}

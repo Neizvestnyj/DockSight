@@ -1,6 +1,9 @@
+import sharedStyles from '../../../shared/ui/Shared.module.css';
+import controlStyles from '../../../shared/ui/Controls.module.css';
 import { ArrowRight, MessageSquare, Square } from 'lucide-react';
 import type { DiagnosticTarget, GroupTarget } from '../../../shared/contracts/contracts';
 import { useLocale } from '../../../shared/i18n/locale';
+import styles from './QuestionComposer.module.css';
 
 /** Render the existing question controls while the investigation owns its draft and lifecycle. */
 export function QuestionComposer({
@@ -29,20 +32,20 @@ export function QuestionComposer({
   const { t, locale } = useLocale();
   return (
     <form
-      className="composer"
+      className={styles['composer']}
       aria-labelledby="composer-title"
       onSubmit={(event) => {
         event.preventDefault();
         submit(draft, group ?? target);
       }}
     >
-      <div className="composer-heading">
+      <div className={styles['composer-heading']}>
         <MessageSquare size={18} aria-hidden="true" />
         <h2 id="composer-title">{t('Ask DockSight')}</h2>
         <p>{t(running ? 'Following the evidence' : hasTurn ? 'Continue the investigation' : 'Read-only diagnosis')}</p>
       </div>
-      <div className="composer-entry">
-        <label htmlFor="query" className="sr-only">
+      <div className={styles['composer-entry']}>
+        <label htmlFor="query" className={`sr-only ${sharedStyles['sr-only']}`}>
           {t(hasTurn ? 'Continue the investigation' : 'Ask DockSight')}
         </label>
         <textarea
@@ -67,31 +70,35 @@ export function QuestionComposer({
             }
           }}
         />
-        <div className="composer-foot">
+        <div className={`${styles['composer-foot']} composer-foot`}>
           <span id="composer-scope">
-            <span className="scope-dot" />
+            <span className={`scope-dot ${sharedStyles['scope-dot']}`} />
             {host || t('Select a host')}
             {group && (
-              <span className="composer-group">
+              <span className={styles['composer-group']}>
                 {' '}
                 · {group.kind === 'compose' ? 'Compose' : 'Swarm'} / {group.name}
               </span>
             )}
-            <span className="composer-hint">{t(' · Read-only diagnosis')}</span>
+            <span className={styles['composer-hint']}>{t(' · Read-only diagnosis')}</span>
           </span>
-          <div className="composer-actions">
-            <span className="query-limit">
+          <div className={styles['composer-actions']}>
+            <span className={`${styles['query-limit']} query-limit`}>
               {draft.length
                 ? `${draft.length.toLocaleString(locale)} / ${Number(4000).toLocaleString(locale)}`
                 : t('Ctrl / ⌘ + Enter to send')}
             </span>
             {running ? (
-              <button type="button" className="primary" onClick={stop}>
+              <button type="button" className={`primary ${controlStyles['primary']}`} onClick={stop}>
                 <Square size={12} />
                 {t('Stop diagnosis')}
               </button>
             ) : (
-              <button className="primary" type="submit" disabled={blocked || !draft.trim() || !host}>
+              <button
+                className={`primary ${controlStyles['primary']}`}
+                type="submit"
+                disabled={blocked || !draft.trim() || !host}
+              >
                 {t('Investigate')}
                 <ArrowRight size={15} />
               </button>

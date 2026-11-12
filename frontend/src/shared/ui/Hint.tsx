@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { CircleHelp } from 'lucide-react';
 import { useFloatingPanel } from './useFloatingPanel';
+import styles from './Hint.module.css';
 
 /** Make optional guidance available to pointer, keyboard, and touch users without permanent page copy. */
 export function Hint({ label, children }: { label: string; children: string }) {
@@ -45,11 +46,11 @@ export function Hint({ label, children }: { label: string; children: string }) {
   }
 
   return (
-    <span ref={root} className="hint" onMouseEnter={show} onMouseLeave={hideSoon}>
+    <span ref={root} className={styles.hint} onMouseEnter={show} onMouseLeave={hideSoon}>
       <button
         ref={trigger}
         type="button"
-        className="hint-trigger"
+        className={styles['hint-trigger']}
         aria-label={label}
         aria-describedby={open ? id : undefined}
         onFocus={show}
@@ -59,7 +60,7 @@ export function Hint({ label, children }: { label: string; children: string }) {
         <CircleHelp size={14} aria-hidden="true" />
       </button>
       {open && (
-        <span ref={panel} id={id} role="tooltip" className="hint-popup" popover="manual">
+        <span ref={panel} id={id} role="tooltip" className={styles['hint-popup']} popover="manual">
           {children}
         </span>
       )}

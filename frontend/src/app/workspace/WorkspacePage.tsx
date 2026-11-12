@@ -1,3 +1,5 @@
+import sharedStyles from '../../shared/ui/Shared.module.css';
+import controlStyles from '../../shared/ui/Controls.module.css';
 import { LanguageSwitch } from '../providers/LocaleProvider';
 import { useLocale } from '../../shared/i18n/locale';
 import { useEffect, useState } from 'react';
@@ -26,6 +28,7 @@ import { useWorkspace } from '../../modules/investigations';
 import { useSavedInvestigations } from '../../modules/investigations';
 import { SavedInvestigations } from '../../modules/investigations';
 import { hostPickerTriggerId, type ConnectionState } from './types';
+import styles from './WorkspacePage.module.css';
 
 interface WorkspaceProps {
   saved: ReturnType<typeof useWorkspace>;
@@ -324,16 +327,16 @@ export function WorkspacePage({
   };
 
   return (
-    <div className="app-shell">
-      <a className="skip-link" href="#main">
+    <div className={`${styles['app-shell']}`}>
+      <a className={`${styles['skip-link']}`} href="#main">
         {t('Skip to investigation')}
       </a>
-      <aside className="sidebar" aria-label={t('Host and container inventory')}>
+      <aside className={`${styles.sidebar} sidebar`} aria-label={t('Host and container inventory')}>
         <Sidebar {...sidebarProps} />
       </aside>
-      <header className="topbar">
+      <header className={`${styles['topbar']}`}>
         <button
-          className="icon-button mobile-menu"
+          className={`icon-button ${controlStyles['icon-button']} ${styles['mobile-menu']}`}
           aria-label={t('Open host and containers')}
           onClick={() => setMenu(true)}
         >
@@ -341,15 +344,15 @@ export function WorkspacePage({
         </button>
         <button
           type="button"
-          className="mobile-brand brand-link"
+          className={`${styles['mobile-brand']} brand-link ${sharedStyles['brand-link']}`}
           aria-label={t('DockSight: return to diagnosis')}
           onClick={() => openInvestigation()}
         >
           <Logo />
         </button>
-        <div className="breadcrumb">
+        <div className={`${styles.breadcrumb} breadcrumb`}>
           <button
-            className="workspace-trigger"
+            className={`${styles['workspace-trigger']}`}
             id={hostPickerTriggerId}
             title={t('Workspace: choose host')}
             aria-haspopup="dialog"
@@ -361,8 +364,10 @@ export function WorkspacePage({
             <ChevronDown size={13} />
           </button>
         </div>
-        <div className="connection-state">
-          <span className={`scope-dot${demo ? ' demo-dot' : ''}`} />
+        <div className={`${styles['connection-state']}`}>
+          <span
+            className={`scope-dot ${sharedStyles['scope-dot']}${demo ? ` demo-dot ${sharedStyles['demo-dot']}` : ''}`}
+          />
           {t(demo ? 'Demo' : 'API mode')}
           <SystemStatusTrigger status={availability} open={openStatus} />
           <ModelTrigger
@@ -371,19 +376,19 @@ export function WorkspacePage({
             running={investigation.running}
             open={() => setModelPickerOpen(true)}
           />
-          <button className="text-button" onClick={connect}>
+          <button className={`text-button ${controlStyles['text-button']}`} onClick={connect}>
             {t(demo ? 'Connect API' : 'Change connection')}
             <ArrowRight size={13} />
           </button>
           {!demo && (
-            <button className="text-button" onClick={logout}>
+            <button className={`text-button ${controlStyles['text-button']}`} onClick={logout}>
               {t('Sign out')}
             </button>
           )}
         </div>
       </header>
-      <main id="main" className="sheet">
-        <div className="page-heading">
+      <main id="main" className={`${styles['sheet']}`}>
+        <div className={`${styles['page-heading']}`}>
           <div>
             <h1 id="workspace-title" tabIndex={-1}>
               {t(viewingContainer ? 'Container overview' : 'Container investigation')}
@@ -401,10 +406,14 @@ export function WorkspacePage({
                   : t('Docker diagnostics · host-scoped sessions')}
             </p>
           </div>
-          <div className="heading-actions">
+          <div className={`${styles['heading-actions']}`}>
             <LanguageSwitch />
             {!viewingContainer && !composerVisible && (
-              <button className="secondary" aria-label={t('Ask DockSight')} onClick={() => openInvestigation(true)}>
+              <button
+                className={`secondary ${controlStyles['secondary']}`}
+                aria-label={t('Ask DockSight')}
+                onClick={() => openInvestigation(true)}
+              >
                 <MessageSquarePlus size={15} />
                 {t('Ask DockSight')}
               </button>
@@ -412,15 +421,15 @@ export function WorkspacePage({
           </div>
         </div>
         {!demo && (!host || !configured) && (
-          <div className="dependency-notice" role="status">
+          <div className={`${styles['dependency-notice']}`} role="status">
             <p>{t('Choose a configured host to continue. Saved evidence remains readable.')}</p>
-            <button className="secondary" onClick={openHostPicker}>
+            <button className={`secondary ${controlStyles['secondary']}`} onClick={openHostPicker}>
               {t('Choose a host')}
             </button>
           </div>
         )}
         {!demo && !saved.detail && configured && (
-          <button className="secondary" onClick={() => void saved.create(host)}>
+          <button className={`secondary ${controlStyles['secondary']}`} onClick={() => void saved.create(host)}>
             {t('New investigation')}
           </button>
         )}
@@ -431,7 +440,7 @@ export function WorkspacePage({
           </p>
         )}
         {!demo && saved.detail && (
-          <div className="workspace-save" role="status">
+          <div className={`${styles['workspace-save']}`} role="status">
             <span>
               {t(
                 saved.saveState === 'saved'
@@ -445,16 +454,16 @@ export function WorkspacePage({
             </span>
             {saved.saveState === 'conflict' && (
               <>
-                <button className="text-button" onClick={saved.reloadConflict}>
+                <button className={`text-button ${controlStyles['text-button']}`} onClick={saved.reloadConflict}>
                   {t('Reload saved draft')}
                 </button>
-                <button className="secondary" onClick={() => void saved.useDraft()}>
+                <button className={`secondary ${controlStyles['secondary']}`} onClick={() => void saved.useDraft()}>
                   {t('Use this draft')}
                 </button>
               </>
             )}
             {saved.saveState === 'error' && (
-              <button className="text-button" onClick={() => void saved.flush()}>
+              <button className={`text-button ${controlStyles['text-button']}`} onClick={() => void saved.flush()}>
                 {t('Retry save')}
               </button>
             )}
@@ -462,12 +471,12 @@ export function WorkspacePage({
         )}
         {!viewingContainer &&
           (scopeTarget?.kind === 'container' && !demo ? (
-            <div className="dependency-notice">
+            <div className={`${styles['dependency-notice']}`}>
               <p>
                 {t('Saved container scope')}: {scopeTarget.name} · <code>{scopeTarget.id}</code>
               </p>
               <button
-                className="secondary"
+                className={`secondary ${controlStyles['secondary']}`}
                 onClick={() => {
                   setScopeTarget(null);
                   setTargetAvailable(true);
@@ -503,26 +512,26 @@ export function WorkspacePage({
             />
           ))}
         {!demo && (!modelAvailable || !targetAvailable || !groupAvailable) && (
-          <p className="inline-warning" role="status">
+          <p className={`inline-warning ${controlStyles['inline-warning']}`} role="status">
             {t('A saved model or target is unavailable. Choose a current model or scope to continue.')}
           </p>
         )}
         {selectionError && (
-          <p className="inline-warning" role="status">
+          <p className={`inline-warning ${controlStyles['inline-warning']}`} role="status">
             {t('The saved container selection is unavailable. Select a current container by its exact ID.')}
           </p>
         )}
         {availability.blockedReason && (
-          <div className="dependency-notice" role="status">
+          <div className={`${styles['dependency-notice']}`} role="status">
             <p>{t(availability.blockedReason)}</p>
-            <button className="text-button" onClick={openStatus}>
+            <button className={`text-button ${controlStyles['text-button']}`} onClick={openStatus}>
               {t('View system status')}
               <ArrowRight size={14} />
             </button>
           </div>
         )}
         {demo && (
-          <div className={`demo-bar${viewingContainer ? ' demo-bar-compact' : ''}`}>
+          <div className={`${styles['demo-bar']} demo-bar${viewingContainer ? ` ${styles['demo-bar-compact']}` : ''}`}>
             <div>
               <FlaskConical size={15} />
               <strong>{t('Demo')}</strong>
@@ -547,9 +556,9 @@ export function WorkspacePage({
           <DemoControls client={demoClient} refresh={refresh} running={investigation.running} />
         )}
         {hostError && (
-          <div className="turn-error">
+          <div className={`turn-error ${sharedStyles['turn-error']}`}>
             <p role="alert">{hostError}</p>
-            <button className="secondary" onClick={retryHosts}>
+            <button className={`secondary ${controlStyles['secondary']}`} onClick={retryHosts}>
               {t('Retry connection')}
             </button>
           </div>
@@ -611,7 +620,7 @@ export function WorkspacePage({
       )}
       {menu && (
         <Modal title={t('Host & containers')} close={() => setMenu(false)}>
-          <div className="mobile-sidebar">
+          <div className={`${styles['mobile-sidebar']} mobile-sidebar`}>
             <Sidebar {...sidebarProps} />
           </div>
         </Modal>

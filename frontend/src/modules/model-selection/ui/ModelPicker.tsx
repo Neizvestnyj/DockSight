@@ -1,3 +1,6 @@
+import feedbackStyles from '../../../shared/ui/Feedback.module.css';
+import sharedStyles from '../../../shared/ui/Shared.module.css';
+import controlStyles from '../../../shared/ui/Controls.module.css';
 import { useEffect, useState } from 'react';
 import { Check, ChevronDown, LoaderCircle, RefreshCw, Search } from 'lucide-react';
 import { useLocale } from '../../../shared/i18n/locale';
@@ -6,6 +9,8 @@ import { providerNames, type ModelSelection, type ProviderId } from '../../../sh
 import type { CheckState } from '../../../shared/contracts/contracts';
 import type { useModelCatalog } from '../model/useModelCatalog';
 import { Select } from '../../../shared/ui/Select';
+import styles from './ModelPicker.module.css';
+import checkStyles from '../../../shared/ui/CheckIndicator.module.css';
 
 type Catalogs = ReturnType<typeof useModelCatalog>;
 
@@ -25,18 +30,18 @@ export function ModelTrigger({
   return (
     <button
       id="model-picker-trigger"
-      className="model-picker-trigger"
+      className={`${styles['model-picker-trigger']}`}
       aria-label={`${t('Choose model')}${selection ? `: ${providerNames[selection.provider]} · ${selection.model}` : ''}`}
       aria-haspopup="dialog"
       disabled={running}
       title={running ? t('Model selection is available after this answer finishes.') : t('Choose model')}
       onClick={open}
     >
-      <span className={`check-dot check-${state}`} aria-hidden="true" />
+      <span className={`${checkStyles['check-dot']} ${checkStyles[`check-${state}`]}`} aria-hidden="true" />
       {selection ? (
         <>
-          <span className="model-provider-name">{providerNames[selection.provider]} · </span>
-          <span className="model-trigger-name">{selection.model}</span>
+          <span className={`${styles['model-provider-name']}`}>{providerNames[selection.provider]} · </span>
+          <span className={`${styles['model-trigger-name']}`}>{selection.model}</span>
         </>
       ) : (
         <span>{t('Model')}</span>
@@ -78,23 +83,28 @@ export function ModelPicker({
   }, [provider, configured, loadCatalog]);
 
   return (
-    <Modal title={t('Choose model')} close={close} returnFocusId="model-picker-trigger" className="model-picker">
-      {demo && <p className="model-picker-demo">{t('Demo models · no provider requests')}</p>}
+    <Modal
+      title={t('Choose model')}
+      close={close}
+      returnFocusId="model-picker-trigger"
+      className={`${styles['model-picker']}`}
+    >
+      {demo && <p className={`${styles['model-picker-demo']}`}>{t('Demo models · no provider requests')}</p>}
       {providerError ? (
-        <div className="model-catalog-error" role="status">
+        <div className={`${styles['model-catalog-error']}`} role="status">
           <p>{t('Could not load providers. Your current model is unchanged.')}</p>
-          <button className="text-button" onClick={() => void loadProviders()}>
+          <button className={`text-button ${controlStyles['text-button']}`} onClick={() => void loadProviders()}>
             {t('Retry')}
           </button>
         </div>
       ) : !providers ? (
-        <p className="model-catalog-message" role="status">
-          <LoaderCircle size={15} className="spin" />
+        <p className={`${styles['model-catalog-message']}`} role="status">
+          <LoaderCircle size={15} className={`spin ${feedbackStyles['spin']}`} />
           {t('Loading providers…')}
         </p>
       ) : (
         <>
-          <label className="field model-provider-field">
+          <label className={`field ${controlStyles['field']} ${styles['model-provider-field']}`}>
             {t('Provider')}
             <Select<ProviderId>
               label={t('Provider')}
@@ -110,10 +120,10 @@ export function ModelPicker({
               }))}
             />
           </label>
-          <div className="model-search-row">
-            <label className="model-search">
+          <div className={`${styles['model-search-row']}`}>
+            <label className={`${styles['model-search']}`}>
               <Search size={15} aria-hidden="true" />
-              <span className="sr-only">{t('Search models')}</span>
+              <span className={`sr-only ${sharedStyles['sr-only']}`}>{t('Search models')}</span>
               <input
                 type="search"
                 placeholder={t('Search models')}
@@ -122,29 +132,29 @@ export function ModelPicker({
               />
             </label>
             <button
-              className="icon-button"
+              className={`icon-button ${controlStyles['icon-button']}`}
               aria-label={t('Refresh models')}
               title={t('Refresh models')}
               disabled={read?.loading || !configured}
               onClick={() => void loadCatalog(provider, true)}
             >
-              <RefreshCw size={16} className={read?.loading ? 'spin' : undefined} />
+              <RefreshCw size={16} className={read?.loading ? `spin ${feedbackStyles['spin']}` : undefined} />
             </button>
           </div>
-          <div className="model-catalog-feedback" role="status">
+          <div className={`${styles['model-catalog-feedback']}`} role="status">
             {failed
               ? t('Could not refresh the catalog. Showing previously received or configured models.')
               : read?.loading
                 ? t(read.data?.models.length ? 'Refreshing models…' : 'Loading models…')
                 : t('Models: {count}', { count: read?.data?.models.length ?? 0 })}
           </div>
-          <div className="model-options" aria-label={t('Models')} aria-busy={read?.loading ?? false}>
+          <div className={`${styles['model-options']}`} aria-label={t('Models')} aria-busy={read?.loading ?? false}>
             {rows.map((row) => {
               const selected = selection?.provider === provider && selection.model === row.id;
               return (
                 <button
                   key={row.id}
-                  className="model-option"
+                  className={`${styles['model-option']}`}
                   aria-pressed={selected}
                   onClick={() => choose({ provider, model: row.id })}
                 >
@@ -154,12 +164,16 @@ export function ModelPicker({
               );
             })}
             {!rows.length && !read?.loading && (
-              <p className="model-catalog-message">{t(search ? 'No matching models.' : 'No models were returned.')}</p>
+              <p className={`${styles['model-catalog-message']}`}>
+                {t(search ? 'No matching models.' : 'No models were returned.')}
+              </p>
             )}
           </div>
         </>
       )}
-      <footer className="model-picker-foot">{t('Applies to the next question. History is preserved.')}</footer>
+      <footer className={`${styles['model-picker-foot']}`}>
+        {t('Applies to the next question. History is preserved.')}
+      </footer>
     </Modal>
   );
 }

@@ -1,3 +1,4 @@
+import controlStyles from '../../../shared/ui/Controls.module.css';
 import { ArrowRight, ArrowUpRight, Server } from 'lucide-react';
 import {
   targetKey,
@@ -9,6 +10,7 @@ import { utc } from '../../../shared/lib/format';
 import { useLocale } from '../../../shared/i18n/locale';
 import { targetKindLabel } from '../../../shared/i18n/messages';
 import { ContainerStatus } from '../../../shared/ui/ui';
+import styles from './HostOverview.module.css';
 
 /** Render bounded local observations and offer explicit, separate investigations of observed targets. */
 export function HostOverview({
@@ -27,19 +29,23 @@ export function HostOverview({
   const { t, locale } = useLocale();
   const source = evidence.find((row) => row.id === report.evidence_id);
   return (
-    <section className="host-overview" aria-label={t('Host overview')}>
-      <header className="host-overview-heading">
+    <section className={`${styles['host-overview']}`} aria-label={t('Host overview')}>
+      <header className={`${styles['host-overview-heading']}`}>
         <Server size={18} aria-hidden="true" />
         <div>
           <h2>{t('Host overview')}</h2>
-          <span className="section-note">{report.host}</span>
+          <span className={`section-note ${controlStyles['section-note']}`}>{report.host}</span>
         </div>
-        <button className="evidence-link" type="button" onClick={() => inspect(report.evidence_id)}>
+        <button
+          className={`evidence-link ${controlStyles['evidence-link']}`}
+          type="button"
+          onClick={() => inspect(report.evidence_id)}
+        >
           {t('Source')}
           <ArrowUpRight size={13} aria-hidden="true" />
         </button>
       </header>
-      <dl className="host-overview-totals">
+      <dl className={`${styles['host-overview-totals']}`}>
         <div>
           <dt>{t('Observed containers')}</dt>
           <dd>{report.total.toLocaleString(locale)}</dd>
@@ -50,51 +56,67 @@ export function HostOverview({
         </div>
         <div>
           <dt>{t('Needs review')}</dt>
-          <dd className={report.attention ? 'warning-text' : ''}>{report.attention.toLocaleString(locale)}</dd>
+          <dd className={report.attention ? `warning-text ${controlStyles['warning-text']}` : ''}>
+            {report.attention.toLocaleString(locale)}
+          </dd>
         </div>
       </dl>
-      <p className="host-overview-note">{t('Local Docker containers only. Remote Swarm replicas are not included.')}</p>
+      <p className={`${styles['host-overview-note']}`}>
+        {t('Local Docker containers only. Remote Swarm replicas are not included.')}
+      </p>
       {report.truncated && (
-        <p className="host-overview-note warning-text">
+        <p className={`${styles['host-overview-note']} warning-text ${controlStyles['warning-text']}`}>
           {t('Observation limits reached. More containers or group choices may exist.')}
         </p>
       )}
       {report.discovery_code && (
-        <p className="host-overview-note warning-text">
+        <p className={`${styles['host-overview-note']} warning-text ${controlStyles['warning-text']}`}>
           {t('Group discovery is incomplete. Local container observations are retained.')}{' '}
           <code>{report.discovery_code}</code>
         </p>
       )}
-      <div className="host-members">
+      <div className={`${styles['host-members']}`}>
         {report.members.map((row) => {
           const log = report.logs.find((item) => item.container_id === row.container_id);
           return (
-            <article className="host-member" key={row.container_id} aria-label={row.name}>
-              <div className="host-member-name">
+            <article className={`${styles['host-member']}`} key={row.container_id} aria-label={row.name}>
+              <div className={`${styles['host-member-name']}`}>
                 <h3 title={row.name}>{row.name}</h3>
-                <span className="mono section-note" title={row.container_id}>
+                <span className={`mono section-note ${controlStyles['section-note']}`} title={row.container_id}>
                   {row.container_id.slice(0, 12)}
                 </span>
-                <span className="section-note">
+                <span className={`section-note ${controlStyles['section-note']}`}>
                   {row.group ? `${targetKindLabel(row.group.kind, t)} / ${row.group.name}` : t('No observed group')}
                 </span>
               </div>
-              <div className="host-member-state">
+              <div className={`${styles['host-member-state']}`}>
                 <ContainerStatus state={row.state} health={row.health} />
-                <span className="section-note">
+                <span className={`section-note ${controlStyles['section-note']}`}>
                   {t('Exit code')} {row.exit_code} · {t('Restarts')} {row.restart_count.toLocaleString(locale)}
                   {row.oom_killed ? ` · ${t('OOM killed')}` : ''}
                 </span>
-                {row.attention && <span className="section-note warning-text">{t('Needs review')}</span>}
+                {row.attention && (
+                  <span
+                    className={`section-note ${controlStyles['section-note']} warning-text ${controlStyles['warning-text']}`}
+                  >
+                    {t('Needs review')}
+                  </span>
+                )}
               </div>
-              <div className="host-member-coverage">
+              <div className={`${styles['host-member-coverage']}`}>
                 {log?.state === 'collected' && log.evidence_id ? (
-                  <button type="button" className="evidence-link" onClick={() => inspect(log.evidence_id!)}>
+                  <button
+                    type="button"
+                    className={`evidence-link ${controlStyles['evidence-link']}`}
+                    onClick={() => inspect(log.evidence_id!)}
+                  >
                     {t('Logs')}
                     <ArrowUpRight size={13} aria-hidden="true" />
                   </button>
                 ) : (
-                  <span className={`section-note${row.attention ? ' warning-text' : ''}`}>
+                  <span
+                    className={`section-note ${controlStyles['section-note']}${row.attention ? ` warning-text ${controlStyles['warning-text']}` : ''}`}
+                  >
                     {t(log?.state === 'failed' ? 'Log read failed' : 'Logs not collected')}
                     {log?.code && (
                       <small>
@@ -103,12 +125,12 @@ export function HostOverview({
                     )}
                   </span>
                 )}
-                <time className="section-note" dateTime={row.observed_at}>
+                <time className={`section-note ${controlStyles['section-note']}`} dateTime={row.observed_at}>
                   {utc(row.observed_at)}
                 </time>
                 <button
                   type="button"
-                  className="text-button"
+                  className={`text-button ${controlStyles['text-button']}`}
                   disabled={disabled}
                   onClick={() => narrow({ kind: 'container', id: row.container_id, name: row.name })}
                 >
@@ -120,20 +142,22 @@ export function HostOverview({
           );
         })}
         {!report.members.length && (
-          <p className="empty-note">
+          <p className={`empty-note ${controlStyles['empty-note']}`}>
             {t(report.total ? 'Container preview omitted by collection limits.' : 'No containers in this observation.')}
           </p>
         )}
       </div>
       {report.targets.length > 0 && (
-        <div className="host-overview-targets">
+        <div className={`${styles['host-overview-targets']}`}>
           <h3>{t('Narrow to an observed group')}</h3>
-          <p className="section-note">{t('Starts a new investigation. Your draft is preserved.')}</p>
+          <p className={`section-note ${controlStyles['section-note']}`}>
+            {t('Starts a new investigation. Your draft is preserved.')}
+          </p>
           <div>
             {report.targets.map((target) => (
               <button
                 type="button"
-                className="secondary small"
+                className={`secondary ${controlStyles['secondary']} small ${controlStyles['small']}`}
                 disabled={disabled}
                 key={targetKey(target)}
                 onClick={() => narrow(target)}
@@ -147,7 +171,7 @@ export function HostOverview({
           </div>
         </div>
       )}
-      <footer className="host-overview-note">
+      <footer className={`${styles['host-overview-note']}`}>
         <span>{t('Automatic log reads are limited to four local containers.')}</span>
         {source && (
           <time dateTime={source.observed_at}>

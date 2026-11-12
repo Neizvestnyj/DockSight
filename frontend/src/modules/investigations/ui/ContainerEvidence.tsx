@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import type { ContainerWidgetGroup } from '../model/evidence';
 import { useLocale } from '../../../shared/i18n/locale';
+import styles from './ContainerEvidence.module.css';
 
 /** Frame a container's historical state and log sections as one diagnostic subject. */
 export function ContainerEvidence({
@@ -15,21 +16,21 @@ export function ContainerEvidence({
   const { t } = useLocale();
   return (
     <section
-      className={`container-evidence${active ? ' linked' : ''}`}
+      className={`${styles['container-evidence']} container-evidence${active ? ' linked' : ''}`}
       aria-label={t('Container evidence: {name}', { name: group.name })}
     >
-      <header className="container-evidence-heading">
+      <header className={`${styles['container-evidence-heading']}`}>
         <h3>{group.name}</h3>
         <span>
           {group.host} <span aria-hidden="true">·</span> <code title={group.id}>{group.id.slice(0, 12)}</code>
         </span>
       </header>
       {!group.widgets.some((row) => row.widget_type === 'container_status') && (
-        <p className="container-evidence-note">{t('State was not included in this answer.')}</p>
+        <p className={`${styles['container-evidence-note']}`}>{t('State was not included in this answer.')}</p>
       )}
       {children}
       {!group.widgets.some((row) => row.widget_type === 'log_anomalies') && (
-        <p className="container-evidence-note">{t('No log card was returned for this container.')}</p>
+        <p className={`${styles['container-evidence-note']}`}>{t('No log card was returned for this container.')}</p>
       )}
     </section>
   );

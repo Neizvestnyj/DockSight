@@ -1,3 +1,6 @@
+import feedbackStyles from '../../../shared/ui/Feedback.module.css';
+import sharedStyles from '../../../shared/ui/Shared.module.css';
+import controlStyles from '../../../shared/ui/Controls.module.css';
 import { useLocale } from '../../../shared/i18n/locale';
 import { Select } from '../../../shared/ui/Select';
 import { useId } from 'react';
@@ -17,6 +20,7 @@ import type { Container, Host } from '../../../shared/contracts/contracts';
 import { Logo, ContainerStatus } from '../../../shared/ui/ui';
 import { utc } from '../../../shared/lib/format';
 import type { ReactNode } from 'react';
+import styles from './Sidebar.module.css';
 
 interface Props {
   savedChats?: ReactNode;
@@ -74,18 +78,18 @@ export function Sidebar({
   const hostSelectId = useId();
   return (
     <>
-      <div className="brand">
+      <div className={`${styles['brand']}`}>
         <button
           type="button"
-          className="brand-link"
+          className={`brand-link ${sharedStyles['brand-link']}`}
           aria-label={t('DockSight: return to diagnosis')}
           onClick={openInvestigation}
         >
           <Logo />
         </button>
-        <span className="brand-sub">{t('Docker diagnostics')}</span>
+        <span className={`${styles['brand-sub']}`}>{t('Docker diagnostics')}</span>
       </div>
-      <div className="host-switch">
+      <div className={`${styles['host-switch']}`}>
         <label htmlFor={hostSelectId}>
           <Server size={14} />
           {t('Configured host')}
@@ -102,23 +106,23 @@ export function Sidebar({
               : [{ value: '', label: t(hostLoading ? 'Loading hosts…' : 'No configured hosts') }]
           }
         />
-        <span className="host-id">{host || t('Connect a backend to begin')}</span>
+        <span className={`${styles['host-id']}`}>{host || t('Connect a backend to begin')}</span>
       </div>
       {hostError && (
-        <div className="sidebar-error" role="alert">
+        <div className={`sidebar-error ${sharedStyles['sidebar-error']}`} role="alert">
           <p>{hostError}</p>
-          <button className="text-button" onClick={retryHosts}>
+          <button className={`text-button ${controlStyles['text-button']}`} onClick={retryHosts}>
             {t('Retry hosts')}
           </button>
         </div>
       )}
-      <div className="workspace-nav">
+      <div className={`${styles['workspace-nav']} workspace-nav`}>
         <Activity size={16} />
-        <button className="text-button" onClick={newInvestigation}>
+        <button className={`text-button ${controlStyles['text-button']}`} onClick={newInvestigation}>
           {t('Diagnostics')}
         </button>
         <button
-          className="icon-button"
+          className={`icon-button ${controlStyles['icon-button']}`}
           aria-label={t('New investigation')}
           title={t('New investigation')}
           onClick={() => {
@@ -129,12 +133,12 @@ export function Sidebar({
         </button>
       </div>
       {savedChats}
-      <section className="inventory">
+      <section className={`${styles['inventory']}`}>
         <header>
           <h2>{t('Containers')}</h2>
           <span>{inventory.length}</span>
           <button
-            className={`icon-button${fetching ? ' refreshing' : ''}`}
+            className={`icon-button ${controlStyles['icon-button']}${fetching ? ` refreshing ${feedbackStyles['refreshing']}` : ''}`}
             aria-busy={fetching}
             aria-label={t('Refresh container inventory')}
             title={t(refreshAcknowledged ? 'Container list refreshed' : 'Refresh container inventory')}
@@ -144,7 +148,12 @@ export function Sidebar({
             {refreshAcknowledged && !fetching ? <Check size={14} /> : <RefreshCw size={14} />}
           </button>
         </header>
-        <div className="inventory-feedback" role="status" aria-live="polite" aria-atomic="true">
+        <div
+          className={`${styles['inventory-feedback']} inventory-feedback`}
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >
           {loading && host ? (
             t('Refreshing container list…')
           ) : inventoryError ? (
@@ -160,49 +169,51 @@ export function Sidebar({
           ) : null}
         </div>
         {inventoryError && (
-          <div className="sidebar-error">
+          <div className={`sidebar-error ${sharedStyles['sidebar-error']}`}>
             <p>{t('Could not read Docker inventory.')}</p>
             <p role="alert">{inventoryError}</p>
-            <button className="text-button" onClick={refresh}>
+            <button className={`text-button ${controlStyles['text-button']}`} onClick={refresh}>
               {t('Retry inventory')}
             </button>
           </div>
         )}
         {loading && host && !inventory.length ? (
-          <div className="inventory-loading" aria-hidden="true">
+          <div className={`${styles['inventory-loading']}`} aria-hidden="true">
             <div />
             <div />
             <div />
           </div>
         ) : inventory.length ? (
-          <div className="container-list" aria-busy={loading}>
+          <div className={`${styles['container-list']} container-list`} aria-busy={loading}>
             {inventory.map((container) => (
               <button
-                className={`container-row${selected === container.id ? ' selected' : ''}`}
+                className={`${styles['container-row']}${selected === container.id ? ' selected' : ''}`}
                 key={container.id}
                 onClick={() => chooseContainer(container)}
                 title={container.name}
                 aria-pressed={selected === container.id}
               >
-                <span className="container-name">
+                <span className={`${styles['container-name']}`}>
                   <Box size={14} />
                   <span>{container.name}</span>
                 </span>
                 <ContainerStatus state={container.state} health={container.health} />
                 {container.state === 'exited' && container.exit_code !== 0 && (
-                  <span className="container-exit negative">
+                  <span className={`${styles['container-exit']} negative ${feedbackStyles['negative']}`}>
                     {t('Exit code')} {container.exit_code}
                   </span>
                 )}
-                {container.compose_project && <span className="container-group">{container.compose_project}</span>}
+                {container.compose_project && (
+                  <span className={`${styles['container-group']}`}>{container.compose_project}</span>
+                )}
               </button>
             ))}
           </div>
         ) : !inventoryError && !loading ? (
-          <p className="empty-note">{t('No containers on this host.')}</p>
+          <p className={`empty-note ${controlStyles['empty-note']}`}>{t('No containers on this host.')}</p>
         ) : null}
       </section>
-      <div className="sidebar-bottom">
+      <div className={`${styles['sidebar-bottom']}`}>
         <p>
           {t(
             demo
@@ -214,12 +225,12 @@ export function Sidebar({
           <br />
           {t(demo ? 'All operations are simulated.' : 'Only acknowledged drafts are restored.')}
         </p>
-        <button className="text-button" onClick={about}>
+        <button className={`text-button ${controlStyles['text-button']}`} onClick={about}>
           <CircleHelp size={15} />
           {t('About this workspace')}
           <ArrowRight size={14} />
         </button>
-        <button className="connection-button" onClick={demo ? connect : returnDemo}>
+        <button className={`${styles['connection-button']}`} onClick={demo ? connect : returnDemo}>
           <Cable size={16} />
           {t(demo ? 'Connect your API' : 'Return to demo')}
           <ArrowUpRight size={14} />

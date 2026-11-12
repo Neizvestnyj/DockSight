@@ -3,6 +3,7 @@ import type { Answer, Evidence } from '../../../shared/contracts/contracts';
 import { evidenceNames, evidenceResource } from '../model/evidence';
 import { utc } from '../../../shared/lib/format';
 import { useLocale } from '../../../shared/i18n/locale';
+import styles from './EvidenceTrail.module.css';
 
 /** Keep repeated observation types distinguishable by their exact historical resource and capture time. */
 export function EvidenceTrail({
@@ -23,9 +24,9 @@ export function EvidenceTrail({
     groups.set(key, group);
   }
   return (
-    <div className="evidence-picker" role="region" aria-label={t('Observation sources')} tabIndex={0}>
+    <div className={`${styles['evidence-picker']}`} role="region" aria-label={t('Observation sources')} tabIndex={0}>
       {[...groups].map(([key, group]) => (
-        <fieldset key={key} className="evidence-resource">
+        <fieldset key={key} className={`${styles['evidence-resource']}`}>
           <legend>
             {group.rows[0]?.container_id ? (
               <Box size={14} />

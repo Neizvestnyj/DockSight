@@ -1,8 +1,11 @@
+import feedbackStyles from '../../../shared/ui/Feedback.module.css';
+import controlStyles from '../../../shared/ui/Controls.module.css';
 import { MessageSquarePlus, RefreshCw } from 'lucide-react';
 import { useLocale } from '../../../shared/i18n/locale';
 import type { useGroups, GroupKind } from '../model/useGroups';
 import { Select } from '../../../shared/ui/Select';
 import { Hint } from '../../../shared/ui/Hint';
+import styles from './GroupScope.module.css';
 
 /** Offer optional explicit scope beside the investigation, leaving named-group chat automatic. */
 export function GroupScope({
@@ -16,9 +19,9 @@ export function GroupScope({
 }) {
   const { t } = useLocale();
   return (
-    <section className="group-scope" aria-label={t('Investigation scope')}>
-      <div className="scope-field">
-        <div className="scope-caption">
+    <section className={`${styles['group-scope']}`} aria-label={t('Investigation scope')}>
+      <div className={styles['scope-field']}>
+        <div className={styles['scope-caption']}>
           <span>{t('Investigation scope')}</span>
           <Hint label={t('About investigation scope')}>
             {t(
@@ -52,9 +55,9 @@ export function GroupScope({
               ]}
             />
           </label>
-          <div className="group-scope-actions">
+          <div className={`${styles['group-scope-actions']}`}>
             <button
-              className="secondary"
+              className={`secondary ${controlStyles['secondary']}`}
               disabled={!scope.group || blocked || scope.loading || scope.error}
               onClick={diagnose}
             >
@@ -62,12 +65,12 @@ export function GroupScope({
               {t('Diagnose group')}
             </button>
             <button
-              className="icon-button"
+              className={`icon-button ${controlStyles['icon-button']}`}
               aria-label={t('Refresh groups')}
               disabled={scope.loading}
               onClick={scope.refresh}
             >
-              <RefreshCw size={14} className={scope.loading ? 'spin' : ''} />
+              <RefreshCw size={14} className={scope.loading ? `spin ${feedbackStyles['spin']}` : ''} />
             </button>
           </div>
           {scope.error ? (
@@ -81,7 +84,9 @@ export function GroupScope({
           ) : (
             !scope.loading && !scope.groups.length && <p>{t('No groups of this kind were returned.')}</p>
           )}
-          {scope.group?.truncated && <p className="warning-text">{t('Group inventory may be incomplete.')}</p>}
+          {scope.group?.truncated && (
+            <p className={`warning-text ${controlStyles['warning-text']}`}>{t('Group inventory may be incomplete.')}</p>
+          )}
         </>
       )}
     </section>

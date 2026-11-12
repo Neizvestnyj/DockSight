@@ -1,8 +1,10 @@
+import controlStyles from '../../../shared/ui/Controls.module.css';
 import { useEffect, useRef, useState } from 'react';
 import { ArrowUpRight, ChevronDown, SlidersHorizontal } from 'lucide-react';
 import type { Action } from '../../../shared/contracts/contracts';
 import { useLocale } from '../../../shared/i18n/locale';
 import { stateLabel } from '../../../shared/i18n/messages';
+import styles from './CardActions.module.css';
 
 /** Keep ordinary operations in a disclosure and expose only an explicit server-linked model suggestion. */
 export function CardActions({
@@ -49,16 +51,19 @@ export function CardActions({
   }
 
   return (
-    <div className="actions">
+    <div className={`${styles['actions']} actions`}>
       {suggested && (
-        <button className="secondary small action-trigger" onClick={() => review(outcomes[suggested.id] ?? suggested)}>
+        <button
+          className={`secondary ${controlStyles['secondary']} small ${controlStyles['small']} ${styles['action-trigger']}`}
+          onClick={() => review(outcomes[suggested.id] ?? suggested)}
+        >
           {label(suggested)}
           <ArrowUpRight size={13} />
         </button>
       )}
       {ordinary.length > 0 && (
         <details
-          className="card-actions-menu"
+          className={`${styles['card-actions-menu']} card-actions-menu`}
           name="container-operations"
           ref={disclosure}
           open={open}
@@ -71,7 +76,7 @@ export function CardActions({
           }}
         >
           <summary
-            className="secondary small action-trigger"
+            className={`secondary ${controlStyles['secondary']} small ${controlStyles['small']} ${styles['action-trigger']}`}
             ref={trigger}
             onClick={(event) => {
               event.preventDefault();
@@ -83,7 +88,7 @@ export function CardActions({
             <ChevronDown size={13} />
           </summary>
           {open && (
-            <div className="available-operations" role="group" aria-label={t('Available operations')}>
+            <div className={`${styles['available-operations']}`} role="group" aria-label={t('Available operations')}>
               {ordinary.map((action) => (
                 <button key={action.id} onClick={() => choose(action)}>
                   {label(action)}

@@ -3,6 +3,7 @@ import type { DemoClient, DemoFault } from '../../infrastructure/demo/demo';
 import { useLocale } from '../../shared/i18n/locale';
 import type { MessageKey } from '../../shared/i18n/messages';
 import { Select } from '../../shared/ui/Select';
+import styles from './DemoControls.module.css';
 
 const faultHelp: Record<DemoFault, MessageKey> = {
   none: 'Requests succeed normally.',
@@ -25,7 +26,7 @@ export function DemoControls({
   const [fault, setFault] = useState(client.fault);
   const [outcome, setOutcome] = useState(client.outcome);
   return (
-    <details className="demo-controls">
+    <details className={`${styles['demo-controls']}`}>
       <summary>{t('Test error states')}</summary>
       <div>
         <label>

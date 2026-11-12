@@ -1,8 +1,13 @@
+import sharedStyles from './Shared.module.css';
+import controlStyles from './Controls.module.css';
+import feedbackStyles from './Feedback.module.css';
 import { stateLabel } from '../i18n/messages';
 import { useLocale } from '../i18n/locale';
 import { useEffect, useId, useRef, type MouseEvent, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 import type { Container } from '../contracts/contracts';
+import styles from './Status.module.css';
+import localStyles from './Modal.module.css';
 
 /** Pair a semantic status color with readable text rather than relying on color alone. */
 export function Status({ state, action = false }: { state: string; action?: boolean }) {
@@ -15,8 +20,8 @@ export function Status({ state, action = false }: { state: string; action?: bool
         ? 'positive'
         : 'neutral';
   return (
-    <span className={`status ${tone}`}>
-      <span aria-hidden="true" className="status-dot" />
+    <span className={`${styles.status} status ${tone} ${feedbackStyles[tone]}`}>
+      <span aria-hidden="true" className={`${styles['status-dot']}`} />
       {stateLabel(state, t, action)}
     </span>
   );
@@ -26,10 +31,12 @@ export function Status({ state, action = false }: { state: string; action?: bool
 export function ContainerStatus({ state, health }: { state: string; health: Container['health'] }) {
   const { t } = useLocale();
   return (
-    <span className="container-status">
+    <span className={`${styles['container-status']} container-status`}>
       <Status state={state} />
-      <span className="health-summary">
-        <span className="health-caption">{t(state === 'running' ? 'Healthcheck' : 'Last healthcheck')}</span>
+      <span className={`${styles['health-summary']}`}>
+        <span className={`${styles['health-caption']} health-caption`}>
+          {t(state === 'running' ? 'Healthcheck' : 'Last healthcheck')}
+        </span>
         <HealthStatus health={health} />
       </span>
     </span>
@@ -40,7 +47,7 @@ export function ContainerStatus({ state, health }: { state: string; health: Cont
 export function HealthFact({ state, health }: { state: string; health: Container['health'] }) {
   const { t } = useLocale();
   return (
-    <dl className="health-fact">
+    <dl className={`${styles['health-fact']} health-fact`}>
       <dt>{t(state === 'running' ? 'Healthcheck' : 'Last healthcheck')}</dt>
       <dd>
         <HealthStatus health={health} />
@@ -69,8 +76,11 @@ function HealthStatus({ health }: { health: Container['health'] }) {
           ? 'Health: healthy'
           : 'Health: not reported';
   return (
-    <span className={`status health-status ${tone}`} title={t('Docker healthcheck')}>
-      <span aria-hidden="true" className="status-dot" />
+    <span
+      className={`${styles.status} ${styles['health-status']} status health-status ${tone} ${feedbackStyles[tone]}`}
+      title={t('Docker healthcheck')}
+    >
+      <span aria-hidden="true" className={`${styles['status-dot']}`} />
       {t(label)}
     </span>
   );
@@ -116,7 +126,7 @@ export function Modal({
   return (
     <dialog
       ref={dialog}
-      className={`modal${className ? ` ${className}` : ''}`}
+      className={`${localStyles.modal} modal${className ? ` ${className}` : ''}`}
       aria-labelledby={titleId}
       onPointerDown={(event) => {
         backdropPress.current = event.isPrimary && event.button === 0 && isBackdrop(event);
@@ -152,9 +162,13 @@ export function Modal({
         }
       }}
     >
-      <header className="modal-head">
+      <header className={`${localStyles['modal-head']} modal-head`}>
         <h2 id={titleId}>{title}</h2>
-        <button className="icon-button" aria-label={t('Close dialog')} onClick={close}>
+        <button
+          className={`icon-button ${controlStyles['icon-button']}`}
+          aria-label={t('Close dialog')}
+          onClick={close}
+        >
           <X size={18} />
         </button>
       </header>
@@ -165,5 +179,13 @@ export function Modal({
 
 /** Display the supplied vector wordmark with its original letterforms and colors. */
 export function Logo() {
-  return <img className="brand-logo" src="/brand/docksight.svg" alt="DockSight" width="968" height="238" />;
+  return (
+    <img
+      className={`brand-logo ${sharedStyles['brand-logo']}`}
+      src="/brand/docksight.svg"
+      alt="DockSight"
+      width="968"
+      height="238"
+    />
+  );
 }

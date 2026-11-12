@@ -1,3 +1,4 @@
+import controlStyles from '../../shared/ui/Controls.module.css';
 import { LanguageSwitch } from '../providers/LocaleProvider';
 import { useLocale } from '../../shared/i18n/locale';
 import { useEffect, useState } from 'react';
@@ -9,6 +10,7 @@ import { ApiError } from '../../shared/contracts/errors';
 import { connectApi } from './connectApi';
 import { ConnectedWorkspace } from '../workspace/ConnectedWorkspace';
 import type { ConnectionState } from '../workspace/types';
+import styles from './SessionEntry.module.css';
 
 /** Keep the active connection stable while presentation language changes. */
 export function Bootstrap() {
@@ -46,7 +48,7 @@ export function Bootstrap() {
       />
     );
   return (
-    <main className="session-entry">
+    <main className={`${styles['session-entry']}`}>
       <Logo />
       <section>
         <h1>
@@ -60,10 +62,10 @@ export function Bootstrap() {
         </h1>
         <p>{t('Saved chats stay on your DockSight backend. Sign in to reopen your workspace.')}</p>
         {state !== 'loading' && (
-          <div className="entry-actions">
+          <div className={`${styles['entry-actions']}`}>
             {state === 'error' && (
               <button
-                className="secondary"
+                className={`secondary ${controlStyles['secondary']}`}
                 onClick={() => {
                   setState('loading');
                   setAttempt((value) => value + 1);
@@ -72,11 +74,11 @@ export function Bootstrap() {
                 {t('Retry connection')}
               </button>
             )}
-            <button className="primary" onClick={() => setConnecting(true)}>
+            <button className={`primary ${controlStyles['primary']}`} onClick={() => setConnecting(true)}>
               {t('Connect API')}
             </button>
             <button
-              className="secondary"
+              className={`secondary ${controlStyles['secondary']}`}
               onClick={() => setConnection({ client: new DemoClient(), demo: true, id: 0 })}
             >
               {t('Explore Demo')}

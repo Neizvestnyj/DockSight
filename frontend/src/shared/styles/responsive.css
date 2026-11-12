@@ -1,0 +1,32 @@
+/* Preserve the shared animation name used by refresh controls. */
+:root {
+  --spin-animation: spin 1s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (max-width: 760px) {
+  :root {
+    --pad: 20px;
+  }
+}
+@media (max-width: 560px) {
+  :root {
+    --pad: 16px;
+    --gap: 20px;
+  }
+  body {
+    font-size: 14px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}

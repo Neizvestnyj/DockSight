@@ -1,3 +1,5 @@
+import feedbackStyles from '../../../shared/ui/Feedback.module.css';
+import controlStyles from '../../../shared/ui/Controls.module.css';
 import { isMessageKey } from '../../../shared/i18n/messages';
 import { useLocale } from '../../../shared/i18n/locale';
 import { useId, useState } from 'react';
@@ -8,6 +10,9 @@ import { bytes, utc } from '../../../shared/lib/format';
 import { EnvironmentContent, LogContent } from '../../runtime';
 import { CardActions } from '../../actions';
 import { widgetSource } from '../model/evidence';
+import styles from '../../../shared/ui/Widget.module.css';
+import factStyles from '../../../shared/ui/FactStrip.module.css';
+import localStyles from './Widgets.module.css';
 
 interface Props {
   widget: Widget;
@@ -58,12 +63,12 @@ export function WidgetCard({
           : LockKeyhole;
   return (
     <section
-      className={`widget widget-${widget.widget_type}${linked ? ' linked' : ''}${embedded ? ' embedded' : ''}`}
+      className={`${styles.widget} ${localStyles['widget-root']} widget widget-${widget.widget_type}${linked ? ' linked' : ''}${embedded ? ' embedded' : ''}`}
       role={embedded ? 'group' : undefined}
       aria-label={name}
       data-evidence-id={primary}
     >
-      <header className="widget-head">
+      <header className={`${styles['widget-head']} widget-head`}>
         <Heading>
           <Icon size={16} />
           {name}
@@ -71,7 +76,7 @@ export function WidgetCard({
         </Heading>
         {embedded && widget.widget_type === 'log_anomalies' && (
           <button
-            className="text-button log-toggle"
+            className={`text-button ${controlStyles['text-button']} ${localStyles['log-toggle']} log-toggle`}
             type="button"
             data-log-toggle
             aria-label={t(expanded ? 'Collapse logs' : 'Expand logs')}
@@ -85,7 +90,7 @@ export function WidgetCard({
         )}
         {primary && (
           <button
-            className="text-button source-link"
+            className={`text-button ${controlStyles['text-button']} ${localStyles['source-link']} source-link`}
             onClick={() => inspect(primary)}
             aria-label={t('View {name} source', { name: name.toLowerCase() })}
           >
@@ -96,9 +101,9 @@ export function WidgetCard({
         )}
       </header>
       {embedded && widget.widget_type === 'log_anomalies' && (
-        <div className="log-disclosure" data-open={!logsOpen} aria-hidden={logsOpen}>
+        <div className={`${localStyles['log-disclosure']}`} data-open={!logsOpen} aria-hidden={logsOpen}>
           <div>
-            <div className="log-collapsed-note">
+            <div className={`${localStyles['log-collapsed-note']}`}>
               <span>
                 {t('{count} lines returned', { count: widget.logs.entries.length })} ·{' '}
                 {t(widget.logs.truncated ? 'Truncated · partial evidence' : 'Within requested bounds')}
@@ -111,21 +116,23 @@ export function WidgetCard({
       {widget.widget_type === 'container_status' && (
         <>
           {!embedded && (
-            <div className="container-heading">
+            <div className={`${localStyles['container-heading']} container-heading`}>
               <strong>{widget.snapshot.name}</strong>
               <Status state={widget.snapshot.state} />
             </div>
           )}
-          <p className="image-name">
+          <p className={`${localStyles['image-name']}`}>
             <code>{widget.snapshot.image}</code>
           </p>
           <HealthFact state={widget.snapshot.state} health={widget.snapshot.health} />
-          <dl className="fact-strip">
+          <dl className={factStyles['fact-strip']}>
             <div>
               <dt>{t('Exit code')}</dt>
               <dd
                 className={
-                  widget.snapshot.state === 'exited' && widget.snapshot.exit_code !== 0 ? 'negative' : undefined
+                  widget.snapshot.state === 'exited' && widget.snapshot.exit_code !== 0
+                    ? `negative ${feedbackStyles['negative']}`
+                    : undefined
                 }
               >
                 {widget.snapshot.exit_code}
@@ -148,17 +155,17 @@ export function WidgetCard({
               </dd>
             </div>
           </dl>
-          <div className="memory-row">
+          <div className={`${localStyles['memory-row']}`}>
             <span>{t('Memory')}</span>
             <span>
               {bytes(widget.snapshot.metrics.memory_usage_bytes, locale, t('Unavailable'))}{' '}
-              <span className="muted">
+              <span className={`muted ${controlStyles['muted']}`}>
                 / {bytes(widget.snapshot.metrics.memory_limit_bytes, locale, t('Unavailable'))}
               </span>
             </span>
           </div>
           {widget.recommendation && (
-            <div className="action-suggestion" aria-label={t('Suggested by model')}>
+            <div className={`${localStyles['action-suggestion']}`} aria-label={t('Suggested by model')}>
               <span>{t('Suggested by model')}</span>
               {widget.recommendation.reason && (
                 <p>
@@ -168,7 +175,10 @@ export function WidgetCard({
                 </p>
               )}
               {primary && (
-                <button className="text-button evidence-link" onClick={() => inspect(primary)}>
+                <button
+                  className={`text-button ${controlStyles['text-button']} evidence-link ${controlStyles['evidence-link']}`}
+                  onClick={() => inspect(primary)}
+                >
                   {t('Supporting evidence')}
                   <ArrowUpRight size={13} />
                 </button>
@@ -176,11 +186,13 @@ export function WidgetCard({
             </div>
           )}
           {widget.actions_code && (
-            <p className="section-note warning-text">
+            <p
+              className={`section-note ${controlStyles['section-note']} warning-text ${controlStyles['warning-text']}`}
+            >
               {t('Actions unavailable')} · <code>{widget.actions_code}</code>
             </p>
           )}
-          <footer className="widget-foot">
+          <footer className={`${styles['widget-foot']} widget-foot`}>
             <time dateTime={widget.snapshot.observed_at}>{utc(widget.snapshot.observed_at)}</time>
             <CardActions
               actions={widget.actions}
@@ -192,35 +204,47 @@ export function WidgetCard({
         </>
       )}
       {widget.widget_type === 'log_anomalies' && (
-        <div id={logId} className="log-disclosure" data-open={logsOpen} aria-hidden={!logsOpen} inert={!logsOpen}>
+        <div
+          id={logId}
+          className={`${localStyles['log-disclosure']}`}
+          data-open={logsOpen}
+          aria-hidden={!logsOpen}
+          inert={!logsOpen}
+        >
           <div>
             <LogContent logs={widget.logs} grouped={embedded} />
-            <footer className="widget-foot">
+            <footer className={`${styles['widget-foot']} widget-foot`}>
               <span>{t('Docker logs · sanitized text')}</span>
               {observed && <time dateTime={observed.observed_at}>{utc(observed.observed_at)}</time>}
-              {widget.logs.truncated && <span className="warning-text">{t('Earlier output was omitted')}</span>}
+              {widget.logs.truncated && (
+                <span className={`warning-text ${controlStyles['warning-text']}`}>
+                  {t('Earlier output was omitted')}
+                </span>
+              )}
             </footer>
           </div>
         </div>
       )}
       {widget.widget_type === 'compose_stack' && (
-        <div className="stack-list">
+        <div className={`${localStyles['stack-list']}`}>
           {widget.stacks.length ? (
             widget.stacks.map((stack) => (
-              <div className="stack-row" key={`${stack.kind}-${stack.name}`}>
+              <div className={`${localStyles['stack-row']}`} key={`${stack.kind}-${stack.name}`}>
                 <div>
                   <strong>{stack.name}</strong>
-                  <span className="muted">{t(stack.kind === 'compose' ? 'Docker Compose' : 'Docker Swarm')}</span>
+                  <span className={`muted ${controlStyles['muted']}`}>
+                    {t(stack.kind === 'compose' ? 'Docker Compose' : 'Docker Swarm')}
+                  </span>
                 </div>
-                <div className="stack-total">
+                <div className={`${localStyles['stack-total']}`}>
                   <strong>
                     {stack.running}
-                    <span className="muted"> / {stack.total}</span>
+                    <span className={`muted ${controlStyles['muted']}`}> / {stack.total}</span>
                   </strong>
-                  <span className="muted">{t('running')}</span>
+                  <span className={`muted ${controlStyles['muted']}`}>{t('running')}</span>
                 </div>
                 <div
-                  className="stack-segments"
+                  className={`${localStyles['stack-segments']}`}
                   role="img"
                   aria-label={t('{running} of {total} running', { running: stack.running, total: stack.total })}
                 >
@@ -231,7 +255,7 @@ export function WidgetCard({
               </div>
             ))
           ) : (
-            <p className="empty-note">{t('No stacks in this observation.')}</p>
+            <p className={`empty-note ${controlStyles['empty-note']}`}>{t('No stacks in this observation.')}</p>
           )}
         </div>
       )}
@@ -239,7 +263,7 @@ export function WidgetCard({
         <>
           <EnvironmentContent variables={widget.variables} />
           {observed && (
-            <footer className="widget-foot">
+            <footer className={`${styles['widget-foot']} widget-foot`}>
               <time dateTime={observed.observed_at}>{utc(observed.observed_at)}</time>
             </footer>
           )}
@@ -261,14 +285,19 @@ export function EvidenceInspector({ evidence, resourceName }: { evidence?: Evide
     env: 'Allowlisted environment',
   } as const;
   return (
-    <section className="observation" tabIndex={-1} aria-label={t('Evidence observation')} id="evidence-observation">
-      <header className="widget-head">
+    <section
+      className={`${localStyles['observation']} observation`}
+      tabIndex={-1}
+      aria-label={t('Evidence observation')}
+      id="evidence-observation"
+    >
+      <header className={`${styles['widget-head']} widget-head`}>
         <h3>{t('Observation')}</h3>
-        <span className="observed-label">{t('Observed fact')}</span>
+        <span className={`${localStyles['observed-label']}`}>{t('Observed fact')}</span>
       </header>
       {evidence ? (
         <>
-          <dl className="provenance">
+          <dl className={`${localStyles['provenance']}`}>
             <div>
               <dt>{t('Source')}</dt>
               <dd>{t(sources[evidence.kind])}</dd>
@@ -292,17 +321,19 @@ export function EvidenceInspector({ evidence, resourceName }: { evidence?: Evide
               </dd>
             </div>
           </dl>
-          <details className="raw-evidence">
+          <details className={`${localStyles['raw-evidence']} raw-evidence`}>
             <summary>{t('Inspect observation data')}</summary>
             <pre tabIndex={0}>{JSON.stringify(evidence.data, null, 2)}</pre>
-            <p className="evidence-id">
+            <p className={`${localStyles['evidence-id']}`}>
               <span>{t('Observation ID')}</span>
               <code>{evidence.id}</code>
             </p>
           </details>
         </>
       ) : (
-        <p className="empty-note">{t('Select an evidence reference to inspect its source and observation.')}</p>
+        <p className={`empty-note ${controlStyles['empty-note']}`}>
+          {t('Select an evidence reference to inspect its source and observation.')}
+        </p>
       )}
     </section>
   );

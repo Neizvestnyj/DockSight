@@ -1,3 +1,4 @@
+import controlStyles from '../../../shared/ui/Controls.module.css';
 import { useLocale } from '../../../shared/i18n/locale';
 import { useState } from 'react';
 import { ArrowRight, PlugZap } from 'lucide-react';
@@ -5,6 +6,7 @@ import type { Transport } from '../../../shared/contracts/contracts';
 import { ApiError } from '../../../shared/contracts/errors';
 import { Modal } from '../../../shared/ui/ui';
 import { isMessageKey, type MessageKey } from '../../../shared/i18n/messages';
+import modalStyles from '../../../shared/ui/Modal.module.css';
 
 /** Explain backend authentication configuration separately from invalid endpoint input. */
 function connectionError(failure: unknown): MessageKey {
@@ -65,7 +67,7 @@ export function Connection({
           }
         }}
       >
-        <label className="field">
+        <label className={`field ${controlStyles['field']}`}>
           {t('API base URL')}
           <input
             required
@@ -75,12 +77,12 @@ export function Connection({
             aria-describedby="api-help"
           />
         </label>
-        <p id="api-help" className="section-note">
+        <p id="api-help" className={`section-note ${controlStyles['section-note']}`}>
           {t(
             'Same-origin API login restores your session after refresh. A separate-origin API uses transient bearer access and requires reconnecting.',
           )}
         </p>
-        <label className="field">
+        <label className={`field ${controlStyles['field']}`}>
           {t('Bearer token')}
           <input
             type="password"
@@ -91,19 +93,19 @@ export function Connection({
             aria-describedby="token-help"
           />
         </label>
-        <p id="token-help" className="section-note">
+        <p id="token-help" className={`section-note ${controlStyles['section-note']}`}>
           {t('The token is cleared after login. Cookie and CSRF credentials are never stored in browser storage.')}
         </p>
         {error && (
-          <p className="inline-error" role="alert">
+          <p className={`inline-error ${controlStyles['inline-error']}`} role="alert">
             {t(error, { origin: window.location.origin })}
           </p>
         )}
-        <footer className="modal-actions">
-          <button type="button" className="secondary" onClick={close}>
+        <footer className={`${modalStyles['modal-actions']} modal-actions`}>
+          <button type="button" className={`secondary ${controlStyles['secondary']}`} onClick={close}>
             {t('Cancel')}
           </button>
-          <button type="submit" className="primary" disabled={busy}>
+          <button type="submit" className={`primary ${controlStyles['primary']}`} disabled={busy}>
             <PlugZap size={15} />
             {t('Connect')}
             <ArrowRight size={15} />

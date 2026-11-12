@@ -1,0 +1,127 @@
+.composer {
+  position: relative;
+  margin-top: 40px;
+  padding: 20px;
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sheet);
+}
+.composer-group {
+  overflow-wrap: anywhere;
+}
+.composer-heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  margin-bottom: 14px;
+}
+.composer-heading > svg {
+  flex: none;
+  color: var(--muted);
+}
+.composer-heading h2 {
+  font-size: 15px;
+  font-weight: 600;
+}
+.composer-heading p {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--muted);
+}
+.composer-entry {
+  background: var(--surface);
+  border: 1px solid var(--control);
+  border-radius: var(--radius-card);
+}
+.composer-entry:focus-within {
+  border-color: var(--accent);
+}
+.composer textarea {
+  display: block;
+  width: 100%;
+  padding: 14px 16px;
+  border: 0;
+  background: transparent;
+  min-height: 92px;
+  max-height: 220px;
+  font-size: 14px;
+  resize: vertical;
+}
+.composer textarea::placeholder {
+  color: var(--faint);
+}
+.composer textarea:focus-visible {
+  outline: none;
+}
+.composer-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--rule);
+}
+.composer-foot > span {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  color: var(--muted);
+}
+.composer-foot :global(.scope-dot) {
+  background: var(--faint);
+  margin-right: 6px;
+}
+.composer-foot button {
+  min-height: 36px;
+  padding: 8px 14px;
+  font-size: 13px;
+}
+.composer-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+  flex: none;
+}
+.query-limit {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+@media (max-width: 1200px) {
+  .query-limit {
+    display: none;
+  }
+}
+@media (max-width: 560px) {
+  .composer {
+    position: static;
+    margin-top: 32px;
+    padding: 12px;
+    box-shadow: none;
+  }
+  .composer textarea {
+    min-height: 96px;
+    font-size: 16px;
+  }
+  .composer-heading p {
+    flex-basis: 100%;
+    margin-left: 28px;
+  }
+  .composer-foot > span {
+    font-size: 12px;
+    max-width: 150px;
+    overflow-wrap: anywhere;
+  }
+  .composer-hint {
+    display: none;
+  }
+  .composer-foot button {
+    min-height: 44px;
+    font-size: 13px;
+  }
+}

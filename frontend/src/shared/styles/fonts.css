@@ -1,4 +1,4 @@
-/* Self-hosted language subsets; unicode ranges keep Latin and Cyrillic faces from overriding each other. */
+/* Self-hosted language subsets keep Latin and Cyrillic faces from overriding each other. */
 
 /* ibm-plex-sans-latin-400-normal */
 @font-face {

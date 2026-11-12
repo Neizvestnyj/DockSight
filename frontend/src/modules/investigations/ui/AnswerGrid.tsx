@@ -1,9 +1,11 @@
+import controlStyles from '../../../shared/ui/Controls.module.css';
 import type { Action, Answer } from '../../../shared/contracts/contracts';
 import { useLocale } from '../../../shared/i18n/locale';
 import { containerWidgetGroups, evidenceResource, widgetSource } from '../model/evidence';
 import { ContainerEvidence } from './ContainerEvidence';
 import { EvidenceTrail } from './EvidenceTrail';
 import { EvidenceInspector, WidgetCard } from './Widgets';
+import styles from './AnswerGrid.module.css';
 
 /** Keep each container's retained observations together beside their sources and group context. */
 export function AnswerGrid({
@@ -37,9 +39,9 @@ export function AnswerGrid({
     />
   );
   return (
-    <div className="answer-grid">
-      <div className="facts-column">
-        <div className="column-label">
+    <div className={`${styles['answer-grid']}`}>
+      <div className={`${styles['facts-column']}`}>
+        <div className={`${styles['column-label']}`}>
           <h2>{t('Runtime evidence')}</h2>
           <span>{t('Server observations')}</span>
         </div>
@@ -52,10 +54,14 @@ export function AnswerGrid({
             {group.widgets.map((widget, index) => card(widget, index, true))}
           </ContainerEvidence>
         ))}
-        {!answer.widgets.length && <p className="empty-note">{t('No UI cards were returned for this answer.')}</p>}
+        {!answer.widgets.length && (
+          <p className={`empty-note ${controlStyles['empty-note']}`}>
+            {t('No UI cards were returned for this answer.')}
+          </p>
+        )}
       </div>
-      <aside className="context-column" aria-label={t('Evidence and context')}>
-        <div className="column-label">
+      <aside className={`${styles['context-column']}`} aria-label={t('Evidence and context')}>
+        <div className={`${styles['column-label']}`}>
           <h2>{t('Evidence trail')}</h2>
           <span>{t('{count} references', { count: answer.evidence.length })}</span>
         </div>

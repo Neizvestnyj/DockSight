@@ -1,6 +1,8 @@
+import controlStyles from '../../../shared/ui/Controls.module.css';
 import type { LogBatch } from '../../../shared/contracts/contracts';
 import { useLocale } from '../../../shared/i18n/locale';
 import { utc } from '../../../shared/lib/format';
+import styles from './RuntimeContent.module.css';
 
 /** Render sanitized log strings verbatim in both historical cards and direct Docker reads. */
 export function LogContent({ logs, grouped = false }: { logs: LogBatch; grouped?: boolean }) {
@@ -9,15 +11,15 @@ export function LogContent({ logs, grouped = false }: { logs: LogBatch; grouped?
   const last = logs.entries.at(-1)?.timestamp;
   return (
     <>
-      <div className="log-toolbar">
+      <div className={`${styles['log-toolbar']}`}>
         <span>{t('{count} lines returned', { count: logs.entries.length })}</span>
         <span>{t(logs.truncated ? 'Truncated · partial evidence' : 'Within requested bounds')}</span>
       </div>
       {!!logs.entries.length && (
-        <div className="log-window">
+        <div className={`${styles['log-window']} log-window`}>
           <span>{t('Latest log window · oldest first')}</span>
           {first && last && (
-            <span className="log-window-range">
+            <span className={`${styles['log-window-range']}`}>
               <time dateTime={first}>{utc(first, true)}</time>
               <span aria-hidden="true">→</span>
               <time dateTime={last}>{utc(last, true)}</time>
@@ -26,14 +28,14 @@ export function LogContent({ logs, grouped = false }: { logs: LogBatch; grouped?
         </div>
       )}
       <div
-        className="logs"
+        className={`${styles.logs} logs`}
         tabIndex={0}
         role={grouped ? 'group' : 'region'}
         aria-label={t('Timestamped container logs')}
       >
         {logs.entries.length ? (
           logs.entries.map((entry, index) => (
-            <div className="log-line" key={index}>
+            <div className={`${styles['log-line']} log-line`} key={index}>
               <time
                 dateTime={entry.timestamp ?? undefined}
                 title={entry.timestamp ? utc(entry.timestamp, true) : undefined}
@@ -62,8 +64,8 @@ export function EnvironmentContent({ variables }: { variables: Record<string, st
   const { t } = useLocale();
   return (
     <>
-      <p className="section-note">{t('Allowlisted variables · read only')}</p>
-      <dl className="env-list">
+      <p className={`section-note ${controlStyles['section-note']}`}>{t('Allowlisted variables · read only')}</p>
+      <dl className={`${styles['env-list']} env-list`}>
         {Object.keys(variables).length ? (
           Object.entries(variables).map(([key, value]) => (
             <div key={key}>

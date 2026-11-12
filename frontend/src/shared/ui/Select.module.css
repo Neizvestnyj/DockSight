@@ -29,8 +29,7 @@
 .select-trigger[aria-expanded='true'] > svg {
   transform: rotate(180deg);
 }
-.select-popup,
-.hint-popup {
+.select-popup {
   position: fixed;
   inset: auto;
   display: block;
@@ -76,59 +75,9 @@
   cursor: not-allowed;
   background: none;
 }
-.hint {
-  display: inline-flex;
-}
-.hint-trigger {
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  border: 0;
-  color: var(--faint);
-  background: transparent;
-}
-.hint-trigger:hover {
-  color: var(--text);
-  background: var(--raised);
-}
-.hint-popup {
-  width: 320px;
-  padding: 11px 13px;
-  border: 0;
-  border-radius: 8px;
-  background: var(--primary);
-  color: var(--surface);
-  font-size: 12px;
-  line-height: 1.6;
-  overflow: auto;
-}
-.language-switch .select-control {
-  width: 140px;
-  flex: none;
-}
-.scope-field {
-  min-width: 0;
-  display: grid;
-  gap: 6px;
-}
-.scope-caption {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  min-height: 24px;
-  color: var(--muted);
-  font-size: 12px;
-}
 @media (max-width: 560px) {
   .select-trigger,
   .select-option {
-    min-height: 44px;
-  }
-  .hint-trigger {
-    width: 44px;
-    height: 44px;
-  }
-  .scope-caption {
     min-height: 44px;
   }
 }

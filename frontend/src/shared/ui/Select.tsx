@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { Check, ChevronDown } from 'lucide-react';
 import { useFloatingPanel } from './useFloatingPanel';
+import styles from './Select.module.css';
 
 export interface SelectOption<T extends string> {
   value: T;
@@ -133,13 +134,13 @@ export function Select<T extends string>({
   }
 
   return (
-    <div ref={root} className={`select-control ${className}`}>
+    <div ref={root} className={`${styles['select-control']} select-control ${className}`}>
       <button
         ref={trigger}
         id={triggerId}
         type="button"
         role="combobox"
-        className="select-trigger"
+        className={`${styles['select-trigger']} select-trigger`}
         aria-label={label}
         aria-describedby={describedBy}
         aria-expanded={expanded}
@@ -155,7 +156,14 @@ export function Select<T extends string>({
         <ChevronDown size={15} aria-hidden="true" />
       </button>
       {expanded && (
-        <div ref={panel} id={listId} role="listbox" aria-label={label} className="select-popup" popover="manual">
+        <div
+          ref={panel}
+          id={listId}
+          role="listbox"
+          aria-label={label}
+          className={styles['select-popup']}
+          popover="manual"
+        >
           {options.map((row, index) => (
             <div
               id={`${listId}-${index}`}
@@ -165,7 +173,7 @@ export function Select<T extends string>({
               aria-disabled={row.disabled || undefined}
               data-value={row.value}
               data-active={row.value === active}
-              className="select-option"
+              className={styles['select-option']}
               onPointerDown={(event) => event.preventDefault()}
               onPointerMove={() => !row.disabled && setActive(row.value)}
               onClick={(event) => {

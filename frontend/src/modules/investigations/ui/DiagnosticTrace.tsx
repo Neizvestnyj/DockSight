@@ -1,3 +1,5 @@
+import feedbackStyles from '../../../shared/ui/Feedback.module.css';
+import controlStyles from '../../../shared/ui/Controls.module.css';
 import { useEffect, useId, useState } from 'react';
 import { ArrowLeft, Braces, Check, ChevronDown, Copy, LoaderCircle, Square, TriangleAlert } from 'lucide-react';
 import type { TraceStep } from '../../../shared/contracts/contracts';
@@ -5,6 +7,7 @@ import { utc } from '../../../shared/lib/format';
 import { useLocale } from '../../../shared/i18n/locale';
 import { diagnosticOperations } from '../../../shared/i18n/messages';
 import type { Turn } from '../model/turns';
+import styles from './DiagnosticTrace.module.css';
 
 /** Keep debugging data inside its original turn, with no provider requests or browser persistence. */
 export function DiagnosticTrace({ turn, host, demo }: { turn: Turn; host: string; demo: boolean }) {
@@ -48,40 +51,40 @@ export function DiagnosticTrace({ turn, host, demo }: { turn: Turn; host: string
   }
 
   return (
-    <details className="diagnostic-trace">
+    <details className={`${styles['diagnostic-trace']} diagnostic-trace`}>
       <summary>
-        <ChevronDown size={15} className="trace-chevron" aria-hidden="true" />
+        <ChevronDown size={15} className={`${styles['trace-chevron']}`} aria-hidden="true" />
         <Braces size={15} aria-hidden="true" />
         <span>{t('Diagnostic trace')}</span>
-        <span className="trace-count">
+        <span className={`${styles['trace-count']}`}>
           {trace ? t('{count} recorded steps', { count: trace.steps.length }) : t('Not recorded')}
         </span>
       </summary>
-      <div className="trace-content">
+      <div className={`${styles['trace-content']}`}>
         {!trace ? (
-          <p className="empty-note">
+          <p className={`empty-note ${controlStyles['empty-note']}`}>
             {t('No trace was recorded for this turn. Run a new diagnosis to capture its steps.')}
           </p>
         ) : (
           <>
-            <div className="trace-heading">
+            <div className={`${styles['trace-heading']}`}>
               <div>
                 <strong>
                   {trace.provider ?? t('Unavailable')} · <code>{trace.model ?? t('Unavailable')}</code>
                 </strong>
                 <p>{demo ? t('Simulated trace · no model request') : t('Recorded by the diagnostic backend')}</p>
               </div>
-              <div className="trace-copy">
+              <div className={`${styles['trace-copy']}`}>
                 <span role="status">
                   {copyState === 'copied' ? t('Trace copied') : copyState === 'failed' ? t('Could not copy trace') : ''}
                 </span>
-                <button className="secondary" onClick={() => void copyTrace()}>
+                <button className={`secondary ${controlStyles['secondary']}`} onClick={() => void copyTrace()}>
                   <Copy size={14} />
                   {t('Copy trace')}
                 </button>
               </div>
             </div>
-            <dl className="trace-identifiers">
+            <dl className={`${styles['trace-identifiers']}`}>
               <div>
                 <dt>{t('Request ID')}</dt>
                 <dd>
@@ -107,8 +110,8 @@ export function DiagnosticTrace({ turn, host, demo }: { turn: Turn; host: string
                 </dd>
               </div>
             </dl>
-            <div className={`trace-layout${showDetail ? ' show-detail' : ''}`}>
-              <ol className="trace-steps" aria-label={t('Recorded diagnostic steps')}>
+            <div className={`${styles['trace-layout']} trace-layout${showDetail ? ' show-detail' : ''}`}>
+              <ol className={`${styles['trace-steps']}`} aria-label={t('Recorded diagnostic steps')}>
                 {trace.steps.map((step) => {
                   const interrupted = step.state === 'running' && turn.state !== 'running';
                   const label = diagnosticOperations[step.operation];
@@ -116,7 +119,7 @@ export function DiagnosticTrace({ turn, host, demo }: { turn: Turn; host: string
                     <li key={step.id}>
                       <button
                         id={`${detailsId}-${step.id}`}
-                        className={`trace-step ${selected?.id === step.id ? 'selected' : ''}`}
+                        className={`${styles['trace-step']} trace-step ${selected?.id === step.id ? 'selected' : ''}`}
                         aria-pressed={selected?.id === step.id}
                         aria-controls={detailsId}
                         onClick={() => {
@@ -124,18 +127,18 @@ export function DiagnosticTrace({ turn, host, demo }: { turn: Turn; host: string
                           setShowDetail(true);
                         }}
                       >
-                        <span className={`trace-mark ${step.state}`} aria-hidden="true">
+                        <span className={`${styles['trace-mark']} ${step.state}`} aria-hidden="true">
                           {interrupted ? (
                             <Square size={14} />
                           ) : step.state === 'running' ? (
-                            <LoaderCircle size={14} className="spin" />
+                            <LoaderCircle size={14} className={`spin ${feedbackStyles['spin']}`} />
                           ) : step.state === 'failed' ? (
                             <TriangleAlert size={14} />
                           ) : (
                             <Check size={14} />
                           )}
                         </span>
-                        <span className="trace-step-name">
+                        <span className={`${styles['trace-step-name']}`}>
                           {label ? t(label) : step.operation}
                           <small>
                             {t(
@@ -149,7 +152,7 @@ export function DiagnosticTrace({ turn, host, demo }: { turn: Turn; host: string
                             )}
                           </small>
                         </span>
-                        <span className="trace-duration">
+                        <span className={`${styles['trace-duration']}`}>
                           {step.duration_ms === null
                             ? '—'
                             : t('{duration} ms', { duration: step.duration_ms.toLocaleString(locale) })}
@@ -159,19 +162,29 @@ export function DiagnosticTrace({ turn, host, demo }: { turn: Turn; host: string
                   );
                 })}
               </ol>
-              <section id={detailsId} className="trace-detail" aria-label={t('Trace step details')} tabIndex={-1}>
-                <button className="text-button trace-back" onClick={() => setShowDetail(false)}>
+              <section
+                id={detailsId}
+                className={`${styles['trace-detail']}`}
+                aria-label={t('Trace step details')}
+                tabIndex={-1}
+              >
+                <button
+                  className={`text-button ${controlStyles['text-button']} ${styles['trace-back']}`}
+                  onClick={() => setShowDetail(false)}
+                >
                   <ArrowLeft size={14} />
                   {t('Back to steps')}
                 </button>
                 {selected ? (
                   <StepDetails step={selected} interrupted={selected.state === 'running' && turn.state !== 'running'} />
                 ) : (
-                  <p className="empty-note">{t('Waiting for the first recorded step…')}</p>
+                  <p className={`empty-note ${controlStyles['empty-note']}`}>
+                    {t('Waiting for the first recorded step…')}
+                  </p>
                 )}
               </section>
             </div>
-            <p className="trace-note">
+            <p className={`${styles['trace-note']}`}>
               {t('This trace stays in this tab. Prompts, hidden reasoning, and provider-native data are excluded.')}
             </p>
           </>
@@ -190,7 +203,7 @@ function StepDetails({ step, interrupted }: { step: TraceStep; interrupted: bool
   return (
     <>
       <h3>{label ? t(label) : step.operation}</h3>
-      <p className="section-note">
+      <p className={`section-note ${controlStyles['section-note']}`}>
         <time dateTime={step.started_at}>{utc(step.started_at)}</time>
         {step.finished_at && (
           <>
@@ -200,11 +213,11 @@ function StepDetails({ step, interrupted }: { step: TraceStep; interrupted: bool
         )}
       </p>
       {interrupted && (
-        <p className="trace-interrupted">
+        <p className={`${styles['trace-interrupted']}`}>
           {t('The stream ended before this step reported a result. Its completion is unknown.')}
         </p>
       )}
-      <dl className="trace-measures">
+      <dl className={`${styles['trace-measures']}`}>
         <div>
           <dt>{t('Duration')}</dt>
           <dd>
@@ -227,13 +240,13 @@ function StepDetails({ step, interrupted }: { step: TraceStep; interrupted: bool
         )}
       </dl>
       {step.code && (
-        <p className="trace-error">
+        <p className={`${styles['trace-error']}`}>
           <TriangleAlert size={14} />
           <code>{step.code}</code>
         </p>
       )}
       {step.issues.length > 0 && (
-        <ul className="trace-issues">
+        <ul className={`${styles['trace-issues']}`}>
           {step.issues.map((issue, index) => (
             <li key={index}>
               <code>{issue.loc.join('.') || '$'}</code>
@@ -248,7 +261,7 @@ function StepDetails({ step, interrupted }: { step: TraceStep; interrupted: bool
       {step.kind === 'model' && (
         <>
           <h4>{t(exploration ? 'Model response · sanitized' : 'Model proposal · sanitized')}</h4>
-          <p className="section-note">
+          <p className={`section-note ${controlStyles['section-note']}`}>
             {t(
               exploration
                 ? 'Adapter output: assistant text and requested tools. Tool arguments are untrusted until validated.'
@@ -257,14 +270,14 @@ function StepDetails({ step, interrupted }: { step: TraceStep; interrupted: bool
           </p>
           {step.response !== null ? (
             <pre
-              className="trace-response"
+              className={`${styles['trace-response']}`}
               tabIndex={0}
               aria-label={t(exploration ? 'Sanitized model response' : 'Sanitized model proposal')}
             >
               {step.response}
             </pre>
           ) : (
-            <p className="empty-note">
+            <p className={`empty-note ${controlStyles['empty-note']}`}>
               {t(
                 exploration
                   ? 'No displayable model response has been received.'
@@ -273,7 +286,9 @@ function StepDetails({ step, interrupted }: { step: TraceStep; interrupted: bool
             </p>
           )}
           {step.response_truncated && (
-            <p className="warning-text">{t('Preview limited to 16 KiB. The displayed response is incomplete.')}</p>
+            <p className={`warning-text ${controlStyles['warning-text']}`}>
+              {t('Preview limited to 16 KiB. The displayed response is incomplete.')}
+            </p>
           )}
         </>
       )}

@@ -1,0 +1,85 @@
+.answer-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: var(--gap);
+  margin-top: var(--gap);
+}
+.facts-column,
+.context-column {
+  min-width: 0;
+}
+.column-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: baseline;
+  margin-bottom: 12px;
+}
+.column-label h2 {
+  font-size: 13px;
+  font-weight: 500;
+}
+.column-label > span {
+  color: var(--muted);
+  font-size: 11px;
+}
+.facts-column > :global(.widget) + :global(.widget) {
+  margin-top: var(--gap);
+}
+.context-column > :global(.widget) {
+  margin-top: 16px;
+}
+.context-column :global(.widget-head) {
+  padding: 12px 14px 8px;
+}
+
+@media (max-width: 1200px) {
+  .answer-grid {
+    grid-template-columns: minmax(0, 1fr) 270px;
+  }
+}
+@media (max-width: 1100px) {
+  .answer-grid {
+    grid-template-columns: minmax(0, 1fr) 270px;
+  }
+}
+@media (max-width: 760px) {
+  .answer-grid {
+    display: block;
+  }
+  .context-column {
+    margin-top: var(--gap);
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    align-items: start;
+  }
+  .context-column > .column-label {
+    grid-column: 1 / -1;
+    margin-bottom: 0;
+  }
+  .context-column > :global(.widget) {
+    margin-top: 0;
+  }
+  .context-column > :global(.widget):only-of-type {
+    grid-column: 1 / -1;
+  }
+}
+@media (max-width: 560px) {
+  .column-label h2 {
+    font-size: 14px;
+  }
+  .column-label > span {
+    font-size: 11px;
+  }
+  .context-column {
+    display: block;
+  }
+  .context-column > * + * {
+    margin-top: 16px;
+  }
+  /* Preserve the mobile override when shared observation styles load later. */
+  .context-column.context-column :global(.widget-head) {
+    padding: 12px 14px;
+  }
+}

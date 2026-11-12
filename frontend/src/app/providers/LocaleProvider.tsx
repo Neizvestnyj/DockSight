@@ -1,9 +1,11 @@
+import sharedStyles from '../../shared/ui/Shared.module.css';
 import { useEffect, useId, useState, type ReactNode } from 'react';
 import { Languages } from 'lucide-react';
 import { LocaleContext } from '../../shared/i18n/locale';
 import { useLocale } from '../../shared/i18n/locale';
 import { resolveLocale, translate, type LocalePreference } from '../../shared/i18n/messages';
 import { Select } from '../../shared/ui/Select';
+import styles from './LocaleProvider.module.css';
 
 const storageKey = 'docksight.locale';
 
@@ -56,9 +58,9 @@ export function LanguageSwitch() {
   const { preference, setPreference, t } = useLocale();
   const id = useId();
   return (
-    <label className="language-switch" htmlFor={id}>
+    <label className={`${styles['language-switch']}`} htmlFor={id}>
       <Languages size={16} aria-hidden="true" />
-      <span className="sr-only">{t('Language')}</span>
+      <span className={`sr-only ${sharedStyles['sr-only']}`}>{t('Language')}</span>
       <Select<LocalePreference>
         id={id}
         label={t('Language')}
