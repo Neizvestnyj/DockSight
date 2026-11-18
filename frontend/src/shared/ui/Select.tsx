@@ -41,7 +41,7 @@ export function Select<T extends string>({
   const search = useRef({ text: '', time: 0 });
   const enabled = options.filter((row) => !row.disabled);
   const selected = options.find((row) => row.value === value);
-  const initial = enabled.find((row) => row.value === value)?.value ?? enabled[0]?.value ?? value;
+  const initial = initialChoice(enabled, value);
   const expanded = open && !disabled;
   const { anchor: trigger, panel } = useFloatingPanel<HTMLButtonElement, HTMLDivElement>(expanded, true);
 
@@ -152,7 +152,7 @@ export function Select<T extends string>({
         onBlur={() => setOpen(false)}
         onClick={() => (expanded ? setOpen(false) : show())}
       >
-        <span>{selected?.label ?? options[0]?.label ?? ''}</span>
+        <span>{selectedLabel(selected, options)}</span>
         <ChevronDown size={15} aria-hidden="true" />
       </button>
       {expanded && (
@@ -165,6 +165,7 @@ export function Select<T extends string>({
           popover="manual"
         >
           {options.map((row, index) => (
+            /* eslint-disable jsx-a11y-x/click-events-have-key-events, jsx-a11y-x/interactive-supports-focus -- Keyboard focus stays on the combobox with an active descendant. */
             <div
               id={`${listId}-${index}`}
               key={row.value}
@@ -184,9 +185,20 @@ export function Select<T extends string>({
               <span>{row.label}</span>
               {row.value === value && <Check size={15} aria-hidden="true" />}
             </div>
+            /* eslint-enable jsx-a11y-x/click-events-have-key-events, jsx-a11y-x/interactive-supports-focus */
           ))}
         </div>
       )}
     </div>
   );
+}
+
+/** Start from the controlled value when enabled, otherwise use the first available choice. */
+function initialChoice<T extends string>(enabled: readonly SelectOption<T>[], value: T): T {
+  return enabled.find((row) => row.value === value)?.value ?? enabled[0]?.value ?? value;
+}
+
+/** Keep the existing fallback label when the controlled value is absent. */
+function selectedLabel<T extends string>(selected: SelectOption<T> | undefined, options: readonly SelectOption<T>[]) {
+  return selected?.label ?? options[0]?.label ?? '';
 }

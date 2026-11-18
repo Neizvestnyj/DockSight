@@ -127,6 +127,31 @@ it('keeps one observer when local acceptance refreshes the active turn identity'
   expect(result.current.running).toBe(true);
 });
 
+it('keeps observing the same turn when its explicit Stop request fails', async () => {
+  const api = new ApiClient();
+  const running = snapshot({ state: 'running', revision: 0, finished_at: null });
+  vi.spyOn(api, 'turn').mockResolvedValue(running);
+  let observerSignal: AbortSignal | undefined;
+  const observer = vi.spyOn(api, 'observeTurn').mockImplementation(async (_id, _receive, signal) => {
+    observerSignal = signal;
+    await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
+  });
+  const cancel = vi.spyOn(api, 'cancelTurn').mockRejectedValue(new TypeError('Stop response unavailable'));
+  const submissions = vi.spyOn(api, 'startTurn');
+  const { result } = renderHook(() => useSavedTurns(api, 'local', undefined, context([running])));
+
+  await waitFor(() => expect(observer).toHaveBeenCalledOnce());
+  await act(async () => {
+    await result.current.stop();
+  });
+  expect(cancel).toHaveBeenCalledOnce();
+  expect(cancel.mock.calls[0]?.[0]).toBe(running.id);
+  expect(observerSignal?.aborted).toBe(false);
+  expect(result.current.running).toBe(true);
+  expect(result.current.error).toBe('Could not stop the diagnosis. Check the saved turn.');
+  expect(submissions).not.toHaveBeenCalled();
+});
+
 it('keeps cancellation ownership on a newer refreshed turn when an older Stop response arrives late', async () => {
   const api = new ApiClient();
   const first = snapshot({ state: 'running', revision: 0, finished_at: null });
@@ -193,6 +218,49 @@ it('groups nested clarification attempts under one original question', () => {
   expect(result.current.turns[0]?.attempts).toHaveLength(3);
 });
 
+it('keeps an unsupported saved answer visible without discarding supported history', () => {
+  const api = new ApiClient();
+  const supported = snapshot();
+  const saved = context([supported]);
+  saved.detail = {
+    ...saved.detail!,
+    turns: { items: [{ id: 'unsupported-answer', code: 'history_unsupported' }, supported], next_cursor: null },
+  };
+  const submissions = vi.spyOn(api, 'startTurn');
+  const { result } = renderHook(() => useSavedTurns(api, 'local', undefined, saved));
+
+  expect(result.current.turns).toHaveLength(2);
+  expect(result.current.turns[0]).toMatchObject({
+    id: 'unsupported-answer',
+    state: 'failed',
+    code: 'history_unsupported',
+    error: 'This saved answer uses an unsupported schema.',
+  });
+  expect(result.current.turns[1]).toMatchObject({ id: supported.id, query: supported.query });
+  expect(submissions).not.toHaveBeenCalled();
+});
+
+it('retains saved answers and the cursor when loading older history fails', async () => {
+  const api = new ApiClient();
+  const existing = snapshot();
+  const saved = context([existing]);
+  saved.detail = { ...saved.detail!, turns: { items: [existing], next_cursor: 'older-page' } };
+  const older = vi.spyOn(api, 'olderTurns').mockRejectedValue(new TypeError('Read unavailable'));
+  const submissions = vi.spyOn(api, 'startTurn');
+  const { result } = renderHook(() => useSavedTurns(api, 'local', undefined, saved));
+
+  await act(async () => {
+    await result.current.older();
+  });
+
+  expect(older).toHaveBeenCalledOnce();
+  expect(result.current.turns[0]).toMatchObject({ id: existing.id, query: existing.query });
+  expect(result.current.nextCursor).toBe('older-page');
+  expect(result.current.olderLoading).toBe(false);
+  expect(result.current.error).toBe('Could not load older answers.');
+  expect(submissions).not.toHaveBeenCalled();
+});
+
 it('posts clarification without replacement text and retains parent compare-and-swap', async () => {
   const api = new ApiClient();
   const target = { kind: 'compose' as const, name: 'shop' };
@@ -214,7 +282,7 @@ it('posts clarification without replacement text and retains parent compare-and-
     expected_revision: 4,
     target,
     model: null,
-    submission_id: expect.any(String),
+    submission_id: expect.any(String) as unknown,
   });
   expect(result.current.turns).toHaveLength(1);
 });
@@ -235,6 +303,75 @@ it('recovers a lost acceptance response through an owned read without posting ag
   });
   expect(submissions).toBe(1);
   expect(result.current.turns[0]?.serverTurnId).toBe(accepted.id);
+});
+
+it('reports an unresolved lost acceptance without submitting again or observing another turn', async () => {
+  vi.useFakeTimers();
+  const api = new ApiClient();
+  const saved = context([]);
+  const submissions = vi.spyOn(api, 'startTurn').mockRejectedValue(new TypeError('Lost response'));
+  const reads = vi.spyOn(api, 'investigation').mockResolvedValue(saved.detail!);
+  const observations = vi.spyOn(api, 'observeTurn');
+  const { result } = renderHook(() => useSavedTurns(api, 'local', undefined, saved));
+
+  await act(async () => {
+    await result.current.run('Original question');
+    await vi.advanceTimersByTimeAsync(30_000);
+  });
+
+  expect(submissions).toHaveBeenCalledOnce();
+  expect(reads).toHaveBeenCalledOnce();
+  expect(observations).not.toHaveBeenCalled();
+  expect(result.current.turns).toEqual([]);
+  expect(result.current.errorSource).toBe('client');
+  expect(result.current.error).toBe('Could not submit the question. Check saved history before trying again.');
+  expect(saved.detail?.workspace.draft).toBe('My draft');
+});
+
+it('waits for both visibility and connectivity before reading the existing running turn', async () => {
+  const online = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+  const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+  const api = new ApiClient();
+  const running = snapshot({ state: 'running', revision: 0, finished_at: null });
+  const reads = vi.spyOn(api, 'turn').mockResolvedValue({ ...running, state: 'completed', revision: 1 });
+  const submissions = vi.spyOn(api, 'startTurn');
+  renderHook(() => useSavedTurns(api, 'local', undefined, context([running])));
+
+  await act(async () => {});
+  expect(reads).not.toHaveBeenCalled();
+  online.mockReturnValue(true);
+  await act(async () => {
+    window.dispatchEvent(new Event('online'));
+  });
+  expect(reads).not.toHaveBeenCalled();
+  visibility.mockReturnValue('visible');
+  await act(async () => {
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await waitFor(() => expect(reads).toHaveBeenCalledOnce());
+  expect(reads.mock.calls[0]?.[0]).toBe(running.id);
+  expect(submissions).not.toHaveBeenCalled();
+});
+
+it('detaches a hidden offline observer before it can read after reconnect', async () => {
+  const online = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+  const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+  const api = new ApiClient();
+  const running = snapshot({ state: 'running', revision: 0, finished_at: null });
+  const reads = vi.spyOn(api, 'turn');
+  const submissions = vi.spyOn(api, 'startTurn');
+  const { unmount } = renderHook(() => useSavedTurns(api, 'local', undefined, context([running])));
+
+  await act(async () => {});
+  unmount();
+  online.mockReturnValue(true);
+  visibility.mockReturnValue('visible');
+  await act(async () => {
+    window.dispatchEvent(new Event('online'));
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  expect(reads).not.toHaveBeenCalled();
+  expect(submissions).not.toHaveBeenCalled();
 });
 
 it('stops observer retries on authentication rejection and never resubmits', async () => {

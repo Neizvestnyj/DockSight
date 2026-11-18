@@ -42,12 +42,12 @@ describe('system availability', async () => {
   });
 
   it('authenticates status requests and preserves the HTTP status of rejected credentials', async () => {
-    const fetcher = vi.fn().mockResolvedValue(Response.json(healthy));
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json(healthy));
     const api = new ApiClient('/api/v1', 'test-token', fetcher);
     const signal = new AbortController().signal;
     expect(await api.systemStatus('demo-eu', signal)).toEqual(healthy);
     expect(fetcher.mock.calls[0]![0]).toBe('/api/v1/system/status?host=demo-eu');
-    expect(new Headers(fetcher.mock.calls[0]![1].headers).get('Authorization')).toBe('Bearer test-token');
+    expect(new Headers(fetcher.mock.calls[0]![1]!.headers).get('Authorization')).toBe('Bearer test-token');
     fetcher.mockResolvedValue(
       Response.json({ code: 'unauthorized', message: 'Authentication required' }, { status: 401 }),
     );
@@ -57,8 +57,8 @@ describe('system availability', async () => {
   it('keeps Demo checks manual and retains old timestamps while refreshing', async () => {
     const client = new DemoClient();
     let finish: (value: typeof healthy) => void = () => {};
-    client.systemStatus = vi
-      .fn()
+    const systemStatus = vi
+      .fn<DemoClient['systemStatus']>()
       .mockResolvedValueOnce(healthy)
       .mockImplementationOnce(
         () =>
@@ -66,20 +66,21 @@ describe('system availability', async () => {
             finish = resolve;
           }),
       );
+    client.systemStatus = systemStatus;
     const { result } = renderHook(() => useSystemStatus(client, 'demo-eu'));
     await waitFor(() => expect(result.current.loading).toBe(false));
-    expect(client.systemStatus).toHaveBeenCalledTimes(1);
+    expect(systemStatus).toHaveBeenCalledTimes(1);
     act(() => result.current.refresh());
     expect(result.current.loading).toBe(true);
     expect(result.current.data?.docker.checked_at).toBe(check.checked_at);
     await act(async () => finish(healthy));
-    expect(client.systemStatus).toHaveBeenCalledTimes(2);
+    expect(systemStatus).toHaveBeenCalledTimes(2);
   });
 
   it('distinguishes rejected credentials from a network failure and retains previous dependency results', async () => {
     const client = new DemoClient();
     client.systemStatus = vi
-      .fn()
+      .fn<DemoClient['systemStatus']>()
       .mockResolvedValueOnce(healthy)
       .mockRejectedValueOnce(new ApiError('private upstream', 'unauthorized', undefined, 'server', 401))
       .mockRejectedValueOnce(new TypeError('private endpoint'));
@@ -99,7 +100,7 @@ describe('system availability', async () => {
     let finish: (value: typeof healthy) => void = () => {};
     let signal: AbortSignal | undefined;
     client.systemStatus = vi
-      .fn()
+      .fn<DemoClient['systemStatus']>()
       .mockImplementationOnce((_host, pendingSignal) => {
         signal = pendingSignal;
         return new Promise((resolve) => {

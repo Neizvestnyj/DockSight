@@ -4,7 +4,8 @@ import type { MessageKey } from '../../../shared/i18n/messages';
 import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, ArrowRight, Check, RefreshCw } from 'lucide-react';
 import { executeOnce } from '../model/executeOnce';
-import type { Action, Transport } from '../../../shared/contracts/contracts';
+import type { Action } from '../../../shared/contracts/contracts';
+import type { Transport } from '../../../shared/contracts/transport';
 import { Modal, Status } from '../../../shared/ui/ui';
 import styles from './ActionReview.module.css';
 import modalStyles from '../../../shared/ui/Modal.module.css';
@@ -113,6 +114,77 @@ export function ActionReview({ action, client, demo, name, close, update, keys }
     }
   }
 
+  /** Explain the authoritative outcome and any unresolved delivery state. */
+  function outcomeMessages() {
+    return (
+      <>
+        {current.state !== 'prepared' && (
+          <p className={styles['operation-message']}>
+            {current.state === 'succeeded' && <Check size={16} />}
+            {current.message}
+          </p>
+        )}
+        {state === 'indeterminate' && (
+          <p className={`inline-warning ${controlStyles['inline-warning']}`}>
+            <AlertTriangle size={17} />
+            {t(
+              'The Docker result is not confirmed. Inspect Docker directly. This mutation cannot be repeated automatically; the target is fenced by the backend.',
+            )}
+          </p>
+        )}
+        {state === 'succeeded' && (
+          <p className={`section-note ${controlStyles['section-note']}`}>
+            {t(
+              'These cards remain historical observations. Run a new diagnosis to observe the current container state.',
+            )}
+          </p>
+        )}
+        {state === 'expired' && (
+          <p className={`inline-warning ${controlStyles['inline-warning']}`}>
+            {t('This action has expired. Run a new diagnosis to obtain a fresh server-prepared action.')}
+          </p>
+        )}
+        {error && (
+          <p role="alert" className={`inline-error ${controlStyles['inline-error']}`}>
+            {t(error)}
+          </p>
+        )}
+      </>
+    );
+  }
+
+  /** Offer only operations allowed by the current authoritative action state. */
+  function actionControls() {
+    return (
+      <footer className={`${modalStyles['modal-actions']} modal-actions`}>
+        <button className={`secondary ${controlStyles['secondary']}`} onClick={close}>
+          {t(state === 'prepared' ? 'Cancel' : 'Close')}
+        </button>
+        {(submitted || keys.has(current.id) || current.state !== 'prepared') && (
+          <button className={`secondary ${controlStyles['secondary']}`} disabled={busy} onClick={() => void check()}>
+            <RefreshCw size={14} />
+            {t('Check existing action')}
+          </button>
+        )}
+        {available &&
+          checkedPrepared &&
+          state === 'prepared' &&
+          !submitted &&
+          (!keys.has(current.id) || checkedPrepared) && (
+            <button className={`primary ${controlStyles['primary']}`} disabled={busy} onClick={() => void confirm()}>
+              {keys.has(current.id) ? t(`Retry confirmed ${current.operation}`) : t(`Confirm ${current.operation}`)}
+              <ArrowRight size={15} />
+            </button>
+          )}
+        {busy && (
+          <span role="status" className={`muted ${controlStyles['muted']}`}>
+            {t('Checking delivery…')}
+          </span>
+        )}
+      </footer>
+    );
+  }
+
   return (
     <Modal
       title={current.state === 'prepared' && !submitted ? t(`Review ${current.operation}`) : t('Action outcome')}
@@ -156,61 +228,8 @@ export function ActionReview({ action, client, demo, name, close, update, keys }
           </dd>
         </div>
       </dl>
-      {current.state !== 'prepared' && (
-        <p className={styles['operation-message']}>
-          {current.state === 'succeeded' && <Check size={16} />}
-          {current.message}
-        </p>
-      )}
-      {state === 'indeterminate' && (
-        <p className={`inline-warning ${controlStyles['inline-warning']}`}>
-          <AlertTriangle size={17} />
-          {t(
-            'The Docker result is not confirmed. Inspect Docker directly. This mutation cannot be repeated automatically; the target is fenced by the backend.',
-          )}
-        </p>
-      )}
-      {state === 'succeeded' && (
-        <p className={`section-note ${controlStyles['section-note']}`}>
-          {t('These cards remain historical observations. Run a new diagnosis to observe the current container state.')}
-        </p>
-      )}
-      {state === 'expired' && (
-        <p className={`inline-warning ${controlStyles['inline-warning']}`}>
-          {t('This action has expired. Run a new diagnosis to obtain a fresh server-prepared action.')}
-        </p>
-      )}
-      {error && (
-        <p role="alert" className={`inline-error ${controlStyles['inline-error']}`}>
-          {t(error)}
-        </p>
-      )}
-      <footer className={`${modalStyles['modal-actions']} modal-actions`}>
-        <button className={`secondary ${controlStyles['secondary']}`} onClick={close}>
-          {t(state === 'prepared' ? 'Cancel' : 'Close')}
-        </button>
-        {(submitted || keys.has(current.id) || current.state !== 'prepared') && (
-          <button className={`secondary ${controlStyles['secondary']}`} disabled={busy} onClick={() => void check()}>
-            <RefreshCw size={14} />
-            {t('Check existing action')}
-          </button>
-        )}
-        {available &&
-          checkedPrepared &&
-          state === 'prepared' &&
-          !submitted &&
-          (!keys.has(current.id) || checkedPrepared) && (
-            <button className={`primary ${controlStyles['primary']}`} disabled={busy} onClick={() => void confirm()}>
-              {keys.has(current.id) ? t(`Retry confirmed ${current.operation}`) : t(`Confirm ${current.operation}`)}
-              <ArrowRight size={15} />
-            </button>
-          )}
-        {busy && (
-          <span role="status" className={`muted ${controlStyles['muted']}`}>
-            {t('Checking delivery…')}
-          </span>
-        )}
-      </footer>
+      {outcomeMessages()}
+      {actionControls()}
     </Modal>
   );
 }

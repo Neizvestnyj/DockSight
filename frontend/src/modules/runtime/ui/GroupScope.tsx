@@ -74,13 +74,7 @@ export function GroupScope({
             </button>
           </div>
           {scope.error ? (
-            <p role="alert">
-              {t(
-                scope.kind === 'swarm'
-                  ? 'Could not read stacks. Swarm requires a manager on this host.'
-                  : 'Could not read Compose projects. Retry the group read.',
-              )}
-            </p>
+            <p role="alert">{t(groupError(scope.kind))}</p>
           ) : (
             !scope.loading && !scope.groups.length && <p>{t('No groups of this kind were returned.')}</p>
           )}
@@ -91,4 +85,11 @@ export function GroupScope({
       )}
     </section>
   );
+}
+
+/** Explain the failed group read for its selected runtime. */
+function groupError(kind: GroupKind) {
+  return kind === 'swarm'
+    ? 'Could not read stacks. Swarm requires a manager on this host.'
+    : 'Could not read Compose projects. Retry the group read.';
 }

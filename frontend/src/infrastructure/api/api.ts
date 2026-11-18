@@ -7,10 +7,10 @@ import {
   metricsSchema,
   stackSchema,
   systemStatusSchema,
-  type Transport,
   type TurnInput,
   type TurnEvent,
 } from '../../shared/contracts/contracts';
+import type { Transport } from '../../shared/contracts/transport';
 import { ApiError } from '../../shared/contracts/errors';
 import { consumeEvents, consumeSnapshots } from './stream';
 import {

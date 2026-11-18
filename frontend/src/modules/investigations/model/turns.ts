@@ -1,14 +1,14 @@
 import type { Answer, DiagnosticTarget, TargetSelection, TraceStep } from '../../../shared/contracts/contracts';
 import type { SavedTurn } from '../../../shared/contracts/investigation-contracts';
 
-export interface TurnTrace {
+interface TurnTrace {
   provider: string | null;
   model: string | null;
   started_at: string | null;
   steps: TraceStep[];
 }
 
-export interface ToolProgress {
+interface ToolProgress {
   tool: string;
   state: 'running' | 'done' | 'failed';
 }

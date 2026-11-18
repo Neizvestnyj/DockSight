@@ -121,13 +121,14 @@ describe('investigation workspace', async () => {
       .fn()
       .mockResolvedValueOnce(action)
       .mockResolvedValue({ ...action, state: 'failed', message: 'Target changed' });
-    client.execute = vi.fn();
+    const execute = vi.fn();
+    client.execute = execute;
     render(<ActionReview action={action} client={client} keys={new Map()} demo close={() => {}} update={() => {}} />);
     expect(await screen.findByText('running', { exact: true })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Confirm stop' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Check existing action' }));
     expect(await screen.findByText('failed', { exact: true })).toBeInTheDocument();
-    expect(client.execute).not.toHaveBeenCalled();
+    expect(execute).not.toHaveBeenCalled();
   });
   it('does not replay a demo result after changing away from and back to a host', async () => {
     await renderDemoApp();
@@ -143,13 +144,14 @@ describe('investigation workspace', async () => {
     const action = widget.actions[0]!;
     const client = new DemoClient();
     client.action = vi.fn().mockResolvedValue(action);
-    client.execute = vi.fn().mockResolvedValue({ ...action, state: 'succeeded' });
+    const execute = vi.fn().mockResolvedValue({ ...action, state: 'succeeded' });
+    client.execute = execute;
     const keys = new Map([[action.id, 'retained-execution-key']]);
     render(<ActionReview action={action} client={client} keys={keys} demo close={() => {}} update={() => {}} />);
     expect(screen.queryByRole('button', { name: 'Confirm stop' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Check existing action' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Retry confirmed stop' }));
-    await waitFor(() => expect(client.execute).toHaveBeenCalledWith(action.id, 'retained-execution-key'));
+    await waitFor(() => expect(execute).toHaveBeenCalledWith(action.id, 'retained-execution-key'));
   });
   it('connects a conclusion reference to a focusable evidence observation', async () => {
     await renderDemoApp();

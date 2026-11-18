@@ -89,10 +89,12 @@
   padding: 12px 0;
   border-top: 1px solid var(--rule);
 }
+/* stylelint-disable no-descending-specificity -- Preserve the established higher-specificity override. */
 .action-suggestion > span {
   color: var(--muted);
   font-size: 12px;
 }
+/* stylelint-enable no-descending-specificity */
 .action-suggestion p {
   margin: 4px 0 8px;
   font-size: 13px;
@@ -170,11 +172,13 @@
 .stack-row + .stack-row {
   margin-top: 16px;
 }
+/* stylelint-disable no-descending-specificity -- Preserve the established higher-specificity override. */
 .stack-row > div > span {
   display: block;
   font-size: 11px;
   margin-top: 2px;
 }
+/* stylelint-enable no-descending-specificity */
 .stack-total {
   text-align: right;
 }
@@ -186,12 +190,14 @@
   gap: 4px;
   grid-column: 1 / -1;
 }
+/* stylelint-disable no-descending-specificity -- Preserve the established higher-specificity override. */
 .stack-segments > span {
   flex: 1;
   height: 4px;
   background: var(--active);
   border-radius: 0;
 }
+/* stylelint-enable no-descending-specificity */
 .stack-segments > span:global(.is-running) {
   background: var(--positive);
 }

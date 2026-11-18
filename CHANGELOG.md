@@ -12,6 +12,8 @@ Dates record merges into `master`. Version links show the corresponding changes.
   retaining investigation, session, and action behavior.
 - Measure frontend coverage for all production TypeScript files and check module dependency boundaries.
 - Keep frontend presentation styles with their owning controls and product modules.
+- Enforce frontend type, accessibility, style, dependency, and unused-code checks locally and in CI.
+- Document frontend module boundaries and investigation recovery behavior.
 
 ### Fixed
 

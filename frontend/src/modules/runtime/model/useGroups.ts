@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import type { GroupTarget, Stack, Transport } from '../../../shared/contracts/contracts';
+import type { GroupTarget, Stack } from '../../../shared/contracts/contracts';
+import type { Transport } from '../../../shared/contracts/transport';
 
 export type GroupKind = 'all' | GroupTarget['kind'];
 

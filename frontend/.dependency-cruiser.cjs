@@ -36,14 +36,15 @@ module.exports = {
       to: { path: '^src/modules/[^/]+/(?!index\\.)' },
     },
     {
-      name: 'migration-no-new-flat-consumers',
+      name: 'bootstrap-is-entry-only',
       severity: 'error',
-      from: { path: '^src/(app|modules|infrastructure|shared)/' },
-      to: { path: '^src/[^/]+\\.(ts|tsx)$' },
+      from: { path: '^src/' },
+      to: { path: '^src/main\\.tsx$' },
     },
   ],
   options: {
     doNotFollow: { path: 'node_modules' },
+    tsPreCompilationDeps: true,
     tsConfig: { fileName: 'tsconfig.json' },
     enhancedResolveOptions: { exportsFields: ['exports'], conditionNames: ['import', 'default'] },
   },

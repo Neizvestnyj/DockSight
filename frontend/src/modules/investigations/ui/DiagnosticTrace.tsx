@@ -17,7 +17,7 @@ export function DiagnosticTrace({ turn, host, demo }: { turn: Turn; host: string
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const detailsId = useId();
   const trace = turn.trace;
-  const selected = trace?.steps.find((step) => step.id === selectedId) ?? trace?.steps.at(-1);
+  const selected = selectedTraceStep(trace, selectedId);
 
   useEffect(() => {
     if (!selectedId || !window.matchMedia?.('(max-width: 1100px)').matches) return;
@@ -194,10 +194,14 @@ export function DiagnosticTrace({ turn, host, demo }: { turn: Turn; host: string
   );
 }
 
+/** Retain a selected trace step, falling back to the most recent one. */
+function selectedTraceStep(trace: Turn['trace'], selectedId: string | null) {
+  return trace?.steps.find((step) => step.id === selectedId) ?? trace?.steps.at(-1);
+}
+
 /** Render measured values and sanitized proposal text without interpreting model content as markup. */
 function StepDetails({ step, interrupted }: { step: TraceStep; interrupted: boolean }) {
   const { t, locale } = useLocale();
-  const exploration = step.operation === 'collect_evidence';
   const label = diagnosticOperations[step.operation];
   const count = (value: number | null) => (value === null ? t('Unavailable') : value.toLocaleString(locale));
   return (
@@ -258,39 +262,48 @@ function StepDetails({ step, interrupted }: { step: TraceStep; interrupted: bool
       {step.kind === 'validation' && step.state === 'succeeded' && (
         <p>{t('The schema and evidence references passed validation. Cards were assembled by the backend.')}</p>
       )}
-      {step.kind === 'model' && (
-        <>
-          <h4>{t(exploration ? 'Model response · sanitized' : 'Model proposal · sanitized')}</h4>
-          <p className={`section-note ${controlStyles['section-note']}`}>
-            {t(
-              exploration
-                ? 'Adapter output: assistant text and requested tools. Tool arguments are untrusted until validated.'
-                : 'Recognized proposal fields before card assembly. Formatting and secrets may be changed.',
-            )}
-          </p>
-          {step.response !== null ? (
-            <pre
-              className={`${styles['trace-response']}`}
-              tabIndex={0}
-              aria-label={t(exploration ? 'Sanitized model response' : 'Sanitized model proposal')}
-            >
-              {step.response}
-            </pre>
-          ) : (
-            <p className={`empty-note ${controlStyles['empty-note']}`}>
-              {t(
-                exploration
-                  ? 'No displayable model response has been received.'
-                  : 'Proposal unavailable. Invalid or oversized response bodies are withheld.',
-              )}
-            </p>
+      {step.kind === 'model' && <ModelStepResponse step={step} />}
+    </>
+  );
+}
+
+/** Display sanitized model output as text with its truncation state. */
+function ModelStepResponse({ step }: { step: TraceStep }) {
+  const { t } = useLocale();
+  const exploration = step.operation === 'collect_evidence';
+  return (
+    <>
+      <h4>{t(exploration ? 'Model response · sanitized' : 'Model proposal · sanitized')}</h4>
+      <p className={`section-note ${controlStyles['section-note']}`}>
+        {t(
+          exploration
+            ? 'Adapter output: assistant text and requested tools. Tool arguments are untrusted until validated.'
+            : 'Recognized proposal fields before card assembly. Formatting and secrets may be changed.',
+        )}
+      </p>
+      {step.response !== null ? (
+        /* eslint-disable jsx-a11y-x/no-noninteractive-tabindex -- Keyboard users must be able to scroll the response. */
+        <pre
+          className={`${styles['trace-response']}`}
+          tabIndex={0}
+          aria-label={t(exploration ? 'Sanitized model response' : 'Sanitized model proposal')}
+        >
+          {step.response}
+        </pre>
+      ) : (
+        /* eslint-enable jsx-a11y-x/no-noninteractive-tabindex */
+        <p className={`empty-note ${controlStyles['empty-note']}`}>
+          {t(
+            exploration
+              ? 'No displayable model response has been received.'
+              : 'Proposal unavailable. Invalid or oversized response bodies are withheld.',
           )}
-          {step.response_truncated && (
-            <p className={`warning-text ${controlStyles['warning-text']}`}>
-              {t('Preview limited to 16 KiB. The displayed response is incomplete.')}
-            </p>
-          )}
-        </>
+        </p>
+      )}
+      {step.response_truncated && (
+        <p className={`warning-text ${controlStyles['warning-text']}`}>
+          {t('Preview limited to 16 KiB. The displayed response is incomplete.')}
+        </p>
       )}
     </>
   );

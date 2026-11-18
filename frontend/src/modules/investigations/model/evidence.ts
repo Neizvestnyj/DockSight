@@ -35,16 +35,21 @@ export function evidenceResource(row: Evidence, answer: Answer): { key: string; 
             answer.host_overview?.members.find((item) => item.container_id === row.container_id)?.name));
     return { key: `${row.host}/${row.container_id}`, name: name ?? `${row.container_id.slice(0, 12)}…` };
   }
-  const stacks = row.kind === 'stack' && Array.isArray(row.data.stacks) ? row.data.stacks : [];
-  const names = stacks.flatMap((item) =>
-    item && typeof item === 'object' && 'name' in item && typeof item.name === 'string'
-      ? [`${'kind' in item && item.kind === 'swarm' ? 'Swarm' : 'Compose'} / ${item.name}`]
-      : [],
-  );
+  const names = stackNames(row);
   return {
     key: `${row.host}/${row.kind}/${[...names].sort().join('|')}`,
     name: names.length ? names.join(' · ') : row.host,
   };
+}
+
+/** Read only named stack entries from the retained evidence payload. */
+function stackNames(row: Evidence): string[] {
+  const stacks: unknown[] = row.kind === 'stack' && Array.isArray(row.data.stacks) ? row.data.stacks : [];
+  return stacks.flatMap((item) =>
+    item && typeof item === 'object' && 'name' in item && typeof item.name === 'string'
+      ? [`${'kind' in item && item.kind === 'swarm' ? 'Swarm' : 'Compose'} / ${item.name}`]
+      : [],
+  );
 }
 
 export interface ContainerWidgetGroup {

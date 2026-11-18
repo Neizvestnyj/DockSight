@@ -15,6 +15,8 @@ export async function available(signal: AbortSignal): Promise<void> {
     };
     const abort = () => {
       finish();
+      // Forward the exact abort reason to preserve cancellation semantics.
+      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
       reject(signal.reason);
     };
     window.addEventListener('online', check);
@@ -29,6 +31,8 @@ export async function delay(milliseconds: number, signal: AbortSignal) {
   await new Promise<void>((resolve, reject) => {
     const abort = () => {
       clearTimeout(timer);
+      // Forward the exact abort reason to preserve cancellation semantics.
+      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
       reject(signal.reason);
     };
     const timer = setTimeout(() => {

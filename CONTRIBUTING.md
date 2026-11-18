@@ -151,6 +151,7 @@ npm --prefix frontend run build
 npm --prefix frontend run test:browser
 ```
 
+`check` runs the frontend static quality gates. `test` measures coverage across production TypeScript and TSX files.
 The ordinary browser suite requires installed Chrome and uses the production preview with mocked HTTP responses.
 Build first.
 Set `PLAYWRIGHT_PORT` if the default preview port is occupied. Reports and failure screenshots are temporary test

@@ -13,6 +13,7 @@
 .runtime-feedback {
   color: var(--muted);
   font-size: 12px;
+  margin: 16px 0;
 }
 .container-view-heading {
   justify-content: space-between;
@@ -37,9 +38,6 @@
 .container-view-actions {
   flex-wrap: wrap;
   flex: none;
-}
-.runtime-feedback {
-  margin: 16px 0;
 }
 .container-view-grid {
   display: grid;
@@ -78,6 +76,7 @@
   padding: 0 16px 16px;
   font-size: 12px;
 }
+/* stylelint-disable no-descending-specificity -- Preserve the established higher-specificity override. */
 .runtime-metadata > div,
 .runtime-metrics > div {
   display: flex;
@@ -86,6 +85,7 @@
   gap: 16px;
   padding-top: 8px;
 }
+/* stylelint-enable no-descending-specificity */
 .runtime-metadata dt,
 .runtime-metrics dt {
   color: var(--muted);
@@ -125,11 +125,13 @@
   display: grid;
   gap: 12px;
 }
+/* stylelint-disable no-descending-specificity -- Preserve the established higher-specificity override. */
 .runtime-loading span {
   background: var(--raised);
   height: 24px;
   border-radius: var(--radius-control);
 }
+/* stylelint-enable no-descending-specificity */
 @media (max-width: 760px) {
   .container-view-grid {
     grid-template-columns: 1fr;
@@ -157,6 +159,7 @@
   .runtime-lifecycle dt {
     margin-bottom: 0;
   }
+  /* stylelint-disable no-descending-specificity -- Preserve the established higher-specificity override. */
   .runtime-lifecycle dt,
   .container-view .runtime-metadata,
   .runtime-panel .runtime-metrics dd:global(.unavailable),
@@ -166,6 +169,7 @@
   .runtime-panel :global(.widget-head) h3 {
     font-size: 14px;
   }
+  /* stylelint-enable no-descending-specificity */
   .runtime-panel :global(.widget-foot),
   .runtime-panel :global(.widget-head) > span,
   .runtime-panel :global(.log-toolbar) {

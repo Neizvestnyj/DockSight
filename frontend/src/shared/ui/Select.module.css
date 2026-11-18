@@ -41,8 +41,6 @@
   background: var(--surface);
   color: var(--text);
   box-shadow: 0 8px 28px rgb(19 20 22 / 12%);
-}
-.select-popup {
   padding: 5px;
   overflow: auto;
   overscroll-behavior: contain;
@@ -65,11 +63,13 @@
 .select-option[data-active='true'] {
   background: var(--active);
 }
+/* stylelint-disable no-descending-specificity -- Preserve the established higher-specificity override. */
 .select-option > svg {
   position: absolute;
   right: 10px;
   color: var(--accent);
 }
+/* stylelint-enable no-descending-specificity */
 .select-option[aria-disabled='true'] {
   color: var(--faint);
   cursor: not-allowed;

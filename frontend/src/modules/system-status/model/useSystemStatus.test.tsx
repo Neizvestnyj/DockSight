@@ -106,7 +106,7 @@ describe('automatic system checks', () => {
     await advance(50_000);
     expect(check).toHaveBeenCalledTimes(2);
     visibility.mockReturnValue('hidden');
-    act(() => document.dispatchEvent(new Event('visibilitychange')));
+    void act(() => document.dispatchEvent(new Event('visibilitychange')));
     await advance(60_000);
     expect(check).toHaveBeenCalledTimes(2);
     visibility.mockReturnValue('visible');
@@ -116,7 +116,7 @@ describe('automatic system checks', () => {
     await act(async () => result.current.refreshIfStale());
     expect(check).toHaveBeenCalledTimes(4);
     online.mockReturnValue(false);
-    act(() => window.dispatchEvent(new Event('offline')));
+    void act(() => window.dispatchEvent(new Event('offline')));
     await advance(60_000);
     expect(check).toHaveBeenCalledTimes(4);
     online.mockReturnValue(true);

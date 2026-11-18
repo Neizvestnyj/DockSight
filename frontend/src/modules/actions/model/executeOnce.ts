@@ -1,4 +1,5 @@
-import type { Action, Transport } from '../../../shared/contracts/contracts';
+import type { Action } from '../../../shared/contracts/contracts';
+import type { Transport } from '../../../shared/contracts/transport';
 
 /** Resolve a lost execution response with a read, never an automatic mutation retry. */
 export async function executeOnce(

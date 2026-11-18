@@ -5,7 +5,7 @@
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   --ground: #eef1f3;
-  --surface: #ffffff;
+  --surface: #fff;
   --raised: #f5f7f8;
   --active: #e4e8eb;
   --border: #e8eaec;
@@ -50,6 +50,8 @@ select,
 textarea {
   font: inherit;
   color: inherit;
+  border: 1px solid var(--control);
+  border-radius: var(--radius-control);
 }
 button,
 select,
@@ -61,15 +63,6 @@ button {
   align-items: center;
   justify-content: center;
   gap: 8px;
-}
-button,
-input,
-select,
-textarea {
-  border: 1px solid var(--control);
-  border-radius: var(--radius-control);
-}
-button {
   background: var(--surface);
 }
 button:hover {
@@ -91,6 +84,7 @@ button:disabled:active {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
 }
+/* stylelint-disable no-descending-specificity -- Preserve the established higher-specificity override. */
 button,
 a,
 input,
@@ -100,6 +94,7 @@ select {
     border-color 120ms,
     outline-offset 120ms;
 }
+/* stylelint-enable no-descending-specificity */
 a {
   color: var(--accent);
 }

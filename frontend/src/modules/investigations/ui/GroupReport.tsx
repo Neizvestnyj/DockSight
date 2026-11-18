@@ -55,6 +55,7 @@ export function GroupReport({
           {t('Service counts include remote nodes. Container logs are limited to this engine.')}
         </p>
       )}
+      {/* eslint-disable-next-line jsx-a11y-x/no-noninteractive-tabindex -- The scrollable region needs keyboard focus. */}
       <div className={`${styles['group-members']}`} tabIndex={0} role="region" aria-label={t('Group members')}>
         {members.map((row) => {
           const log = logs.find((item) => item.container_id === row.id);

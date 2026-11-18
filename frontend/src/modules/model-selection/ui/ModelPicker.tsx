@@ -72,8 +72,13 @@ export function ModelPicker({
   const provider = providerOverride ?? selection?.provider ?? providers?.default.provider ?? 'ollama';
   const configured = providers?.providers.find((row) => row.id === provider)?.configured;
   const read = catalogs[provider];
-  const rows = read?.data?.models.filter((row) => row.id.toLowerCase().includes(search.trim().toLowerCase())) ?? [];
+  const rows = filteredRows();
   const failed = read?.error || (read?.data && read.data.code !== 'ok');
+
+  /** Filter only the current provider's acknowledged catalog. */
+  function filteredRows() {
+    return read?.data?.models.filter((row) => row.id.toLowerCase().includes(search.trim().toLowerCase())) ?? [];
+  }
 
   useEffect(() => {
     void loadProviders();
@@ -81,6 +86,88 @@ export function ModelPicker({
   useEffect(() => {
     if (configured) void loadCatalog(provider);
   }, [provider, configured, loadCatalog]);
+
+  /** Present the current catalog without committing a model until a row is chosen. */
+  function catalogContent(available: NonNullable<typeof providers>) {
+    return (
+      <>
+        <label className={`field ${controlStyles['field']} ${styles['model-provider-field']}`}>
+          {t('Provider')}
+          <Select<ProviderId>
+            label={t('Provider')}
+            value={provider}
+            onChange={(next) => {
+              setProvider(next);
+              setSearch('');
+            }}
+            options={available.providers.map((row) => ({
+              value: row.id,
+              label: `${row.name}${!row.configured ? ` · ${t('Not configured')}` : ''}`,
+              disabled: !row.configured,
+            }))}
+          />
+        </label>
+        <div className={`${styles['model-search-row']}`}>
+          <label className={`${styles['model-search']}`}>
+            <Search size={15} aria-hidden="true" />
+            <span className={`sr-only ${sharedStyles['sr-only']}`}>{t('Search models')}</span>
+            <input
+              type="search"
+              placeholder={t('Search models')}
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+          </label>
+          <button
+            className={`icon-button ${controlStyles['icon-button']}`}
+            aria-label={t('Refresh models')}
+            title={t('Refresh models')}
+            disabled={read?.loading || !configured}
+            onClick={() => void loadCatalog(provider, true)}
+          >
+            <RefreshCw size={16} className={read?.loading ? `spin ${feedbackStyles['spin']}` : undefined} />
+          </button>
+        </div>
+        {catalogResults()}
+      </>
+    );
+  }
+
+  /** Keep catalog feedback and its selectable rows tied to the active provider. */
+  function catalogResults() {
+    return (
+      <>
+        <div className={`${styles['model-catalog-feedback']}`} role="status">
+          {failed
+            ? t('Could not refresh the catalog. Showing previously received or configured models.')
+            : read?.loading
+              ? t(read.data?.models.length ? 'Refreshing models…' : 'Loading models…')
+              : t('Models: {count}', { count: read?.data?.models.length ?? 0 })}
+        </div>
+        <div className={`${styles['model-options']}`} aria-label={t('Models')} aria-busy={read?.loading ?? false}>
+          {rows.map((row) => {
+            const selected = selection?.provider === provider && selection.model === row.id;
+            return (
+              <button
+                key={row.id}
+                className={`${styles['model-option']}`}
+                aria-pressed={selected}
+                onClick={() => choose({ provider, model: row.id })}
+              >
+                <span>{row.id}</span>
+                {selected && <Check size={16} aria-hidden="true" />}
+              </button>
+            );
+          })}
+          {!rows.length && !read?.loading && (
+            <p className={`${styles['model-catalog-message']}`}>
+              {t(search ? 'No matching models.' : 'No models were returned.')}
+            </p>
+          )}
+        </div>
+      </>
+    );
+  }
 
   return (
     <Modal
@@ -103,73 +190,7 @@ export function ModelPicker({
           {t('Loading providers…')}
         </p>
       ) : (
-        <>
-          <label className={`field ${controlStyles['field']} ${styles['model-provider-field']}`}>
-            {t('Provider')}
-            <Select<ProviderId>
-              label={t('Provider')}
-              value={provider}
-              onChange={(next) => {
-                setProvider(next);
-                setSearch('');
-              }}
-              options={providers.providers.map((row) => ({
-                value: row.id,
-                label: `${row.name}${!row.configured ? ` · ${t('Not configured')}` : ''}`,
-                disabled: !row.configured,
-              }))}
-            />
-          </label>
-          <div className={`${styles['model-search-row']}`}>
-            <label className={`${styles['model-search']}`}>
-              <Search size={15} aria-hidden="true" />
-              <span className={`sr-only ${sharedStyles['sr-only']}`}>{t('Search models')}</span>
-              <input
-                type="search"
-                placeholder={t('Search models')}
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-              />
-            </label>
-            <button
-              className={`icon-button ${controlStyles['icon-button']}`}
-              aria-label={t('Refresh models')}
-              title={t('Refresh models')}
-              disabled={read?.loading || !configured}
-              onClick={() => void loadCatalog(provider, true)}
-            >
-              <RefreshCw size={16} className={read?.loading ? `spin ${feedbackStyles['spin']}` : undefined} />
-            </button>
-          </div>
-          <div className={`${styles['model-catalog-feedback']}`} role="status">
-            {failed
-              ? t('Could not refresh the catalog. Showing previously received or configured models.')
-              : read?.loading
-                ? t(read.data?.models.length ? 'Refreshing models…' : 'Loading models…')
-                : t('Models: {count}', { count: read?.data?.models.length ?? 0 })}
-          </div>
-          <div className={`${styles['model-options']}`} aria-label={t('Models')} aria-busy={read?.loading ?? false}>
-            {rows.map((row) => {
-              const selected = selection?.provider === provider && selection.model === row.id;
-              return (
-                <button
-                  key={row.id}
-                  className={`${styles['model-option']}`}
-                  aria-pressed={selected}
-                  onClick={() => choose({ provider, model: row.id })}
-                >
-                  <span>{row.id}</span>
-                  {selected && <Check size={16} aria-hidden="true" />}
-                </button>
-              );
-            })}
-            {!rows.length && !read?.loading && (
-              <p className={`${styles['model-catalog-message']}`}>
-                {t(search ? 'No matching models.' : 'No models were returned.')}
-              </p>
-            )}
-          </div>
-        </>
+        catalogContent(providers)
       )}
       <footer className={`${styles['model-picker-foot']}`}>
         {t('Applies to the next question. History is preserved.')}

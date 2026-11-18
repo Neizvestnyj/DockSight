@@ -55,6 +55,18 @@ export function useWorkspaceWrites({
   setDetail,
   install,
 }: WriteContext) {
+  /** Retain failed changes only while the initiating workspace still owns the write. */
+  function failWrite(failure: unknown, patch: WorkspaceChanges, id: string, epoch: number): false {
+    if (generation.current !== epoch || current.current?.id !== id) return false;
+    pending.current = { ...patch, ...pending.current };
+    const parsed = investigationWorkspaceSchema.safeParse(failure instanceof ApiError ? failure.current : null);
+    if (failure instanceof ApiError && failure.code === 'workspace_conflict' && parsed.success) {
+      conflict.current = parsed.data;
+      setSaveState('conflict');
+    } else setSaveState('error');
+    return false;
+  }
+
   /** Commit pending local changes, stopping on conflicts and retaining dirty text. */
   async function flush(): Promise<boolean> {
     clearTimeout(timer.current);
@@ -78,14 +90,7 @@ export function useWorkspaceWrites({
           setDetail(current.current);
           if (patch.draft !== undefined && pending.current.draft === undefined) showDraft(result.draft);
         } catch (failure) {
-          if (generation.current !== epoch || current.current?.id !== id) return false;
-          pending.current = { ...patch, ...pending.current };
-          const parsed = investigationWorkspaceSchema.safeParse(failure instanceof ApiError ? failure.current : null);
-          if (failure instanceof ApiError && failure.code === 'workspace_conflict' && parsed.success) {
-            conflict.current = parsed.data;
-            setSaveState('conflict');
-          } else setSaveState('error');
-          return false;
+          return failWrite(failure, patch, id, epoch);
         }
       }
       if (generation.current === epoch) setSaveState('saved');

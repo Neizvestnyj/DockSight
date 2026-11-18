@@ -1,4 +1,4 @@
-import type { Transport } from '../../shared/contracts/contracts';
+import type { Transport } from '../../shared/contracts/transport';
 
 export interface ConnectionState {
   client: Transport;

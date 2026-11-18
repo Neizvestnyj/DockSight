@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Transport } from '../../../shared/contracts/contracts';
+import type { Transport } from '../../../shared/contracts/transport';
 import type { ModelCatalog, ModelProviders, ProviderId } from '../../../shared/contracts/model-contracts';
 
 interface CatalogRead {

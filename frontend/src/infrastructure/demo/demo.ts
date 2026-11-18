@@ -16,11 +16,11 @@ import {
   type Host,
   type LogBatch,
   type SystemStatus,
-  type Transport,
   type TurnInput,
   type TurnEvent,
   type Stack,
 } from '../../shared/contracts/contracts';
+import type { Transport } from '../../shared/contracts/transport';
 
 export const scenarios = [
   {
@@ -235,6 +235,8 @@ async function delay(signal: AbortSignal): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     const abort = () => {
       clearTimeout(timer);
+      // Abort reasons are intentionally forwarded without changing their identity.
+      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
       reject(signal.reason);
     };
     const timer = setTimeout(() => {
@@ -254,6 +256,7 @@ export class DemoClient implements Transport {
   private readonly keys = new Map<string, string>();
 
   /** Return explicitly simulated dependency checks without contacting any real service. */
+  // eslint-disable-next-line @typescript-eslint/require-await -- Match the asynchronous transport contract.
   async systemStatus(host: string | null, signal: AbortSignal, selection?: ModelSelection): Promise<SystemStatus> {
     signal.throwIfAborted();
     const result = demoSystemStatus(host);
@@ -264,6 +267,7 @@ export class DemoClient implements Transport {
   }
 
   /** Expose fixture connections only; configured demo providers never require credentials. */
+  // eslint-disable-next-line @typescript-eslint/require-await -- Match the asynchronous transport contract.
   async modelProviders(signal: AbortSignal): Promise<ModelProviders> {
     signal.throwIfAborted();
     return {
@@ -279,6 +283,7 @@ export class DemoClient implements Transport {
   }
 
   /** Return visibly simulated model identities without contacting real catalogs. */
+  // eslint-disable-next-line @typescript-eslint/require-await -- Match the asynchronous transport contract.
   async models(provider: ProviderId, signal: AbortSignal): Promise<ModelCatalog> {
     signal.throwIfAborted();
     return {
@@ -330,11 +335,13 @@ export class DemoClient implements Transport {
   }
 
   /** Return only configured simulated host IDs. */
+  // eslint-disable-next-line @typescript-eslint/require-await -- Match the asynchronous transport contract.
   async hosts() {
     return demoHosts;
   }
 
   /** Keep inventory counts derived from the returned rows. */
+  // eslint-disable-next-line @typescript-eslint/require-await -- Match the asynchronous transport contract.
   async containers(host: string) {
     if (this.fault === 'offline') throw new Error('Demo: host connection unavailable.');
     if (this.fault === 'empty' || host === 'demo-empty') return [];
@@ -479,6 +486,7 @@ export class DemoClient implements Transport {
   }
 
   /** Read a retained simulation without changing its target. */
+  // eslint-disable-next-line @typescript-eslint/require-await -- Match the asynchronous transport contract.
   async action(id: string) {
     const action = this.actions.get(id);
     if (!action) throw new Error('Demo action not found. Run a fresh diagnosis.');

@@ -1,8 +1,8 @@
 import controlStyles from '../../../shared/ui/Controls.module.css';
 import { useLocale } from '../../../shared/i18n/locale';
-import { useState } from 'react';
+import { useState, type FormEvent } from 'react';
 import { ArrowRight, PlugZap } from 'lucide-react';
-import type { Transport } from '../../../shared/contracts/contracts';
+import type { Transport } from '../../../shared/contracts/transport';
 import { ApiError } from '../../../shared/contracts/errors';
 import { Modal } from '../../../shared/ui/ui';
 import { isMessageKey, type MessageKey } from '../../../shared/i18n/messages';
@@ -36,37 +36,38 @@ export function Connection({
   const [token, setToken] = useState('');
   const [error, setError] = useState<MessageKey | ''>('');
   const [busy, setBusy] = useState(false);
+
+  /** Validate the endpoint and clear the submitted credential after the connection attempt. */
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (busy) return;
+    const base = endpoint.trim().replace(/\/$/, '');
+    try {
+      const url = new URL(base, window.location.origin);
+      const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
+      if (url.protocol !== 'https:' && !(url.protocol === 'http:' && loopback))
+        throw new Error('Use HTTPS, or HTTP on localhost.');
+      if (url.username || url.password || url.search || url.hash || !url.pathname.endsWith('/api/v1'))
+        throw new Error('The API base must end in /api/v1 and contain no credentials or query.');
+      if (!token.trim()) throw new Error('Enter a bearer token.');
+      setBusy(true);
+      const secret = token.trim();
+      try {
+        const client = await connectApi({ base, token: secret });
+        setToken('');
+        connect(client);
+      } finally {
+        setToken('');
+        setBusy(false);
+      }
+    } catch (failure) {
+      setError(connectionError(failure));
+    }
+  }
   return (
     <Modal title={t('Connect to DockSight')} close={close}>
       <p>{t('Use your DockSight backend and its configured Docker hosts.')}</p>
-      <form
-        onSubmit={async (event) => {
-          event.preventDefault();
-          if (busy) return;
-          const base = endpoint.trim().replace(/\/$/, '');
-          try {
-            const url = new URL(base, window.location.origin);
-            const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
-            if (url.protocol !== 'https:' && !(url.protocol === 'http:' && loopback))
-              throw new Error('Use HTTPS, or HTTP on localhost.');
-            if (url.username || url.password || url.search || url.hash || !url.pathname.endsWith('/api/v1'))
-              throw new Error('The API base must end in /api/v1 and contain no credentials or query.');
-            if (!token.trim()) throw new Error('Enter a bearer token.');
-            setBusy(true);
-            const secret = token.trim();
-            try {
-              const client = await connectApi({ base, token: secret });
-              setToken('');
-              connect(client);
-            } finally {
-              setToken('');
-              setBusy(false);
-            }
-          } catch (failure) {
-            setError(connectionError(failure));
-          }
-        }}
-      >
+      <form onSubmit={(event) => void submit(event)}>
         <label className={`field ${controlStyles['field']}`}>
           {t('API base URL')}
           <input

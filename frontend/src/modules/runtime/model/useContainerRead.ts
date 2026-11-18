@@ -1,6 +1,7 @@
 import { useCallback, useState, type Dispatch, type SetStateAction } from 'react';
 import { ApiError } from '../../../shared/contracts/errors';
-import type { Container, LogBatch, Metrics, Transport } from '../../../shared/contracts/contracts';
+import type { Container, LogBatch, Metrics } from '../../../shared/contracts/contracts';
+import type { Transport } from '../../../shared/contracts/transport';
 import { usePolling, type PollResult, type ReadReason } from '../../../shared/lib/usePolling';
 
 export interface RuntimeRead<T> {

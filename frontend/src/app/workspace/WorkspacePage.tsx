@@ -24,8 +24,7 @@ import type { ModelSelection } from '../../shared/contracts/model-contracts';
 import { ModelPicker, ModelTrigger } from '../../modules/model-selection';
 import { useModelCatalog } from '../../modules/model-selection';
 import { ApiClient } from '../../infrastructure/api/api';
-import { useWorkspace } from '../../modules/investigations';
-import { useSavedInvestigations } from '../../modules/investigations';
+import type { useWorkspace, useSavedInvestigations } from '../../modules/investigations';
 import { SavedInvestigations } from '../../modules/investigations';
 import { hostPickerTriggerId, type ConnectionState } from './types';
 import styles from './WorkspacePage.module.css';
@@ -96,9 +95,7 @@ export function WorkspacePage({
   const availability = useSystemStatus(client, host, !hostLoading, !demo, modelSelection);
   const catalog = useModelCatalog(client);
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
-  const effectiveModel =
-    modelSelection ??
-    (availability.data ? { provider: availability.data.provider, model: availability.data.model } : undefined);
+  const effectiveModel = selectedModel();
   const [statusOpen, setStatusOpen] = useState(false);
   const { inventory, loading, fetching, inventoryError, lastRefreshed, refreshAcknowledged, refresh } = useInventory(
     client,
@@ -114,27 +111,57 @@ export function WorkspacePage({
   const [menu, setMenu] = useState(false);
   const [help, setHelp] = useState(false);
   const [composerVisible, setComposerVisible] = useState(false);
-  const name = hosts.find((row) => row.id === host)?.name ?? host;
+  const name = hostName();
   const configured = hosts.some((row) => row.id === host);
   const [targetAvailable, setTargetAvailable] = useState(scopeTarget?.kind !== 'container');
   const [selectionError, setSelectionError] = useState(false);
-  const modelAvailable =
-    !modelSelection ||
-    Boolean(
-      catalog.providers?.providers.some((row) => row.id === modelSelection.provider && row.configured) &&
-      catalog.catalogs[modelSelection.provider]?.data?.models.some((row) => row.id === modelSelection.model),
+  const modelAvailable = modelIsAvailable();
+  const groupAvailable = groupIsAvailable();
+  const continuingBlocked = continuationIsBlocked();
+
+  /** Display the explicit model or the backend's currently reported default. */
+  function selectedModel() {
+    return (
+      modelSelection ??
+      (availability.data ? { provider: availability.data.provider, model: availability.data.model } : undefined)
     );
-  const groupAvailable = !scopeTarget || scopeTarget.kind === 'container' || Boolean(groupScope.group);
-  const continuingBlocked =
-    !demo &&
-    (!configured ||
-      !modelAvailable ||
-      !targetAvailable ||
-      !groupAvailable ||
-      saved.loading ||
-      !saved.detail ||
-      saved.saveState === 'conflict' ||
-      saved.saveState === 'error');
+  }
+
+  /** Resolve only the configured host ID's current label. */
+  function hostName() {
+    return hosts.find((row) => row.id === host)?.name ?? host;
+  }
+
+  /** Require the exact saved model to remain in its configured catalog. */
+  function modelIsAvailable() {
+    return (
+      !modelSelection ||
+      Boolean(
+        catalog.providers?.providers.some((row) => row.id === modelSelection.provider && row.configured) &&
+        catalog.catalogs[modelSelection.provider]?.data?.models.some((row) => row.id === modelSelection.model),
+      )
+    );
+  }
+
+  /** Keep archived group scope readable until the same current group is selected. */
+  function groupIsAvailable() {
+    return !scopeTarget || scopeTarget.kind === 'container' || Boolean(groupScope.group);
+  }
+
+  /** Block continuation while its exact saved scope or revision is unavailable. */
+  function continuationIsBlocked() {
+    return (
+      !demo &&
+      (!configured ||
+        !modelAvailable ||
+        !targetAvailable ||
+        !groupAvailable ||
+        saved.loading ||
+        !saved.detail ||
+        saved.saveState === 'conflict' ||
+        saved.saveState === 'error')
+    );
+  }
 
   const { loadProviders, loadCatalog, providers } = catalog;
   useEffect(() => {
@@ -261,133 +288,140 @@ export function WorkspacePage({
     );
   }
 
-  const sidebarProps = {
-    hosts,
-    host,
-    hostLoading,
-    hostError,
-    retryHosts,
-    inventory: groupScope.group
-      ? inventory.filter((row) => groupScope.group!.container_ids.includes(row.id))
-      : inventory,
-    inventoryError,
-    lastRefreshed,
-    refreshAcknowledged: Boolean(refreshAcknowledged),
-    loading,
-    fetching,
-    selected: viewingContainer ? (selected?.id ?? '') : '',
-    chooseContainer,
-    refresh,
-    demo,
-    connect: () => {
-      setMenu(false);
-      connect();
-    },
-    returnDemo,
-    changeHost: (value: string) => {
-      changeHost(value);
-      setMenu(false);
-    },
-    newInvestigation: () => {
-      if (demo) {
-        investigation.clear();
-        setDraft('');
-      } else if (configured)
-        void saved.create(host).then(() => {
-          void history.refresh();
-          requestAnimationFrame(() => document.getElementById('query')?.focus());
-        });
-      openInvestigation(true);
-    },
-    openInvestigation: () => openInvestigation(),
-    about: () => {
-      setMenu(false);
-      setHelp(true);
-    },
-    savedChats: !demo ? (
-      <SavedInvestigations
-        {...history}
-        selected={saved.detail?.id}
-        open={(id) => {
-          setMenu(false);
-          void saved.open(id);
-        }}
-        remove={(id) => {
-          void history.remove(id).then((removed) => {
-            if (removed && saved.detail?.id === id) {
-              const next = history.items.find((row) => row.id !== id);
-              if (next) void saved.open(next.id);
-              else void saved.create(host);
-            }
+  /** Assemble the same host and chat navigation for desktop and mobile. */
+  function sidebarProperties() {
+    return {
+      hosts,
+      host,
+      hostLoading,
+      hostError,
+      retryHosts,
+      inventory: groupScope.group
+        ? inventory.filter((row) => groupScope.group!.container_ids.includes(row.id))
+        : inventory,
+      inventoryError,
+      lastRefreshed,
+      refreshAcknowledged: Boolean(refreshAcknowledged),
+      loading,
+      fetching,
+      selected: viewingContainer ? (selected?.id ?? '') : '',
+      chooseContainer,
+      refresh,
+      demo,
+      connect: () => {
+        setMenu(false);
+        connect();
+      },
+      returnDemo,
+      changeHost: (value: string) => {
+        changeHost(value);
+        setMenu(false);
+      },
+      newInvestigation: () => {
+        if (demo) {
+          investigation.clear();
+          setDraft('');
+        } else if (configured)
+          void saved.create(host).then(() => {
+            void history.refresh();
+            requestAnimationFrame(() => document.getElementById('query')?.focus());
           });
-        }}
-      />
-    ) : undefined,
-    transient: client instanceof ApiClient && client.authentication === 'bearer',
-  };
+        openInvestigation(true);
+      },
+      openInvestigation: () => openInvestigation(),
+      about: () => {
+        setMenu(false);
+        setHelp(true);
+      },
+      savedChats: !demo ? (
+        <SavedInvestigations
+          {...history}
+          selected={saved.detail?.id}
+          open={(id) => {
+            setMenu(false);
+            void saved.open(id);
+          }}
+          remove={(id) => {
+            void history.remove(id).then((removed) => {
+              if (removed && saved.detail?.id === id) {
+                const next = history.items.find((row) => row.id !== id);
+                if (next) void saved.open(next.id);
+                else void saved.create(host);
+              }
+            });
+          }}
+        />
+      ) : undefined,
+      transient: client instanceof ApiClient && client.authentication === 'bearer',
+    };
+  }
+  const sidebarProps = sidebarProperties();
 
-  return (
-    <div className={`${styles['app-shell']}`}>
-      <a className={`${styles['skip-link']}`} href="#main">
-        {t('Skip to investigation')}
-      </a>
-      <aside className={`${styles.sidebar} sidebar`} aria-label={t('Host and container inventory')}>
-        <Sidebar {...sidebarProps} />
-      </aside>
-      <header className={`${styles['topbar']}`}>
-        <button
-          className={`icon-button ${controlStyles['icon-button']} ${styles['mobile-menu']}`}
-          aria-label={t('Open host and containers')}
-          onClick={() => setMenu(true)}
-        >
-          <Menu size={19} />
-        </button>
-        <button
-          type="button"
-          className={`${styles['mobile-brand']} brand-link ${sharedStyles['brand-link']}`}
-          aria-label={t('DockSight: return to diagnosis')}
-          onClick={() => openInvestigation()}
-        >
-          <Logo />
-        </button>
-        <div className={`${styles.breadcrumb} breadcrumb`}>
+  /** Render the host, connection, and model controls. */
+  function workspaceHeader() {
+    return (
+      <>
+        <header className={`${styles['topbar']}`}>
           <button
-            className={`${styles['workspace-trigger']}`}
-            id={hostPickerTriggerId}
-            title={t('Workspace: choose host')}
-            aria-haspopup="dialog"
-            onClick={openHostPicker}
+            className={`icon-button ${controlStyles['icon-button']} ${styles['mobile-menu']}`}
+            aria-label={t('Open host and containers')}
+            onClick={() => setMenu(true)}
           >
-            <span>{t('Workspace')}</span>
-            <ChevronRight className="breadcrumb-divider" size={13} />
-            <strong>{name || t('Docker hosts')}</strong>
-            <ChevronDown size={13} />
+            <Menu size={19} />
           </button>
-        </div>
-        <div className={`${styles['connection-state']}`}>
-          <span
-            className={`scope-dot ${sharedStyles['scope-dot']}${demo ? ` demo-dot ${sharedStyles['demo-dot']}` : ''}`}
-          />
-          {t(demo ? 'Demo' : 'API mode')}
-          <SystemStatusTrigger status={availability} open={openStatus} />
-          <ModelTrigger
-            selection={effectiveModel}
-            state={availability.data?.model_check.state ?? 'not_checked'}
-            running={investigation.running}
-            open={() => setModelPickerOpen(true)}
-          />
-          <button className={`text-button ${controlStyles['text-button']}`} onClick={connect}>
-            {t(demo ? 'Connect API' : 'Change connection')}
-            <ArrowRight size={13} />
+          <button
+            type="button"
+            className={`${styles['mobile-brand']} brand-link ${sharedStyles['brand-link']}`}
+            aria-label={t('DockSight: return to diagnosis')}
+            onClick={() => openInvestigation()}
+          >
+            <Logo />
           </button>
-          {!demo && (
-            <button className={`text-button ${controlStyles['text-button']}`} onClick={logout}>
-              {t('Sign out')}
+          <div className={`${styles.breadcrumb} breadcrumb`}>
+            <button
+              className={`${styles['workspace-trigger']}`}
+              id={hostPickerTriggerId}
+              title={t('Workspace: choose host')}
+              aria-haspopup="dialog"
+              onClick={openHostPicker}
+            >
+              <span>{t('Workspace')}</span>
+              <ChevronRight className="breadcrumb-divider" size={13} />
+              <strong>{name || t('Docker hosts')}</strong>
+              <ChevronDown size={13} />
             </button>
-          )}
-        </div>
-      </header>
-      <main id="main" className={`${styles['sheet']}`}>
+          </div>
+          <div className={`${styles['connection-state']}`}>
+            <span
+              className={`scope-dot ${sharedStyles['scope-dot']}${demo ? ` demo-dot ${sharedStyles['demo-dot']}` : ''}`}
+            />
+            {t(demo ? 'Demo' : 'API mode')}
+            <SystemStatusTrigger status={availability} open={openStatus} />
+            <ModelTrigger
+              selection={effectiveModel}
+              state={availability.data?.model_check.state ?? 'not_checked'}
+              running={investigation.running}
+              open={() => setModelPickerOpen(true)}
+            />
+            <button className={`text-button ${controlStyles['text-button']}`} onClick={connect}>
+              {t(demo ? 'Connect API' : 'Change connection')}
+              <ArrowRight size={13} />
+            </button>
+            {!demo && (
+              <button className={`text-button ${controlStyles['text-button']}`} onClick={logout}>
+                {t('Sign out')}
+              </button>
+            )}
+          </div>
+        </header>
+      </>
+    );
+  }
+
+  /** Render the current workspace heading and navigation. */
+  function pageHeading() {
+    return (
+      <>
         <div className={`${styles['page-heading']}`}>
           <div>
             <h1 id="workspace-title" tabIndex={-1}>
@@ -420,6 +454,14 @@ export function WorkspacePage({
             )}
           </div>
         </div>
+      </>
+    );
+  }
+
+  /** Explain host selection and saved-chat availability. */
+  function hostNotices() {
+    return (
+      <>
         {!demo && (!host || !configured) && (
           <div className={`${styles['dependency-notice']}`} role="status">
             <p>{t('Choose a configured host to continue. Saved evidence remains readable.')}</p>
@@ -439,6 +481,14 @@ export function WorkspacePage({
             {t(isMessageKey(saved.error) ? saved.error : 'Could not refresh saved chat. Retry the read.')}
           </p>
         )}
+      </>
+    );
+  }
+
+  /** Show draft acknowledgement and explicit conflict controls. */
+  function draftStatus() {
+    return (
+      <>
         {!demo && saved.detail && (
           <div className={`${styles['workspace-save']}`} role="status">
             <span>
@@ -469,6 +519,14 @@ export function WorkspacePage({
             )}
           </div>
         )}
+      </>
+    );
+  }
+
+  /** Keep exact scope selection and availability explanations together. */
+  function scopeControls() {
+    return (
+      <>
         {!viewingContainer &&
           (scopeTarget?.kind === 'container' && !demo ? (
             <div className={`${styles['dependency-notice']}`}>
@@ -530,6 +588,14 @@ export function WorkspacePage({
             </button>
           </div>
         )}
+      </>
+    );
+  }
+
+  /** Render Demo controls and host read failures. */
+  function demoAndHostStatus() {
+    return (
+      <>
         {demo && (
           <div className={`${styles['demo-bar']} demo-bar${viewingContainer ? ` ${styles['demo-bar-compact']}` : ''}`}>
             <div>
@@ -563,6 +629,14 @@ export function WorkspacePage({
             </button>
           </div>
         )}
+      </>
+    );
+  }
+
+  /** Keep the current container and investigation mounted in their existing views. */
+  function workspaceContent() {
+    return (
+      <>
         {selected && (
           <div hidden={!viewingContainer}>
             <ContainerView
@@ -592,69 +666,98 @@ export function WorkspacePage({
             target={!demo ? (scopeTarget ?? undefined) : undefined}
           />
         </div>
+      </>
+    );
+  }
+
+  /** Render the existing status, model, mobile, and help dialogs. */
+  function workspaceDialogs() {
+    return (
+      <>
+        {statusOpen && (
+          <SystemStatusPanel
+            status={availability}
+            host={name || host}
+            demo={demo}
+            close={() => setStatusOpen(false)}
+            connect={() => {
+              setStatusOpen(false);
+              connect();
+            }}
+          />
+        )}
+        {modelPickerOpen && (
+          <ModelPicker
+            catalog={catalog}
+            selection={effectiveModel}
+            demo={demo}
+            close={() => setModelPickerOpen(false)}
+            choose={(selection) => {
+              if (investigation.running) return;
+              chooseModel(selection);
+              setModelPickerOpen(false);
+            }}
+          />
+        )}
+        {menu && (
+          <Modal title={t('Host & containers')} close={() => setMenu(false)}>
+            <div className={`${styles['mobile-sidebar']} mobile-sidebar`}>
+              <Sidebar {...sidebarProps} />
+            </div>
+          </Modal>
+        )}
+        {help && (
+          <Modal title={t('About this workspace')} close={() => setHelp(false)}>
+            <p>
+              {t(
+                'DockSight gathers read-only Docker observations and returns a model explanation with typed cards. The backend decides permitted operations.',
+              )}
+            </p>
+            <p>
+              {t(
+                'Conclusions are interpretations. Cards and the evidence trail show the observed facts and their UTC timestamps.',
+              )}
+            </p>
+            <p>
+              {t(
+                demo
+                  ? 'Demo chats are simulated and live only in this tab.'
+                  : 'Saved chats and acknowledged drafts stay on your backend. Continuing a chat gathers fresh Docker evidence.',
+              )}
+            </p>
+            <p>
+              {demo
+                ? t('All current observations are fixture-based examples. Connect an API for real Docker evidence.')
+                : t(
+                    client instanceof ApiClient && client.authentication === 'cookie'
+                      ? 'Your browser session uses an HttpOnly cookie. CSRF authority stays only in memory.'
+                      : 'Your bearer token is held only in this tab’s memory and is discarded when you disconnect or reload.',
+                  )}
+            </p>
+          </Modal>
+        )}
+      </>
+    );
+  }
+
+  return (
+    <div className={`${styles['app-shell']}`}>
+      <a className={`${styles['skip-link']}`} href="#main">
+        {t('Skip to investigation')}
+      </a>
+      <aside className={`${styles.sidebar} sidebar`} aria-label={t('Host and container inventory')}>
+        <Sidebar {...sidebarProps} />
+      </aside>
+      {workspaceHeader()}
+      <main id="main" className={`${styles['sheet']}`}>
+        {pageHeading()}
+        {hostNotices()}
+        {draftStatus()}
+        {scopeControls()}
+        {demoAndHostStatus()}
+        {workspaceContent()}
       </main>
-      {statusOpen && (
-        <SystemStatusPanel
-          status={availability}
-          host={name || host}
-          demo={demo}
-          close={() => setStatusOpen(false)}
-          connect={() => {
-            setStatusOpen(false);
-            connect();
-          }}
-        />
-      )}
-      {modelPickerOpen && (
-        <ModelPicker
-          catalog={catalog}
-          selection={effectiveModel}
-          demo={demo}
-          close={() => setModelPickerOpen(false)}
-          choose={(selection) => {
-            if (investigation.running) return;
-            chooseModel(selection);
-            setModelPickerOpen(false);
-          }}
-        />
-      )}
-      {menu && (
-        <Modal title={t('Host & containers')} close={() => setMenu(false)}>
-          <div className={`${styles['mobile-sidebar']} mobile-sidebar`}>
-            <Sidebar {...sidebarProps} />
-          </div>
-        </Modal>
-      )}
-      {help && (
-        <Modal title={t('About this workspace')} close={() => setHelp(false)}>
-          <p>
-            {t(
-              'DockSight gathers read-only Docker observations and returns a model explanation with typed cards. The backend decides permitted operations.',
-            )}
-          </p>
-          <p>
-            {t(
-              'Conclusions are interpretations. Cards and the evidence trail show the observed facts and their UTC timestamps.',
-            )}
-          </p>
-          <p>
-            {t(
-              demo
-                ? 'Demo chats are simulated and live only in this tab.'
-                : 'Saved chats and acknowledged drafts stay on your backend. Continuing a chat gathers fresh Docker evidence.',
-            )}
-          </p>
-          <p>
-            {demo
-              ? t('All current observations are fixture-based examples. Connect an API for real Docker evidence.')
-              : t(
-                  client instanceof ApiClient && client.authentication === 'cookie'
-                    ? 'Your browser session uses an HttpOnly cookie. CSRF authority stays only in memory.'
-                    : 'Your bearer token is held only in this tab’s memory and is discarded when you disconnect or reload.',
-                )}
-          </p>
-        </Modal>
-      )}
+      {workspaceDialogs()}
     </div>
   );
 }

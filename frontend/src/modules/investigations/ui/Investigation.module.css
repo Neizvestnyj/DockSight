@@ -121,11 +121,13 @@
 .first-run h2 {
   font-size: 22px;
 }
+/* stylelint-disable no-descending-specificity -- Preserve the established higher-specificity override. */
 .first-run p {
   margin: 12px 0 20px;
   color: var(--muted);
   line-height: 1.7;
 }
+/* stylelint-enable no-descending-specificity */
 .progress {
   display: flex;
   flex-wrap: wrap;
@@ -145,11 +147,13 @@
   padding: 24px 0;
   align-items: center;
 }
+/* stylelint-disable no-descending-specificity -- Preserve the established higher-specificity override. */
 .collecting p {
   font-size: 12px;
   color: var(--muted);
   margin-top: 5px;
 }
+/* stylelint-enable no-descending-specificity */
 .query-scope {
   overflow-wrap: anywhere;
 }

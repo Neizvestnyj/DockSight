@@ -123,6 +123,7 @@ export function Modal({
       if (target instanceof HTMLElement && target.isConnected) target.focus();
     };
   }, [returnFocusId]);
+  /* eslint-disable jsx-a11y-x/no-noninteractive-element-interactions -- Native dialog handles cancel and backdrop dismissal. */
   return (
     <dialog
       ref={dialog}
@@ -175,6 +176,7 @@ export function Modal({
       {children}
     </dialog>
   );
+  /* eslint-enable jsx-a11y-x/no-noninteractive-element-interactions */
 }
 
 /** Display the supplied vector wordmark with its original letterforms and colors. */

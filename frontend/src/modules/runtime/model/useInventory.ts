@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Container, Transport } from '../../../shared/contracts/contracts';
+import type { Container } from '../../../shared/contracts/contracts';
+import type { Transport } from '../../../shared/contracts/transport';
 import { usePolling, type PollResult, type ReadReason } from '../../../shared/lib/usePolling';
 
 /** Refresh the host read model without changing diagnostic observations or navigation. */

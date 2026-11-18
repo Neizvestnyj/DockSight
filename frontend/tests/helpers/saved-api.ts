@@ -93,7 +93,9 @@ export async function savedApi(page: Page) {
     if (path.startsWith('/hosts/local/containers/')) return route.fulfill({ json: demoContainer(0, 'local', now) });
     if (path === '/me/workspace') {
       if (method === 'PATCH') {
-        const { expected_revision: _revision, ...patch } = request.postDataJSON();
+        const { expected_revision: _revision, ...patch } = request.postDataJSON() as Partial<typeof actor> & {
+          expected_revision: number;
+        };
         void _revision;
         actor = { ...actor, ...patch, revision: actor.revision + 1 };
         state.actor = actor;
@@ -132,7 +134,9 @@ export async function savedApi(page: Page) {
     const chatId = path.split('/')[2];
     const chat = chats.find((row) => row.id === chatId);
     if (chat && path.endsWith('/workspace')) {
-      const { expected_revision, ...patch } = request.postDataJSON();
+      const { expected_revision, ...patch } = request.postDataJSON() as Partial<typeof chat.workspace> & {
+        expected_revision: number;
+      };
       state.workspaceWrites.push({ id: chat.id, expected_revision, ...patch });
       if (state.conflictNext || expected_revision !== chat.workspace.revision) {
         state.conflictNext = false;

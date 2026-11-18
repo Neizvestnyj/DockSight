@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { ApiError } from '../../../shared/contracts/errors';
 import { targetKey } from '../../../shared/contracts/contracts';
-import type { Answer, DiagnosticTarget, Transport, TurnEvent } from '../../../shared/contracts/contracts';
+import type { Answer, DiagnosticTarget, TurnEvent } from '../../../shared/contracts/contracts';
+import type { Transport } from '../../../shared/contracts/transport';
 import type { ModelSelection } from '../../../shared/contracts/model-contracts';
 import { useSavedTurns, type SavedContext } from './useSavedTurns';
 import type { Turn } from './turns';
@@ -126,6 +127,7 @@ function useTransientInvestigation(client: Transport, host: string, initial?: An
             return { ...common, state: turn.selection ? 'awaiting_selection' : 'completed' };
           case 'turn.failed':
             return { ...common, state: 'failed', error: event.message, errorSource: 'server', code: event.code };
+          case 'turn.started':
           default:
             return common;
         }
@@ -153,7 +155,7 @@ function useTransientInvestigation(client: Transport, host: string, initial?: An
     const { id, target } = input;
     const query = input.query.trim();
     if (active.current || !query || !host) return;
-    const nextScope = target ? targetKey(target) : '';
+    const nextScope = transientScope(target);
     if (freshSession || (!continuing && nextScope !== scope.current)) session.current = undefined;
     if (!continuing) scope.current = nextScope;
     const controller = new AbortController();
@@ -167,13 +169,7 @@ function useTransientInvestigation(client: Transport, host: string, initial?: An
     );
     try {
       await client.diagnose(
-        {
-          host,
-          query,
-          ...(target?.kind === 'container' ? { container_id: target.id } : target ? { group: target } : {}),
-          ...(session.current ? { session_id: session.current } : {}),
-          ...(selection ? { model_selection: selection } : {}),
-        },
+        diagnosticInput(host, query, target, session.current, selection),
         (event) => {
           if (generation.current === current) receive(id, event);
         },
@@ -183,23 +179,46 @@ function useTransientInvestigation(client: Transport, host: string, initial?: An
       if (generation.current !== current) return;
       const code = error instanceof ApiError ? error.code : 'connection_error';
       if (['session_not_found', 'session_expired'].includes(code)) session.current = undefined;
-      setTurns((previous) =>
-        previous.map((turn) =>
-          turn.id === id
-            ? {
-                ...turn,
-                state: 'failed',
-                code,
-                error: error instanceof Error ? error.message : 'Connection failed. Retry manually.',
-                errorSource: error instanceof ApiError ? error.source : 'client',
-              }
-            : turn,
-        ),
-      );
+      setTurns((previous) => previous.map((turn) => failedTransientTurn(turn, id, code, error)));
     } finally {
       if (generation.current === current) active.current = null;
     }
   }
 
   return { turns, running, run, chooseTarget, stop, clear, example };
+}
+
+/** Identify the transient session scope without matching resources by display name. */
+function transientScope(target: DiagnosticTarget | undefined): string {
+  return target ? targetKey(target) : '';
+}
+
+/** Build the same scoped request for one transient diagnosis attempt. */
+function diagnosticInput(
+  host: string,
+  query: string,
+  target: DiagnosticTarget | undefined,
+  session: string | undefined,
+  selection: ModelSelection | undefined,
+): Parameters<Transport['diagnose']>[0] {
+  return {
+    host,
+    query,
+    ...(target?.kind === 'container' ? { container_id: target.id } : target ? { group: target } : {}),
+    ...(session ? { session_id: session } : {}),
+    ...(selection ? { model_selection: selection } : {}),
+  };
+}
+
+/** Keep transport failure details on the attempt that owns them. */
+function failedTransientTurn(turn: Turn, id: string, code: string, error: unknown): Turn {
+  return turn.id === id
+    ? {
+        ...turn,
+        state: 'failed',
+        code,
+        error: error instanceof Error ? error.message : 'Connection failed. Retry manually.',
+        errorSource: error instanceof ApiError ? error.source : 'client',
+      }
+    : turn;
 }

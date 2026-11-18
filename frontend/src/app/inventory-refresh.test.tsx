@@ -57,7 +57,11 @@ function installApi() {
       return Response.json({ actor: 'operator', expires_at: '2026-12-01T12:00:00Z', csrf_token: 'c'.repeat(43) });
     if (path === '/api/v1/me/workspace') {
       if (options?.method === 'PATCH')
-        actor = { ...actor, ...JSON.parse(String(options.body)), revision: actor.revision + 1 };
+        actor = {
+          ...actor,
+          ...(JSON.parse(String(options.body as string)) as Partial<typeof actor>),
+          revision: actor.revision + 1,
+        };
       const { expected_revision: _expected, ...result } = actor as typeof actor & { expected_revision?: number };
       void _expected;
       return Response.json(result);
@@ -65,13 +69,15 @@ function installApi() {
     if (path === '/api/v1/investigations') return Response.json({ items: [], next_cursor: null });
     if (path.endsWith(`/investigations/${id}`)) return Response.json(detail);
     if (path.endsWith(`/investigations/${id}/workspace`)) {
-      const { expected_revision: _expected, ...changes } = JSON.parse(String(options?.body));
+      const { expected_revision: _expected, ...changes } = JSON.parse(String(options?.body as string)) as Partial<
+        typeof detail.workspace
+      > & { expected_revision?: number };
       void _expected;
       detail = { ...detail, workspace: { ...detail.workspace, ...changes, revision: detail.workspace.revision + 1 } };
       return Response.json(detail.workspace);
     }
     if (path.endsWith(`/investigations/${id}/turns`)) {
-      const body = JSON.parse(String(options?.body));
+      const body = JSON.parse(String(options?.body as string)) as Pick<SavedTurn, 'submission_id' | 'query' | 'target'>;
       const turn: SavedTurn = {
         schema_version: 1,
         id: crypto.randomUUID(),

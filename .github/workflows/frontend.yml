@@ -34,7 +34,7 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Install dependencies
         run: npm ci
-      - name: Check types, lint, and formatting
+      - name: Check frontend quality gates
         run: npm run check
       - name: Run unit and component tests
         run: npm test

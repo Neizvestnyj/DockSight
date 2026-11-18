@@ -8,7 +8,7 @@ import {
 } from '../../src/shared/contracts/investigation-contracts';
 import type { TurnEvent } from '../../src/shared/contracts/contracts';
 
-type Scenario = (route: Route) => unknown | Promise<unknown>;
+type Scenario = (route: Route) => unknown;
 
 /** Adapt deterministic diagnostic event fixtures into the saved HTTP protocol without a legacy request. */
 export async function routeSavedApi(page: Page, scenario: Scenario) {
@@ -61,7 +61,9 @@ export async function routeSavedApi(page: Page, scenario: Scenario) {
     if (path.endsWith('/me/workspace')) {
       await hostsReady;
       if (method === 'PATCH') {
-        const { expected_revision: _revision, ...changes } = request.postDataJSON();
+        const { expected_revision: _revision, ...changes } = request.postDataJSON() as Partial<ActorWorkspace> & {
+          expected_revision: number;
+        };
         void _revision;
         actor = { ...actor, ...changes, revision: actor.revision + 1 };
       }
@@ -95,7 +97,9 @@ export async function routeSavedApi(page: Page, scenario: Scenario) {
         return route.fulfill({ status: 204 });
       }
       if (path.endsWith('/workspace')) {
-        const { expected_revision, ...patch } = request.postDataJSON();
+        const { expected_revision, ...patch } = request.postDataJSON() as Partial<typeof chat.workspace> & {
+          expected_revision: number;
+        };
         if (expected_revision !== chat.workspace.revision)
           return route.fulfill({
             status: 409,
@@ -173,7 +177,7 @@ export async function routeSavedApi(page: Page, scenario: Scenario) {
                 chat.active_turn_id = null;
               };
             const value: unknown = Reflect.get(target, property);
-            return typeof value === 'function' ? value.bind(target) : value;
+            return typeof value === 'function' ? (value.bind(target) as unknown) : value;
           },
         });
         try {
@@ -227,7 +231,7 @@ export async function routeSavedApi(page: Page, scenario: Scenario) {
             return route.abort(...args);
           };
         const value: unknown = Reflect.get(target, property);
-        return typeof value === 'function' ? value.bind(target) : value;
+        return typeof value === 'function' ? (value.bind(target) as unknown) : value;
       },
     });
     return scenario(facade);

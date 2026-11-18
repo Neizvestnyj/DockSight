@@ -55,10 +55,12 @@
 .workspace-nav :global(.icon-button) {
   margin-left: auto;
 }
+/* stylelint-disable no-descending-specificity -- Preserve the established higher-specificity override. */
 .inventory {
   min-height: 0;
   overflow-y: auto;
 }
+/* stylelint-enable no-descending-specificity */
 .inventory > header {
   display: flex;
   align-items: center;
@@ -97,6 +99,7 @@
   align-items: center;
   gap: 8px;
 }
+/* stylelint-disable no-descending-specificity -- Preserve the established higher-specificity override. */
 .container-name > span {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -104,11 +107,15 @@
   font-size: 13px;
   font-weight: 500;
 }
+/* stylelint-enable no-descending-specificity */
 .container-name svg {
   color: var(--muted);
 }
 .container-row :global(.container-status) {
   margin: 4px 0 0 22px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
 }
 .container-row :global(.status) {
   font-size: 11px;
@@ -117,10 +124,12 @@
   margin: 4px 0 0 22px;
   font-size: 11px;
 }
+/* stylelint-disable no-descending-specificity -- Preserve the established higher-specificity override. */
 .sidebar-bottom {
   margin-top: auto;
   padding: 24px 6px 0;
 }
+/* stylelint-enable no-descending-specificity */
 .sidebar-bottom > p {
   font-size: 12px;
   line-height: 1.6;
@@ -144,9 +153,11 @@
   padding: 7px;
   font-size: 12px;
 }
+/* stylelint-disable no-descending-specificity -- Preserve the established higher-specificity override. */
 .connection-button svg:last-child {
   margin-left: auto;
 }
+/* stylelint-enable no-descending-specificity */
 .inventory-loading {
   padding: 12px 8px;
   font-size: 12px;
@@ -165,21 +176,18 @@
   font-size: 12px;
   line-height: 1.5;
 }
+/* stylelint-disable no-descending-specificity -- Preserve the established higher-specificity override. */
 .inventory-feedback span,
 .inventory-feedback strong {
   display: block;
 }
+/* stylelint-enable no-descending-specificity */
 .inventory-feedback strong {
   color: var(--positive);
   font-weight: 500;
 }
 .container-row :global(.health-caption) {
   font-size: 11px;
-}
-.container-row :global(.container-status) {
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
 }
 .container-group {
   display: block;

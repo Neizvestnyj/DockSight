@@ -4,8 +4,6 @@
   align-items: center;
   gap: 12px;
   margin: 24px 0;
-}
-.workspace-save {
   font-size: 13px;
   color: var(--muted);
 }
@@ -86,11 +84,13 @@
   text-decoration: underline;
   text-underline-offset: 4px;
 }
+/* stylelint-disable no-descending-specificity -- Preserve the established higher-specificity override. */
 .breadcrumb strong {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* stylelint-enable no-descending-specificity */
 .connection-state {
   flex: none;
   white-space: nowrap;
@@ -169,10 +169,12 @@
   align-items: center;
   gap: 8px;
 }
+/* stylelint-disable no-descending-specificity -- Preserve the established higher-specificity override. */
 .demo-bar > div > span {
   color: var(--muted);
   max-width: 490px;
 }
+/* stylelint-enable no-descending-specificity */
 .demo-bar > div {
   flex-wrap: wrap;
 }
@@ -266,12 +268,14 @@
     min-height: 96px;
     padding-block: 4px;
     row-gap: 0;
+    padding: 0 16px;
   }
   .connection-state {
     justify-content: flex-end;
     width: 100%;
     margin-left: 0;
     min-width: 0;
+    font-size: 11px;
   }
   .dependency-notice {
     align-items: flex-start;
@@ -289,9 +293,6 @@
     border-radius: 0;
     min-height: calc(100dvh - 52px);
     padding-bottom: 16px;
-  }
-  .topbar {
-    padding: 0 16px;
   }
   .breadcrumb {
     font-size: 12px;
@@ -311,9 +312,6 @@
   .workspace-trigger {
     min-height: 44px;
     gap: 6px;
-  }
-  .connection-state {
-    font-size: 11px;
   }
   .connection-state :global(.text-button) {
     display: none;

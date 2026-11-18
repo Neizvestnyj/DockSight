@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import { ApiError } from '../../../shared/contracts/errors';
-import type { CheckCode, CheckState, SystemStatus, Transport } from '../../../shared/contracts/contracts';
+import type { CheckCode, CheckState, SystemStatus } from '../../../shared/contracts/contracts';
+import type { Transport } from '../../../shared/contracts/transport';
 import type { MessageKey } from '../../../shared/i18n/messages';
 import { usePolling, type PollResult } from '../../../shared/lib/usePolling';
 import type { ModelSelection } from '../../../shared/contracts/model-contracts';
@@ -126,17 +127,7 @@ export function useSystemStatus(
   );
   const { refresh, refreshIfStale, stopped, interactive } = usePolling(read, automatic, enabled, pollingOptions);
 
-  let blockedReason: MessageKey | undefined;
-  if (current.api.state === 'unavailable') blockedReason = current.api.reason;
-  if (current.api.state === 'available' && current.data) {
-    if (current.data.docker.state === 'unavailable')
-      blockedReason =
-        'Docker is unavailable for this host. Diagnosis cannot collect evidence. Check the connection and try again.';
-    else if (current.data.provider_check.state === 'unavailable')
-      blockedReason = 'The model provider is unavailable. You can still inspect Docker directly.';
-    else if (current.data.model_check.state === 'unavailable')
-      blockedReason = 'The configured model is unavailable. You can still inspect Docker directly.';
-  }
+  const blockedReason = unavailableReason(current);
   return {
     data: current.data,
     api: current.api,
@@ -148,4 +139,20 @@ export function useSystemStatus(
     interactive,
     blockedReason,
   };
+}
+
+/** Derive a diagnosis-blocking explanation from the retained status snapshot. */
+function unavailableReason(current: Observation): MessageKey | undefined {
+  let blockedReason: MessageKey | undefined;
+  if (current.api.state === 'unavailable') blockedReason = current.api.reason;
+  if (current.api.state === 'available' && current.data) {
+    if (current.data.docker.state === 'unavailable')
+      blockedReason =
+        'Docker is unavailable for this host. Diagnosis cannot collect evidence. Check the connection and try again.';
+    else if (current.data.provider_check.state === 'unavailable')
+      blockedReason = 'The model provider is unavailable. You can still inspect Docker directly.';
+    else if (current.data.model_check.state === 'unavailable')
+      blockedReason = 'The configured model is unavailable. You can still inspect Docker directly.';
+  }
+  return blockedReason;
 }

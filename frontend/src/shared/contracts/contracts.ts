@@ -1,6 +1,5 @@
 import { z } from 'zod';
-import type { ModelCatalog, ModelProviders, ModelSelection, ProviderId } from './model-contracts';
-import type { HistoryTransport } from './investigation-contracts';
+import type { ModelSelection } from './model-contracts';
 
 export const metricsSchema = z.object({
   cpu_percent: z.number().nullable(),
@@ -214,56 +213,71 @@ export const evidenceSchema = z.object({
   container_name: z.string().nullish(),
   data: z.record(z.string(), z.unknown()),
 });
-export const answerSchema = z
-  .object({
-    schema_version: z.literal(1),
-    summary: z.string(),
-    uncertain: z.boolean(),
-    cause: causeSchema.nullish(),
-    group: groupInspectionSchema.nullish(),
-    host_overview: hostOverviewSchema.nullish(),
-    evidence: z.array(evidenceSchema),
-    widgets: z.array(widgetSchema).max(16),
-  })
-  .superRefine((answer, context) => {
-    const byId = new Map(answer.evidence.map((row) => [row.id, row]));
-    if (answer.cause?.evidence_ids.some((id) => !byId.has(id)))
-      context.addIssue({ code: 'custom', path: ['cause'], message: 'Cause references unavailable evidence.' });
-    if (answer.host_overview) {
-      const overview = answer.host_overview;
-      const source = byId.get(overview.evidence_id);
-      if (source?.kind !== 'host' || source.host !== overview.host || source.container_id !== null)
-        context.addIssue({
-          code: 'custom',
-          path: ['host_overview'],
-          message: 'Host overview requires scoped host evidence.',
-        });
-      for (const row of overview.logs) {
-        if (row.state !== 'collected') continue;
-        const log = row.evidence_id ? byId.get(row.evidence_id) : undefined;
-        if (log?.kind !== 'logs' || log.container_id !== row.container_id || log.host !== overview.host)
-          context.addIssue({
-            code: 'custom',
-            path: ['host_overview', 'logs'],
-            message: 'Log coverage is outside its host scope.',
-          });
-      }
-    }
-    if (!answer.group) return;
-    const source = byId.get(answer.group.evidence_id);
-    if (source?.kind !== 'stack')
-      context.addIssue({ code: 'custom', path: ['group'], message: 'Group requires stack evidence.' });
-    for (const row of answer.group.logs) {
-      if (row.state !== 'collected') continue;
-      const log = row.evidence_id ? byId.get(row.evidence_id) : undefined;
-      if (log?.kind !== 'logs' || log.container_id !== row.container_id || log.host !== source?.host)
-        context.addIssue({
-          code: 'custom',
-          path: ['group', 'logs'],
-          message: 'Log coverage is outside its evidence scope.',
-        });
-    }
-  });
+const answerFieldsSchema = z.object({
+  schema_version: z.literal(1),
+  summary: z.string(),
+  uncertain: z.boolean(),
+  cause: causeSchema.nullish(),
+  group: groupInspectionSchema.nullish(),
+  host_overview: hostOverviewSchema.nullish(),
+  evidence: z.array(evidenceSchema),
+  widgets: z.array(widgetSchema).max(16),
+});
+export const answerSchema = answerFieldsSchema.superRefine((answer, context) => {
+  const byId = new Map(answer.evidence.map((row) => [row.id, row]));
+  if (answer.cause?.evidence_ids.some((id) => !byId.has(id)))
+    context.addIssue({ code: 'custom', path: ['cause'], message: 'Cause references unavailable evidence.' });
+  if (answer.host_overview) validateOverviewEvidence(answer.host_overview, byId, context);
+  if (answer.group) validateGroupEvidence(answer.group, byId, context);
+});
+
+type EvidenceById = Map<string, z.infer<typeof evidenceSchema>>;
+
+/** Check that host overview and log evidence retain their exact host and container scope. */
+function validateOverviewEvidence(
+  overview: NonNullable<z.infer<typeof answerFieldsSchema>['host_overview']>,
+  byId: EvidenceById,
+  context: z.RefinementCtx,
+) {
+  const source = byId.get(overview.evidence_id);
+  if (source?.kind !== 'host' || source.host !== overview.host || source.container_id !== null)
+    context.addIssue({
+      code: 'custom',
+      path: ['host_overview'],
+      message: 'Host overview requires scoped host evidence.',
+    });
+  for (const row of overview.logs) {
+    if (row.state !== 'collected') continue;
+    const log = row.evidence_id ? byId.get(row.evidence_id) : undefined;
+    if (log?.kind !== 'logs' || log.container_id !== row.container_id || log.host !== overview.host)
+      context.addIssue({
+        code: 'custom',
+        path: ['host_overview', 'logs'],
+        message: 'Log coverage is outside its host scope.',
+      });
+  }
+}
+
+/** Check group and collected log references against their retained stack scope. */
+function validateGroupEvidence(
+  group: NonNullable<z.infer<typeof answerFieldsSchema>['group']>,
+  byId: EvidenceById,
+  context: z.RefinementCtx,
+) {
+  const source = byId.get(group.evidence_id);
+  if (source?.kind !== 'stack')
+    context.addIssue({ code: 'custom', path: ['group'], message: 'Group requires stack evidence.' });
+  for (const row of group.logs) {
+    if (row.state !== 'collected') continue;
+    const log = row.evidence_id ? byId.get(row.evidence_id) : undefined;
+    if (log?.kind !== 'logs' || log.container_id !== row.container_id || log.host !== source?.host)
+      context.addIssue({
+        code: 'custom',
+        path: ['group', 'logs'],
+        message: 'Log coverage is outside its evidence scope.',
+      });
+  }
+}
 const envelope = { schema_version: z.literal(1), request_id: z.string(), turn_id: z.string() };
 export const traceStepSchema = z
   .object({
@@ -380,19 +394,4 @@ export interface TurnInput {
 /** Compare containers by exact identity and groups by their observed namespace and name. */
 export function targetKey(target: DiagnosticTarget): string {
   return `${target.kind}:${target.kind === 'container' ? target.id : target.name}`;
-}
-export interface Transport {
-  readonly history?: HistoryTransport;
-  systemStatus(host: string | null, signal: AbortSignal, selection?: ModelSelection): Promise<SystemStatus>;
-  modelProviders(signal: AbortSignal): Promise<ModelProviders>;
-  models(provider: ProviderId, signal: AbortSignal, refresh?: boolean): Promise<ModelCatalog>;
-  hosts(signal: AbortSignal): Promise<Host[]>;
-  containers(host: string, signal: AbortSignal): Promise<Container[]>;
-  stacks(host: string, kind: GroupTarget['kind'], signal: AbortSignal): Promise<Stack[]>;
-  container(host: string, id: string, signal: AbortSignal): Promise<Container>;
-  logs(host: string, id: string, signal: AbortSignal): Promise<LogBatch>;
-  stats(host: string, id: string, signal: AbortSignal): Promise<Metrics>;
-  diagnose(input: TurnInput, receive: (event: TurnEvent) => void, signal: AbortSignal): Promise<void>;
-  action(id: string): Promise<Action>;
-  execute(id: string, key: string): Promise<Action>;
 }

@@ -207,7 +207,7 @@ describe('host-scoped diagnostic session', () => {
       void result.current.chooseTarget(id, target);
     });
     await waitFor(() => expect(result.current.running).toBe(true));
-    if (state === 'stopped') act(() => result.current.stop());
+    if (state === 'stopped') void act(() => result.current.stop());
     act(() =>
       events?.({
         schema_version: 1,
@@ -295,7 +295,7 @@ describe('host-scoped diagnostic session', () => {
       void result.current.run('Collect evidence');
     });
     await waitFor(() => expect(result.current.running).toBe(true));
-    act(() => result.current.stop());
+    void act(() => result.current.stop());
     act(() => late?.({ schema_version: 1, request_id: 'late', turn_id: 'late', type: 'turn.completed' }));
     expect(result.current.turns[0]?.state).toBe('stopped');
     expect(result.current.running).toBe(false);

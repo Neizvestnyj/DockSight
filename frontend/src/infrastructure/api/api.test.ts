@@ -31,6 +31,8 @@ describe('direct container reads', () => {
   it('authenticates, scopes, and validates state, bounded logs, and current metrics', async () => {
     const snapshot = demoContainer(0, 'test host', '2026-10-27T12:00:00Z');
     const fetcher = vi.fn(async (url: string | URL | Request) => {
+      // The fixture preserves the fetch input's original string coercion.
+      // eslint-disable-next-line @typescript-eslint/no-base-to-string
       const path = String(url);
       return Response.json(
         path.endsWith('/stats')
@@ -144,7 +146,7 @@ describe('diagnostic stream', () => {
     const [url, init] = fetcher.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe('/api/v1/chat/turns');
     expect(new Headers(init.headers).get('Authorization')).toBe('Bearer private-token');
-    expect(JSON.parse(String(init.body))).toEqual({ host: 'local', query: 'Why?' });
+    expect(JSON.parse(String(init.body as string))).toEqual({ host: 'local', query: 'Why?' });
   });
 });
 
@@ -168,6 +170,6 @@ describe('action recovery', () => {
     });
     expect((await client.execute(action.id, 'original-key')).state).toBe('failed');
     expect(new Headers(init?.headers).get('Idempotency-Key')).toBe('original-key');
-    expect(JSON.parse(String(init?.body))).toEqual({ confirmed: true });
+    expect(JSON.parse(String(init?.body as string))).toEqual({ confirmed: true });
   });
 });

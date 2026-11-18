@@ -19,6 +19,7 @@
 }
 .trace-chevron {
   transform: rotate(-90deg);
+  transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 .diagnostic-trace[open] .trace-chevron {
   transform: none;
@@ -221,10 +222,12 @@
     grid-template-columns: 1fr;
     gap: 20px;
   }
+  /* stylelint-disable no-descending-specificity -- Preserve the established higher-specificity override. */
   .trace-detail {
     border: 0;
     padding: 0;
   }
+  /* stylelint-enable no-descending-specificity */
 }
 @media (max-width: 560px) {
   .trace-heading strong,
@@ -246,9 +249,6 @@
     width: 100%;
     justify-content: space-between;
   }
-}
-.trace-chevron {
-  transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 @supports (interpolate-size: allow-keywords) and (interactivity: inert) and selector(details::details-content) {
   .diagnostic-trace {

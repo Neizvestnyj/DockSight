@@ -39,6 +39,13 @@ repos:
 
   - repo: local
     hooks:
+      - id: frontend-check
+        name: Check frontend quality gates
+        entry: npm --prefix frontend run check
+        language: system
+        files: ^(frontend/|\.pre-commit-config\.yaml$|\.github/workflows/frontend\.yml$)
+        pass_filenames: false
+
       - id: hadolint
         name: Lint Dockerfile
         entry: uv run --project backend hadolint

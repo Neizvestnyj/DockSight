@@ -44,7 +44,7 @@ it('connects a separate-origin API with transient bearer authority and clears th
     'https://example.test/api/v1/hosts',
     expect.objectContaining({
       credentials: 'omit',
-      headers: expect.objectContaining({ Authorization: 'Bearer test-only-connection-token' }),
+      headers: expect.objectContaining({ Authorization: 'Bearer test-only-connection-token' }) as unknown,
     }),
   );
   expect((connected.mock.calls[0]?.[0] as ApiClient).authentication).toBe('bearer');

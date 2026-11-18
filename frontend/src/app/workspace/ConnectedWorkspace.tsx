@@ -1,7 +1,8 @@
 import controlStyles from '../../shared/ui/Controls.module.css';
 import { useLocale } from '../../shared/i18n/locale';
 import { useEffect, useRef, useState } from 'react';
-import type { Host, Transport } from '../../shared/contracts/contracts';
+import type { Host } from '../../shared/contracts/contracts';
+import type { Transport } from '../../shared/contracts/transport';
 import { DemoClient, demoHosts } from '../../infrastructure/demo/demo';
 import { isMessageKey } from '../../shared/i18n/messages';
 import { Connection } from '../../modules/session';
@@ -39,7 +40,7 @@ export function ConnectedWorkspace({
   const [modelSelection, setModelSelection] = useState<ModelSelection>();
   const saved = useWorkspace(connection.client.history);
   const history = useSavedInvestigations(connection.client.history);
-  const host = connection.demo ? selectedHost : (saved.detail?.host ?? selectedHost);
+  const host = workspaceHost(connection.demo, selectedHost, saved.detail?.host);
   const restored = useRef<number | undefined>(undefined);
   const choseInitialHost = useRef(false);
   const displayHosts = connection.demo
@@ -197,4 +198,9 @@ export function ConnectedWorkspace({
       )}
     </>
   );
+}
+
+/** Keep a saved investigation bound to its own host until an explicit scope change. */
+function workspaceHost(demo: boolean, selected: string, savedHost: string | undefined): string {
+  return demo ? selected : (savedHost ?? selected);
 }

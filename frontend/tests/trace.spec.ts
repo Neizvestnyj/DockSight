@@ -183,7 +183,9 @@ test('keeps a demo trace open across completion, supports keyboard selection and
   await expect(trace.locator('.trace-step[aria-pressed=true]')).toContainText('Формирование ответа');
   await trace.getByRole('button', { name: 'Скопировать трассировку' }).click();
   await expect(trace.getByRole('status')).toHaveText('Трассировка скопирована');
-  const copied = await page.evaluate(() => JSON.parse((window as Window & { traceCopy?: string }).traceCopy!));
+  const copied = await page.evaluate(
+    () => JSON.parse((window as Window & { traceCopy?: string }).traceCopy!) as { simulated: unknown; steps: unknown },
+  );
   expect(copied.simulated).toBe(true);
   expect(copied.steps).toHaveLength(7);
   expect(JSON.stringify(copied)).not.toContain('Inspect this container');

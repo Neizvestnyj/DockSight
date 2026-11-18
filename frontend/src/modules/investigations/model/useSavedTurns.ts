@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiError } from '../../../shared/contracts/errors';
-import { targetKey, type Answer, type DiagnosticTarget, type Transport } from '../../../shared/contracts/contracts';
+import { targetKey, type Answer, type DiagnosticTarget } from '../../../shared/contracts/contracts';
+import type { Transport } from '../../../shared/contracts/transport';
 import type { ModelSelection } from '../../../shared/contracts/model-contracts';
 import type {
   InvestigationDetail,
@@ -26,8 +27,9 @@ export interface SavedContext {
 /** Render persisted attempts as questions and recover observation without resubmitting work. */
 export function useSavedTurns(client: Transport, host: string, selection?: ModelSelection, saved?: SavedContext) {
   const history = client.history;
-  const [snapshots, setSnapshots] = useState<TurnPage['items']>(saved?.detail?.turns.items ?? []);
-  const [nextCursor, setNextCursor] = useState(saved?.detail?.turns.next_cursor ?? null);
+  const detail = saved?.detail;
+  const [snapshots, setSnapshots] = useState<TurnPage['items']>(detail?.turns.items ?? []);
+  const [nextCursor, setNextCursor] = useState(detail?.turns.next_cursor ?? null);
   const [error, setError] = useState('');
   const [errorSource, setErrorSource] = useState<'server' | 'client'>('client');
   const [observing, setObserving] = useState(false);
@@ -39,14 +41,19 @@ export function useSavedTurns(client: Transport, host: string, selection?: Model
   useEffect(() => {
     latest.current = saved;
   }, [saved]);
-  const runningId = useRef(saved?.detail?.active_turn_id ?? null);
+  const runningId = useRef(detail?.active_turn_id ?? null);
   const observedId = useRef<string | null>(null);
   const submittingRef = useRef(false);
-  const id = saved?.detail?.id;
-  const refreshedActiveId = saved?.detail?.active_turn_id;
+  const id = detail?.id;
+  const refreshedActiveId = detail?.active_turn_id;
+
+  /** Reject observation replies after their controller or owning generation was detached. */
+  function detached(controller: AbortController, epoch: number): boolean {
+    return controller.signal.aborted || generation.current !== epoch;
+  }
 
   useEffect(() => {
-    const incoming = saved?.detail?.turns.items;
+    const incoming = detail?.turns.items;
     if (!incoming) return;
     let attached = true;
     queueMicrotask(() => {
@@ -71,7 +78,7 @@ export function useSavedTurns(client: Transport, host: string, selection?: Model
     return () => {
       attached = false;
     };
-  }, [saved?.detail?.turns.items]);
+  }, [detail?.turns.items]);
 
   /** Reject another host/chat and stale revisions before exposing a committed snapshot. */
   const receive = useCallback(
@@ -94,11 +101,11 @@ export function useSavedTurns(client: Transport, host: string, selection?: Model
     async (turnId: string, controller: AbortController, epoch: number) => {
       if (!history) return;
       let failures = 0;
-      while (!controller.signal.aborted && generation.current === epoch) {
+      while (!detached(controller, epoch)) {
         try {
           await available(controller.signal);
           const current = await history.turn(turnId, controller.signal);
-          if (controller.signal.aborted || generation.current !== epoch) return;
+          if (detached(controller, epoch)) return;
           receive(current);
           setError('');
           if (current.state !== 'running') {
@@ -109,7 +116,7 @@ export function useSavedTurns(client: Transport, host: string, selection?: Model
           await history.observeTurn(
             turnId,
             (snapshot) => {
-              if (!controller.signal.aborted && generation.current === epoch) receive(snapshot);
+              if (!detached(controller, epoch)) receive(snapshot);
             },
             controller.signal,
           );
@@ -118,7 +125,7 @@ export function useSavedTurns(client: Transport, host: string, selection?: Model
             return;
           }
         } catch (failure) {
-          if (controller.signal.aborted || generation.current !== epoch) return;
+          if (detached(controller, epoch)) return;
           setObserving(false);
           setErrorSource('client');
           if (failure instanceof ApiError && [401, 403, 404].includes(failure.httpStatus ?? 0)) {
@@ -181,7 +188,19 @@ export function useSavedTurns(client: Transport, host: string, selection?: Model
     void observe(refreshedActiveId, controller, generation.current);
   }, [history, id, saved?.enabled, submitting, refreshedActiveId, snapshots, observe]);
 
+  /** Preserve conflict ownership and expose only the existing submission error. */
+  function failSubmission(failure: unknown, saved: SavedContext) {
+    setErrorSource(failure instanceof ApiError ? 'server' : 'client');
+    if (failure instanceof ApiError && failure.code === 'workspace_conflict') saved.conflict?.(failure.current);
+    setError(
+      failure instanceof ApiError
+        ? failure.message
+        : 'Could not submit the question. Check saved history before trying again.',
+    );
+  }
+
   /** Admit a question or exact saved clarification once, recovering a lost response through reads. */
+  // eslint-disable-next-line complexity -- Keep admission and recovery in one async sequence to preserve ownership timing.
   async function submit(input: Omit<StartTurn, 'expected_revision'>, preservedDraft?: string) {
     if (!history || !id || !saved || submittingRef.current || runningId.current) return;
     submittingRef.current = true;
@@ -202,7 +221,7 @@ export function useSavedTurns(client: Transport, host: string, selection?: Model
           await history.startTurn(id, { ...input, expected_revision: saved.revision() } as StartTurn, controller.signal)
         ).snapshot;
       } catch (failure) {
-        if (controller.signal.aborted || generation.current !== epoch) return;
+        if (detached(controller, epoch)) return;
         if (failure instanceof ApiError) throw failure;
         const recovered = await history.investigation(id, controller.signal);
         const receipt = recovered.turns.items.find(
@@ -211,7 +230,7 @@ export function useSavedTurns(client: Transport, host: string, selection?: Model
         if (!receipt) throw failure;
         snapshot = receipt;
       }
-      if (controller.signal.aborted || generation.current !== epoch) return;
+      if (detached(controller, epoch)) return;
       receive(snapshot);
       await saved.refresh();
       if (generation.current !== epoch) return;
@@ -223,13 +242,7 @@ export function useSavedTurns(client: Transport, host: string, selection?: Model
       }
     } catch (failure) {
       if (generation.current !== epoch) return;
-      setErrorSource(failure instanceof ApiError ? 'server' : 'client');
-      if (failure instanceof ApiError && failure.code === 'workspace_conflict') saved.conflict?.(failure.current);
-      setError(
-        failure instanceof ApiError
-          ? failure.message
-          : 'Could not submit the question. Check saved history before trying again.',
-      );
+      failSubmission(failure, saved);
     } finally {
       if (generation.current === epoch) {
         submittingRef.current = false;

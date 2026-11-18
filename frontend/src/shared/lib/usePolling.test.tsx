@@ -65,14 +65,14 @@ describe('runtime polling', () => {
     renderHook(() => usePolling(read, true));
     await advance(0);
     visibility.mockReturnValue('hidden');
-    act(() => document.dispatchEvent(new Event('visibilitychange')));
+    void act(() => document.dispatchEvent(new Event('visibilitychange')));
     await advance(60_000);
     expect(read).toHaveBeenCalledOnce();
     visibility.mockReturnValue('visible');
     await act(async () => document.dispatchEvent(new Event('visibilitychange')));
     expect(read).toHaveBeenCalledTimes(2);
     online.mockReturnValue(false);
-    act(() => window.dispatchEvent(new Event('offline')));
+    void act(() => window.dispatchEvent(new Event('offline')));
     await advance(60_000);
     expect(read).toHaveBeenCalledTimes(2);
     online.mockReturnValue(true);

@@ -153,6 +153,19 @@ actions. Models provide explanations and select from approved tools and widgets.
 ## Frontend
 
 - Keep the React, strict TypeScript, and Vite client in `frontend/`. Branch changes require explicit user approval.
+- Put assembly in `src/app/`, product capabilities in `src/modules/`, concrete transports in `src/infrastructure/`,
+  and reusable contracts and foundations in `src/shared/`. Import other modules through their public APIs and avoid
+  cycles. Product modules do not import app assembly or concrete transports. Shared does not import higher layers.
+- Give state, controllers, and connections stable owners. Use cohesive pure helpers and local UI state when shared
+  ownership is unnecessary. Owners cancel stale reads and clean up effect subscriptions and timers. Use CSS Modules
+  for components and `shared/styles` for intentional global foundations.
+- Preserve observable behavior and existing failure and concurrency boundaries during refactoring. Discuss pre-existing
+  defects before changing their behavior.
+- Apply strict TypeScript and typed ESLint to production and test code. Handle promises, unsafe values, and exhaustive
+  cases explicitly. Keep modified cyclomatic complexity at most 15 and nesting depth at most 4 in production code.
+  Scope justified exceptions narrowly and explain their reason in English.
+- Keep dependency-cruiser, Knip, Stylelint, and accessibility checks effective. Test behavior and failure boundaries.
+  Do not weaken assertions, test discovery, or coverage floors to pass checks.
 - Treat the backend widget schemas, runtime values, SSE events, and action lifecycle as the client contracts.
   Validate API data at the transport boundary. Render logs and environment values as text.
 - Keep API bearer tokens and CSRF values in browser memory. First-party login may persist an opaque HttpOnly cookie.
@@ -168,6 +181,7 @@ actions. Models provide explanations and select from approved tools and widgets.
   Restore last-active only at bootstrap. Focus refresh must not follow another tab's navigation.
 - Save drafts after 300 ms using serialized revisioned writes. Restore acknowledged state only. Preserve dirty text on
   conflict and require explicit reload/use-this-draft. Focus reads must not silently rebase dirty workspace revisions.
+  Keep text entered during initial chat creation locally until its matching acknowledgement, then save it normally.
 - Refresh/reconnect reads and observes the same accepted turn without resubmitting. Detach on navigation or disconnect.
   Only explicit Stop cancels the exact active owner. A late old Stop must not detach a newer turn.
 - Keep removed-host/model archives readable and require explicit valid scope before continuation. Never match

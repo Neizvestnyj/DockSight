@@ -62,6 +62,7 @@ export function CardActions({
         </button>
       )}
       {ordinary.length > 0 && (
+        /* eslint-disable jsx-a11y-x/no-noninteractive-element-interactions -- Native details handles disclosure; Escape restores focus. */
         <details
           className={`${styles['card-actions-menu']} card-actions-menu`}
           name="container-operations"
@@ -98,6 +99,7 @@ export function CardActions({
             </div>
           )}
         </details>
+        /* eslint-enable jsx-a11y-x/no-noninteractive-element-interactions */
       )}
       {!actions.length && <span>{t('No permitted actions')}</span>}
     </div>

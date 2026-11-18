@@ -57,7 +57,7 @@ describe('model selection', async () => {
   });
 
   it('authenticates and validates provider catalogs and selected status identity', async () => {
-    const fetcher = vi.fn().mockResolvedValue(
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
       Response.json({
         schema_version: 1,
         provider: 'ollama',
@@ -72,7 +72,7 @@ describe('model selection', async () => {
     const signal = new AbortController().signal;
     await client.models('ollama', signal, true);
     expect(fetcher.mock.calls[0]?.[0]).toBe('/api/v1/model-providers/ollama/models?refresh=true');
-    expect(new Headers(fetcher.mock.calls[0]?.[1].headers).get('Authorization')).toBe('Bearer test-token');
+    expect(new Headers(fetcher.mock.calls[0]?.[1]?.headers).get('Authorization')).toBe('Bearer test-token');
     await expect(client.models('gemini', signal)).rejects.toThrow();
     fetcher.mockResolvedValue(Response.json(demoSystemStatus('demo-eu')));
     await expect(
@@ -85,12 +85,13 @@ describe('model selection', async () => {
     const client = new DemoClient();
     const data = await client.models('ollama', new AbortController().signal);
     let finish: (catalog: ModelCatalog) => void = () => {};
-    client.models = vi.fn().mockImplementationOnce(
+    const models = vi.fn<DemoClient['models']>().mockImplementationOnce(
       () =>
         new Promise((resolve) => {
           finish = resolve;
         }),
     );
+    client.models = models;
     const { result } = renderHook(() => useModelCatalog(client));
     let first: Promise<void> | undefined;
     act(() => {
@@ -104,8 +105,8 @@ describe('model selection', async () => {
     await act(async () => {
       await result.current.loadCatalog('ollama');
     });
-    expect(client.models).toHaveBeenCalledTimes(1);
-    vi.mocked(client.models).mockRejectedValueOnce(new TypeError('private connection failure'));
+    expect(models).toHaveBeenCalledTimes(1);
+    models.mockRejectedValueOnce(new TypeError('private connection failure'));
     await act(async () => {
       await result.current.loadCatalog('ollama', true);
     });

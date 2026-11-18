@@ -103,6 +103,69 @@ export function useWorkspace(history?: HistoryTransport) {
     install,
   });
 
+  /** Reject replies after their workspace generation was detached. */
+  function detached(epoch: number, signal: AbortSignal): boolean {
+    return generation.current !== epoch || signal.aborted;
+  }
+
+  /** Preserve newer acknowledged workspace data already installed for the same chat. */
+  function currentWorkspace(id: string, result: InvestigationDetail) {
+    const acknowledged = current.current?.id === id ? current.current.workspace : result.workspace;
+    return acknowledged.revision > result.workspace.revision ? acknowledged : result.workspace;
+  }
+
+  /** Drop a provisional draft when a different initial creation owns its scope. */
+  function prepareInitialDraft(initial: boolean, host: string) {
+    if (
+      initial &&
+      initialDraft.current &&
+      (initialCreation.current || (initialDraft.current.host && initialDraft.current.host !== host))
+    ) {
+      initialDraft.current = null;
+      showDraft('');
+      setSaveState('saved');
+    }
+  }
+
+  /** Transfer a matching provisional draft only after its initial chat was acknowledged. */
+  function takeInitialDraft(initial: boolean, epoch: number): string | undefined {
+    const retained = initial && initialDraft.current?.epoch === epoch ? initialDraft.current.value : undefined;
+    if (initial) {
+      initialDraft.current = null;
+      initialCreation.current = null;
+    }
+    return retained;
+  }
+
+  /** Leave a failed initial draft visible without claiming it was saved. */
+  function failInitialCreation(initial: boolean, epoch: number) {
+    if (initial && initialCreation.current?.epoch === epoch) {
+      initialCreation.current = null;
+      if (initialDraft.current?.epoch === epoch) initialDraft.current = { ...initialDraft.current, epoch: null };
+    }
+  }
+
+  /** Merge a refresh without rebasing dirty draft state or another workspace's revision. */
+  function mergeRefresh(result: InvestigationDetail, id: string, epoch: number): boolean {
+    if (generation.current !== epoch || current.current?.id !== id) return false;
+    const acknowledged = current.current.workspace;
+    const dirty = Boolean(Object.keys(pending.current).length || conflict.current);
+    if (dirty && result.workspace.revision > acknowledged.revision) {
+      if (!conflict.current || result.workspace.revision >= conflict.current.revision)
+        conflict.current = result.workspace;
+      clearTimeout(timer.current);
+      setSaveState('conflict');
+    }
+    current.current = {
+      ...result,
+      workspace: dirty || result.workspace.revision < acknowledged.revision ? acknowledged : result.workspace,
+    };
+    setDetail(current.current);
+    if (!Object.keys(pending.current).length && !writing.current && !conflict.current)
+      showDraft(current.current.workspace.draft);
+    return true;
+  }
+
   /** Detach old reads before opening another owned archive. */
   async function open(id: string) {
     if (!history) return;
@@ -116,20 +179,20 @@ export function useWorkspace(history?: HistoryTransport) {
     setError('');
     try {
       const result = await history.investigation(id, controller.signal);
-      if (generation.current !== epoch || controller.signal.aborted) return;
-      if (!(await flush()) || generation.current !== epoch || controller.signal.aborted) return;
-      const acknowledged = current.current?.id === id ? current.current.workspace : result.workspace;
+      if (detached(epoch, controller.signal)) return;
+      if (!(await flush()) || detached(epoch, controller.signal)) return;
+      const workspace = currentWorkspace(id, result);
       if (openingInitial) {
         initialDraft.current = null;
         initialCreation.current = null;
       }
       install({
         ...result,
-        workspace: acknowledged.revision > result.workspace.revision ? acknowledged : result.workspace,
+        workspace,
       });
       await savePreferences({ last_investigation_id: id });
     } catch {
-      if (generation.current === epoch && !controller.signal.aborted) {
+      if (!detached(epoch, controller.signal)) {
         if (openingInitial && !current.current) {
           initialCreation.current = null;
           if (initialDraft.current) initialDraft.current = { ...initialDraft.current, epoch: null };
@@ -147,15 +210,7 @@ export function useWorkspace(history?: HistoryTransport) {
     if (!(await flush())) return;
     active.current?.abort();
     const initial = !current.current;
-    if (
-      initial &&
-      initialDraft.current &&
-      (initialCreation.current || (initialDraft.current.host && initialDraft.current.host !== host))
-    ) {
-      initialDraft.current = null;
-      showDraft('');
-      setSaveState('saved');
-    }
+    prepareInitialDraft(initial, host);
     const epoch = ++generation.current;
     if (initial) {
       initialCreation.current = { host, epoch };
@@ -168,20 +223,13 @@ export function useWorkspace(history?: HistoryTransport) {
       const result = await history.createInvestigation(crypto.randomUUID(), host);
       if (generation.current !== epoch) return;
       if (!(await flush()) || generation.current !== epoch) return;
-      const retained = initial && initialDraft.current?.epoch === epoch ? initialDraft.current.value : undefined;
-      if (initial) {
-        initialDraft.current = null;
-        initialCreation.current = null;
-      }
+      const retained = takeInitialDraft(initial, epoch);
       install({ ...result, turns: { items: [], next_cursor: null } });
       if (retained !== undefined) patch({ draft: retained });
       await savePreferences({ last_investigation_id: result.id, host });
     } catch {
       if (generation.current === epoch) {
-        if (initial && initialCreation.current?.epoch === epoch) {
-          initialCreation.current = null;
-          if (initialDraft.current?.epoch === epoch) initialDraft.current = { ...initialDraft.current, epoch: null };
-        }
+        failInitialCreation(initial, epoch);
         setError('Could not create saved chat. Retry manually.');
       }
     } finally {
@@ -197,22 +245,7 @@ export function useWorkspace(history?: HistoryTransport) {
     try {
       const result = await history.investigation(id, new AbortController().signal);
       if (writing.current) await writing.current;
-      if (generation.current !== epoch || current.current?.id !== id) return;
-      const acknowledged = current.current.workspace;
-      const dirty = Boolean(Object.keys(pending.current).length || conflict.current);
-      if (dirty && result.workspace.revision > acknowledged.revision) {
-        if (!conflict.current || result.workspace.revision >= conflict.current.revision)
-          conflict.current = result.workspace;
-        clearTimeout(timer.current);
-        setSaveState('conflict');
-      }
-      current.current = {
-        ...result,
-        workspace: dirty || result.workspace.revision < acknowledged.revision ? acknowledged : result.workspace,
-      };
-      setDetail(current.current);
-      if (!Object.keys(pending.current).length && !writing.current && !conflict.current)
-        showDraft(current.current.workspace.draft);
+      if (!mergeRefresh(result, id, epoch)) return;
       if (actorWriting.current) await actorWriting.current;
       const preferences = await history.actorWorkspace();
       if (generation.current === epoch) {

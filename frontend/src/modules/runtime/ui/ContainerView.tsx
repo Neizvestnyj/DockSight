@@ -2,7 +2,8 @@ import feedbackStyles from '../../../shared/ui/Feedback.module.css';
 import controlStyles from '../../../shared/ui/Controls.module.css';
 import type { ReactNode } from 'react';
 import { ArrowLeft, ArrowRight, Box, Cpu, LockKeyhole, RefreshCw, Terminal } from 'lucide-react';
-import type { Container, Transport } from '../../../shared/contracts/contracts';
+import type { Container } from '../../../shared/contracts/contracts';
+import type { Transport } from '../../../shared/contracts/transport';
 import type { MessageKey } from '../../../shared/i18n/messages';
 import { bytes, utc } from '../../../shared/lib/format';
 import { useLocale } from '../../../shared/i18n/locale';
@@ -45,14 +46,95 @@ export function ContainerView({
   );
   const state = snapshot.data;
   const measure = metrics.data;
-  return (
-    <section className={`${styles['container-view']}`} aria-label={t('Container facts')}>
-      <div className={`${styles['container-view-nav']}`}>
-        <button className={`text-button ${controlStyles['text-button']}`} onClick={back}>
-          <ArrowLeft size={14} />
-          {t('Back to investigation')}
-        </button>
-      </div>
+  /** Render the current inspect facts and exact resource metadata. */
+  function stateFacts() {
+    return (
+      state && (
+        <>
+          <div className={`${styles['runtime-state']} runtime-state`}>
+            <Status state={state.state} />
+            <code>{state.image}</code>
+          </div>
+          <HealthFact state={state.state} health={state.health} />
+          <dl className={`${factStyles['fact-strip']} fact-strip ${styles['runtime-lifecycle']}`}>
+            <div>
+              <dt>{t('Exit code')}</dt>
+              <dd
+                className={
+                  state.state === 'exited' && state.exit_code !== 0
+                    ? `negative ${feedbackStyles['negative']}`
+                    : undefined
+                }
+              >
+                {state.exit_code}
+              </dd>
+            </div>
+            <div>
+              <dt>{t('OOM killed')}</dt>
+              <dd>{t(state.oom_killed ? 'Yes' : 'No')}</dd>
+            </div>
+            <div>
+              <dt>{t('Restarts')}</dt>
+              <dd>{state.restart_count}</dd>
+            </div>
+          </dl>
+          <dl className={`${styles['runtime-metadata']}`}>
+            <div>
+              <dt>{t('Started')}</dt>
+              <dd>
+                {state.started_at ? (
+                  <time dateTime={state.started_at}>{timestamp(state.started_at)}</time>
+                ) : (
+                  t('Unavailable')
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt>{t('Compose project')}</dt>
+              <dd>{state.compose_project ?? t('None reported')}</dd>
+            </div>
+          </dl>
+        </>
+      )
+    );
+  }
+
+  /** Render the current bounded metrics snapshot. */
+  function metricFacts() {
+    return (
+      measure && (
+        <>
+          <dl className={`${styles['runtime-metrics']}`}>
+            <div>
+              <dt>{t('CPU')}</dt>
+              <dd className={measure.cpu_percent === null ? 'unavailable' : ''}>
+                {measure.cpu_percent === null
+                  ? t('Unavailable')
+                  : `${measure.cpu_percent.toLocaleString(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`}
+              </dd>
+            </div>
+            <div>
+              <dt>{t('Memory usage')}</dt>
+              <dd className={measure.memory_usage_bytes === null ? 'unavailable' : ''}>
+                {bytes(measure.memory_usage_bytes, locale, t('Unavailable'))}
+              </dd>
+            </div>
+            <div>
+              <dt>{t('Memory limit')}</dt>
+              <dd className={measure.memory_limit_bytes === null ? 'unavailable' : ''}>
+                {bytes(measure.memory_limit_bytes, locale, t('Unavailable'))}
+              </dd>
+            </div>
+          </dl>
+          <p className={`section-note ${controlStyles['section-note']}`}>{t('One measurement · no metric history')}</p>
+        </>
+      )
+    );
+  }
+
+  /** Show the exact current target and its available controls. */
+  function containerHeading() {
+    return (
       <div className={`${styles['container-view-heading']}`}>
         <div>
           <h2 id="container-title" tabIndex={-1}>
@@ -84,6 +166,18 @@ export function ContainerView({
           </button>
         </div>
       </div>
+    );
+  }
+
+  return (
+    <section className={`${styles['container-view']}`} aria-label={t('Container facts')}>
+      <div className={`${styles['container-view-nav']}`}>
+        <button className={`text-button ${controlStyles['text-button']}`} onClick={back}>
+          <ArrowLeft size={14} />
+          {t('Back to investigation')}
+        </button>
+      </div>
+      {containerHeading()}
       <p className={`${styles['runtime-feedback']}`} role="status" aria-live="polite">
         {t(
           loading
@@ -111,53 +205,7 @@ export function ContainerView({
             busy={loading}
             observedAt={state?.observed_at}
           >
-            {state && (
-              <>
-                <div className={`${styles['runtime-state']} runtime-state`}>
-                  <Status state={state.state} />
-                  <code>{state.image}</code>
-                </div>
-                <HealthFact state={state.state} health={state.health} />
-                <dl className={`${factStyles['fact-strip']} fact-strip ${styles['runtime-lifecycle']}`}>
-                  <div>
-                    <dt>{t('Exit code')}</dt>
-                    <dd
-                      className={
-                        state.state === 'exited' && state.exit_code !== 0
-                          ? `negative ${feedbackStyles['negative']}`
-                          : undefined
-                      }
-                    >
-                      {state.exit_code}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>{t('OOM killed')}</dt>
-                    <dd>{t(state.oom_killed ? 'Yes' : 'No')}</dd>
-                  </div>
-                  <div>
-                    <dt>{t('Restarts')}</dt>
-                    <dd>{state.restart_count}</dd>
-                  </div>
-                </dl>
-                <dl className={`${styles['runtime-metadata']}`}>
-                  <div>
-                    <dt>{t('Started')}</dt>
-                    <dd>
-                      {state.started_at ? (
-                        <time dateTime={state.started_at}>{timestamp(state.started_at)}</time>
-                      ) : (
-                        t('Unavailable')
-                      )}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>{t('Compose project')}</dt>
-                    <dd>{state.compose_project ?? t('None reported')}</dd>
-                  </div>
-                </dl>
-              </>
-            )}
+            {stateFacts()}
           </ReadPanel>
           <ReadPanel
             title="Container logs"
@@ -181,35 +229,7 @@ export function ContainerView({
             refresh={refresh}
             busy={loading}
           >
-            {measure && (
-              <>
-                <dl className={`${styles['runtime-metrics']}`}>
-                  <div>
-                    <dt>{t('CPU')}</dt>
-                    <dd className={measure.cpu_percent === null ? 'unavailable' : ''}>
-                      {measure.cpu_percent === null
-                        ? t('Unavailable')
-                        : `${measure.cpu_percent.toLocaleString(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>{t('Memory usage')}</dt>
-                    <dd className={measure.memory_usage_bytes === null ? 'unavailable' : ''}>
-                      {bytes(measure.memory_usage_bytes, locale, t('Unavailable'))}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>{t('Memory limit')}</dt>
-                    <dd className={measure.memory_limit_bytes === null ? 'unavailable' : ''}>
-                      {bytes(measure.memory_limit_bytes, locale, t('Unavailable'))}
-                    </dd>
-                  </div>
-                </dl>
-                <p className={`section-note ${controlStyles['section-note']}`}>
-                  {t('One measurement · no metric history')}
-                </p>
-              </>
-            )}
+            {metricFacts()}
           </ReadPanel>
           <ReadPanel
             title="Environment"

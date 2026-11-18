@@ -32,6 +32,7 @@ export function SystemStatusTrigger({ status, open }: { status: Availability; op
       ? 'available'
       : 'not_checked';
   const summary = rows.map(([name, state]) => `${t(name)}: ${t(labels[state])}`).join(' · ');
+  /* eslint-disable jsx-a11y-x/role-supports-aria-props -- aria-description is a global ARIA attribute. */
   return (
     <button
       className={`${styles['system-status-trigger']}`}
@@ -62,6 +63,7 @@ export function SystemStatusTrigger({ status, open }: { status: Availability; op
       </span>
     </button>
   );
+  /* eslint-enable jsx-a11y-x/role-supports-aria-props */
 }
 
 /** Explain metadata availability, freshness, and limitations without offering server configuration edits. */
@@ -80,13 +82,7 @@ export function SystemStatusPanel({
 }) {
   const { t } = useLocale();
   const data = status.data;
-  const feedback: MessageKey = status.stopped
-    ? 'Automatic checks stopped. Retry manually.'
-    : status.automatic
-      ? status.blockedReason
-        ? 'Automatic checks retry with increasing intervals.'
-        : 'Checks refresh every minute while this tab is visible.'
-      : 'No background polling';
+  const feedback = statusFeedback(status);
   const providerNames = {
     ollama: 'Ollama',
     openai: 'OpenAI',
@@ -95,7 +91,7 @@ export function SystemStatusPanel({
     compatible: 'OpenAI-compatible',
   } as const;
   const dependency = (check?: DependencyCheck) => ({
-    state: check?.state ?? ('not_checked' as CheckState),
+    state: check?.state ?? 'not_checked',
     reason: check ? checkReasons[check.code] : ('Not checked' as MessageKey),
     checkedAt: check?.checked_at,
   });
@@ -182,4 +178,13 @@ export function SystemStatusPanel({
       </footer>
     </Modal>
   );
+}
+
+/** Explain the current polling policy without changing the availability state. */
+function statusFeedback(status: Availability): MessageKey {
+  if (status.stopped) return 'Automatic checks stopped. Retry manually.';
+  if (!status.automatic) return 'No background polling';
+  return status.blockedReason
+    ? 'Automatic checks retry with increasing intervals.'
+    : 'Checks refresh every minute while this tab is visible.';
 }

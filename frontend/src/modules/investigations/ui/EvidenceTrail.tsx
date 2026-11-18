@@ -24,6 +24,7 @@ export function EvidenceTrail({
     groups.set(key, group);
   }
   return (
+    // eslint-disable-next-line jsx-a11y-x/no-noninteractive-tabindex -- The scrollable region needs keyboard focus.
     <div className={`${styles['evidence-picker']}`} role="region" aria-label={t('Observation sources')} tabIndex={0}>
       {[...groups].map(([key, group]) => (
         <fieldset key={key} className={`${styles['evidence-resource']}`}>
