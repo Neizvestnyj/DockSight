@@ -6,6 +6,10 @@ Dates record merges into `master`. Version links show the corresponding changes.
 
 ## [0.8.2]
 
+### Added
+
+- Add the XERJ Corpus Hub contributor badge to the README.
+
 ### Changed
 
 - Raise backend and frontend coverage floors in CI and show measured coverage in the README badges.
