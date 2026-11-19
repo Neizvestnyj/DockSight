@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { DiagnosticTarget } from '../../../shared/contracts/contracts';
 import { ApiError } from '../../../shared/contracts/errors';
 import {
   actorWorkspaceSchema,
@@ -12,6 +13,11 @@ import {
 
 import { useWorkspaceWrites, type InitialCreation, type InitialDraft, type SaveState } from './workspace-writes';
 
+interface ContainerDiagnosis {
+  query: string;
+  target: Extract<DiagnosticTarget, { kind: 'container' }>;
+}
+
 /** Keep acknowledged server revisions separate from unsent text and serialize local writes. */
 export function useWorkspace(history?: HistoryTransport) {
   const [ready, setReady] = useState(!history);
@@ -19,6 +25,7 @@ export function useWorkspace(history?: HistoryTransport) {
   const [error, setError] = useState('');
   const [actor, setActor] = useState<ActorWorkspace>();
   const [detail, setDetail] = useState<InvestigationDetail>();
+  const [diagnosisChatId, setDiagnosisChatId] = useState<string>();
   const [draft, showDraft] = useState('');
   const [saveState, setSaveState] = useState<SaveState>('saved');
   const [attempt, setAttempt] = useState(0);
@@ -30,6 +37,7 @@ export function useWorkspace(history?: HistoryTransport) {
   const actorWriting = useRef<Promise<boolean> | null>(null);
   const conflict = useRef<InvestigationWorkspace | null>(null);
   const generation = useRef(0);
+  const pendingDiagnosis = useRef<(ContainerDiagnosis & { id: string; epoch: number }) | undefined>(undefined);
   const accountGeneration = useRef(0);
   const active = useRef<AbortController | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -204,8 +212,8 @@ export function useWorkspace(history?: HistoryTransport) {
     }
   }
 
-  /** Create one explicit chat without deleting any previous archive. */
-  async function create(host: string) {
+  /** Create one explicit chat and hand its ID to a caller only while this navigation still owns it. */
+  async function create(host: string, diagnosis?: ContainerDiagnosis) {
     if (!history || !host) return;
     if (!(await flush())) return;
     active.current?.abort();
@@ -225,6 +233,10 @@ export function useWorkspace(history?: HistoryTransport) {
       if (!(await flush()) || generation.current !== epoch) return;
       const retained = takeInitialDraft(initial, epoch);
       install({ ...result, turns: { items: [], next_cursor: null } });
+      if (diagnosis) {
+        pendingDiagnosis.current = { id: result.id, epoch, ...diagnosis };
+        setDiagnosisChatId(result.id);
+      }
       if (retained !== undefined) patch({ draft: retained });
       await savePreferences({ last_investigation_id: result.id, host });
     } catch {
@@ -235,6 +247,15 @@ export function useWorkspace(history?: HistoryTransport) {
     } finally {
       if (generation.current === epoch) setLoading(false);
     }
+  }
+
+  /** Claim the initial question once from the matching chat after its workspace mounts. */
+  function takeDiagnosis(id: string) {
+    const pending = pendingDiagnosis.current;
+    if (pending?.id !== id || pending.epoch !== generation.current || current.current?.id !== id) return;
+    pendingDiagnosis.current = undefined;
+    setDiagnosisChatId(undefined);
+    return pending;
   }
 
   /** Refresh metadata after acceptance while preserving any newly typed local draft. */
@@ -333,6 +354,8 @@ export function useWorkspace(history?: HistoryTransport) {
     saveState,
     open,
     create,
+    diagnosisChatId,
+    takeDiagnosis,
     patch,
     flush,
     refresh,

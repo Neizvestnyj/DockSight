@@ -25,8 +25,9 @@ import { ModelPicker, ModelTrigger } from '../../modules/model-selection';
 import { useModelCatalog } from '../../modules/model-selection';
 import { ApiClient } from '../../infrastructure/api/api';
 import type { useWorkspace, useSavedInvestigations } from '../../modules/investigations';
-import { SavedInvestigations } from '../../modules/investigations';
+import { DemoInvestigations, SavedInvestigations } from '../../modules/investigations';
 import { hostPickerTriggerId, type ConnectionState } from './types';
+import { useContainerDiagnosis } from './useContainerDiagnosis';
 import styles from './WorkspacePage.module.css';
 
 interface WorkspaceProps {
@@ -118,6 +119,18 @@ export function WorkspacePage({
   const modelAvailable = modelIsAvailable();
   const groupAvailable = groupIsAvailable();
   const continuingBlocked = continuationIsBlocked();
+  const demoChats = investigation.demoChats;
+  const containerDiagnosis = useContainerDiagnosis({
+    host,
+    selected,
+    draft,
+    saved,
+    investigation,
+    blocked: Boolean(availability.blockedReason),
+    openInvestigation,
+    refreshHistory: history.refresh,
+    startDemo: startDemoContainerDiagnosis,
+  });
 
   /** Display the explicit model or the backend's currently reported default. */
   function selectedModel() {
@@ -254,23 +267,39 @@ export function WorkspacePage({
     requestAnimationFrame(() => document.getElementById(focusQuery ? 'query' : 'workspace-title')?.focus());
   }
 
-  /** Start an isolated model session for the exact container, preserving previous diagnostic snapshots. */
-  function diagnoseContainer(container: Container) {
-    if (investigation.running || availability.blockedReason) return;
+  /** Choose the simulated container fixture and open its Demo chat. */
+  function startDemoContainerDiagnosis(
+    container: Container,
+    query: string,
+    target: Extract<DiagnosticTarget, { kind: 'container' }>,
+    startsNew: boolean,
+  ) {
+    if (!demoChats) return;
+    if (startsNew) {
+      if (!demoChats.newChat({ draft, scenario })) return;
+      setDraft('');
+    }
     const matched = scenarios.find((row) => row.container === container.name);
     if (demoClient && matched) {
       demoClient.setScenario(matched.id);
       setScenario(matched.id);
     }
     openInvestigation();
-    void investigation.run(
-      t('Investigate {name} ({id}). What happened, and what evidence supports it?', {
-        name: container.name,
-        id: container.id,
-      }),
-      true,
-      demo ? undefined : { kind: 'container', id: container.id, name: container.name },
-    );
+    void demoChats.diagnoseContainer(query, target);
+  }
+
+  /** Restore a Demo chat's retained turns and draft without requesting a new answer. */
+  function openDemoChat(id: string) {
+    if (!demoClient || !demoChats) return;
+    const restored = demoChats.openChat(id, { draft, scenario });
+    if (!restored) return;
+    const fixture = scenarios.find((row) => row.id === restored.scenario);
+    if (fixture) {
+      demoClient.setScenario(fixture.id);
+      setScenario(fixture.id);
+    }
+    setDraft(restored.draft);
+    openInvestigation();
   }
 
   /** Start an explicitly scoped group investigation without changing historical observations. */
@@ -318,8 +347,8 @@ export function WorkspacePage({
         setMenu(false);
       },
       newInvestigation: () => {
-        if (demo) {
-          investigation.clear();
+        if (demoChats) {
+          if (!demoChats.newChat({ draft, scenario })) return;
           setDraft('');
         } else if (configured)
           void saved.create(host).then(() => {
@@ -333,7 +362,19 @@ export function WorkspacePage({
         setMenu(false);
         setHelp(true);
       },
-      savedChats: !demo ? (
+      savedChats: demoChats ? (
+        <DemoInvestigations
+          items={demoChats.archives.map((chat) => {
+            const first = chat.turns[0];
+            return {
+              id: chat.id,
+              title: first?.exampleQuery && isMessageKey(first.query) ? t(first.query) : first?.query,
+            };
+          })}
+          running={investigation.running}
+          open={openDemoChat}
+        />
+      ) : !demo ? (
         <SavedInvestigations
           {...history}
           selected={saved.detail?.id}
@@ -644,11 +685,14 @@ export function WorkspacePage({
               client={client}
               container={selected}
               running={investigation.running}
-              blocked={Boolean(availability.blockedReason)}
+              blocked={saved.loading || Boolean(availability.blockedReason)}
               automatic={!demo}
               active={viewingContainer}
               back={() => openInvestigation()}
-              diagnose={diagnoseContainer}
+              diagnose={containerDiagnosis.diagnose}
+              continueDiagnosis={
+                containerDiagnosis.separate ? (container) => containerDiagnosis.diagnose(container, true) : undefined
+              }
             />
           </div>
         )}

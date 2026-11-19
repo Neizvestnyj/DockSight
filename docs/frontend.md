@@ -42,6 +42,7 @@ Separate-origin bearer access omits cookies and requires reconnecting after refr
 The endpoint, bearer token, and CSRF value stay in memory and never enter browser storage or the page URL.
 Provider credentials stay on the backend.
 The locale is the only JavaScript browser-storage preference. It follows browser language unless explicitly selected.
+The language selector is beside the DockSight logo on the sign-in screen.
 
 ## Saved chats and drafts
 
@@ -95,8 +96,13 @@ selection, focus, and investigation state. A failed read marks retained rows sta
 
 Selecting a container opens a read-only overview. Inspect, metrics, and logs load independently and are not atomic.
 Inspect includes allowlisted environment values. Failed sources retain their last successful values. Only an inspect
-`container_not_found` response confirms removal. Absence from bounded inventory does not establish deletion. Diagnosis
-targets the exact selected container ID. Historical observations do not change during refresh.
+`container_not_found` response confirms removal. Absence from bounded inventory does not establish deletion.
+
+Container diagnosis uses the exact selected ID. **Diagnose in a new chat** starts a separate investigation and
+preserves the previous chat and its draft. **Continue in current chat** adds the container to the open investigation.
+An empty chat without a draft and a chat whose latest explicit target is the same container offer **Diagnose** in
+place. Selecting a container does not start or stop a turn. Finished answers and historical observations stay in
+their original chats. Demo retains previous chats in memory for the current host.
 
 ## System status
 

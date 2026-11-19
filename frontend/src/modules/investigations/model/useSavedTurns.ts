@@ -320,6 +320,10 @@ export function useSavedTurns(client: Transport, host: string, selection?: Model
 
   return {
     turns: projectSavedTurns(snapshots),
+    lastTarget: snapshots.reduce<DiagnosticTarget | undefined>(
+      (target, row) => ('target' in row ? (row.target ?? target) : target),
+      undefined,
+    ),
     running: submitting || snapshots.some((row) => 'state' in row && row.state === 'running'),
     run,
     chooseTarget,

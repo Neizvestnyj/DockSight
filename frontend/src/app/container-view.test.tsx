@@ -73,15 +73,16 @@ describe('read-only container viewing', async () => {
   });
 
   it('starts diagnosis only on explicit request for the selected exact container', async () => {
+    const session = crypto.randomUUID();
     const diagnose = vi.spyOn(DemoClient.prototype, 'diagnose').mockImplementation(async (input, receive) => {
       const envelope = { schema_version: 1 as const, request_id: 'r', turn_id: 't' };
-      receive({ ...envelope, type: 'turn.started', session_id: crypto.randomUUID() });
+      receive({ ...envelope, type: 'turn.started', session_id: input.session_id ?? session });
       receive({ ...envelope, type: 'answer.ready', answer: demoAnswer('oom', input.host) });
       receive({ ...envelope, type: 'turn.completed' });
     });
     await renderDemoApp();
     fireEvent.click(await screen.findByTitle('report-worker'));
-    const button = screen.getByRole('button', { name: 'Diagnose' });
+    const button = screen.getByRole('button', { name: 'Diagnose in a new chat' });
     await waitFor(() => expect(button).toBeEnabled());
     expect(diagnose).not.toHaveBeenCalled();
     fireEvent.click(button);
@@ -89,9 +90,21 @@ describe('read-only container viewing', async () => {
     expect(diagnose).toHaveBeenCalledOnce();
     expect(diagnose.mock.calls[0]?.[0]).toEqual({
       host: 'demo-eu',
+      container_id: '2'.repeat(64),
       query: `Investigate report-worker (${'2'.repeat(64)}). What happened, and what evidence supports it?`,
     });
-    expect(screen.getByText('2 turns in this tab session')).toBeInTheDocument();
+    const archived = screen.getByRole('region', { name: 'Demo chats' });
+    fireEvent.click(within(archived).getByRole('button', { name: 'Why does payments-api keep restarting?' }));
+    expect(screen.getByRole('heading', { name: 'Why does payments-api keep restarting?' })).toBeInTheDocument();
+    expect.soft(screen.getByRole('combobox', { name: 'Demo scenario' })).toHaveTextContent('Crash loop');
+    expect(diagnose).toHaveBeenCalledOnce();
+    fireEvent.click(within(archived).getByRole('button', { name: /Investigate report-worker/ }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Continue the investigation' }), {
+      target: { value: 'Check the exit code again.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Investigate' }));
+    await screen.findByRole('heading', { name: 'Check the exit code again.' });
+    expect(diagnose.mock.calls[1]?.[0]).toMatchObject({ session_id: session, container_id: '2'.repeat(64) });
   });
 
   it('retains the last data and its timestamp during refresh and after a failed refresh', async () => {

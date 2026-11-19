@@ -37,7 +37,16 @@
 }
 .container-view-actions {
   flex-wrap: wrap;
-  flex: none;
+  align-items: flex-start;
+}
+.diagnosis-actions {
+  display: grid;
+  gap: 4px;
+}
+.diagnosis-actions .continue-diagnosis {
+  min-height: 32px;
+  justify-content: center;
+  text-align: center;
 }
 .container-view-grid {
   display: grid;
@@ -141,8 +150,14 @@
   .container-view-actions {
     width: 100%;
   }
-  .container-view-actions button {
-    flex: 1;
+  .container-view-actions > button,
+  .container-view-actions > .diagnosis-actions {
+    flex: 1 1 auto;
+  }
+  .container-view-actions > button,
+  .diagnosis-actions > button,
+  .diagnosis-actions > .continue-diagnosis {
+    min-height: 44px;
   }
   :global(.fact-strip).runtime-lifecycle {
     display: block;

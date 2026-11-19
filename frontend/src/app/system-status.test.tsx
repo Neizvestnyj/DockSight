@@ -127,7 +127,7 @@ describe('system availability', async () => {
     fireEvent.click(await screen.findByTitle('payments-api'));
     const facts = screen.getByRole('region', { name: 'Container facts' });
     expect(await within(facts).findByText('APP_ENV')).toBeInTheDocument();
-    expect(within(facts).getByRole('button', { name: 'Diagnose' })).toBeDisabled();
+    expect(within(facts).getByRole('button', { name: 'Diagnose in a new chat' })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: /^System status/ }));
     const panel = screen.getByRole('dialog', { name: 'System status' });
     expect(panel).toHaveTextContent('qwen3.5:9b');
@@ -136,7 +136,7 @@ describe('system availability', async () => {
     fireEvent.click(within(panel).getByRole('button', { name: 'Check again' }));
     await waitFor(() => expect(within(panel).getByRole('button', { name: 'Check again' })).toBeEnabled());
     fireEvent.click(within(panel).getByRole('button', { name: 'Close dialog' }));
-    expect(within(facts).getByRole('button', { name: 'Diagnose' })).toBeEnabled();
+    expect(within(facts).getByRole('button', { name: 'Diagnose in a new chat' })).toBeEnabled();
     expect(diagnose).not.toHaveBeenCalled();
   });
 });

@@ -226,6 +226,18 @@ it('groups nested clarification attempts under one original question', () => {
   expect(result.current.turns[0]?.attempts).toHaveLength(3);
 });
 
+it('uses a late clarification as the latest target even when its question is shown above others', () => {
+  const group = { kind: 'compose', name: 'commerce' } as const;
+  const parent = snapshot({ state: 'awaiting_selection' });
+  const container = snapshot({ target: { kind: 'container', id: 'a'.repeat(64), name: 'payments-api' } });
+  const clarification = snapshot({ clarification_of: parent.id, target: group });
+  const { result } = renderHook(() =>
+    useSavedTurns(new ApiClient(), 'local', undefined, context([parent, container, clarification])),
+  );
+  expect(result.current.turns.at(-1)?.id).toBe(container.id);
+  expect(result.current.lastTarget).toEqual(group);
+});
+
 it('keeps an unsupported saved answer visible without discarding supported history', () => {
   const api = new ApiClient();
   const supported = snapshot();
