@@ -156,12 +156,22 @@ test('rechecks stale status, recovers diagnosis automatically, and stops after r
     }
     return route.fulfill({ json: [] });
   });
-  await page.clock.install();
+  const clockStart = Date.now();
+  await page.clock.install({ time: clockStart });
+  // Keep browser time fixed while the test API delivers responses.
+  await page.clock.pauseAt(clockStart + 60_000);
   await openDemo(page);
   await connectApi(page);
   await expect(page.locator('.composer-foot')).toContainText('local');
+  const draftSaved = page.getByText('Draft saved', { exact: true });
+  await expect(draftSaved).toBeVisible();
   const draft = page.getByRole('textbox');
   await draft.fill('Preserve this investigation');
+  await expect(page.getByText('Draft unsaved', { exact: true })).toBeVisible();
+  await page.clock.runFor(300);
+  await expect(draftSaved).toBeVisible();
+  const diagnose = page.getByRole('button', { name: 'Investigate', exact: true });
+  await expect(diagnose).toBeEnabled();
   const trigger = page.getByRole('button', { name: /^System status/ });
   const dialog = page.getByRole('dialog', { name: 'System status' });
   await trigger.click();
@@ -178,7 +188,8 @@ test('rechecks stale status, recovers diagnosis automatically, and stops after r
   await page.keyboard.press('Escape');
   failure = 'docker';
   await page.clock.runFor(60_000);
-  await expect(page.getByRole('button', { name: 'Investigate', exact: true })).toBeDisabled();
+  await expect.poll(() => calls).toBe(3);
+  await expect(diagnose).toBeDisabled();
   await expect(
     page.getByText(
       'Docker is unavailable for this host. Diagnosis cannot collect evidence. Check the connection and try again.',
@@ -186,10 +197,12 @@ test('rechecks stale status, recovers diagnosis automatically, and stops after r
   ).toBeVisible();
   failure = 'none';
   await page.clock.runFor(120_000);
-  await expect(page.getByRole('button', { name: 'Investigate', exact: true })).toBeEnabled();
+  await expect.poll(() => calls).toBe(4);
+  await expect(diagnose).toBeEnabled();
   await expect(draft).toHaveValue('Preserve this investigation');
   failure = 'authorization';
   await page.clock.runFor(60_000);
+  await expect.poll(() => calls).toBe(5);
   await trigger.click();
   await expect(dialog).toContainText('The API rejected the bearer token.');
   await expect(dialog).toContainText('Dependency results are from the previous successful check.');

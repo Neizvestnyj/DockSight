@@ -18,6 +18,11 @@ Dates record merges into `master` unless a release date is set separately. Versi
 - Refresh backend and frontend dependencies, CI tools, and Docker images. Frontend development requires Node.js 24.15
   or later in the Node.js 24 LTS line.
 
+### Fixed
+
+- Stabilize the browser test for automatic recovery after Docker status failures and stopping polls after rejected
+  authorization.
+
 ### Removed
 
 - Remove generated Design Taste files from version control.
