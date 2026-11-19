@@ -4,8 +4,8 @@ import { chooseOption } from './helpers/select';
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import { hostAnswer } from './fixtures/host-overview';
-import { demoContainer, demoSystemStatus } from '../src/demo';
-import type { StartTurn } from '../src/investigation-contracts';
+import { demoContainer, demoSystemStatus } from '../src/infrastructure/demo/demo';
+import type { StartTurn } from '../src/shared/contracts/investigation-contracts';
 
 /** Connect to the test's isolated intercepted API on desktop and mobile. */
 async function connect(page: Page) {

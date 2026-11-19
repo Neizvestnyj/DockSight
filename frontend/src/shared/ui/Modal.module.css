@@ -1,0 +1,55 @@
+.modal {
+  width: min(520px, calc(100% - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sheet);
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: 0 16px 64px #00000024;
+}
+.modal::backdrop {
+  background: #13141666;
+}
+.modal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.modal-head h2 {
+  font-size: 20px;
+  font-weight: 500;
+}
+.modal > p {
+  margin: 12px 0;
+}
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 24px;
+}
+.modal-actions > span {
+  font-size: 12px;
+}
+@media (max-width: 560px) {
+  .modal-actions :global(.primary) {
+    white-space: normal;
+  }
+  .modal {
+    padding: 20px;
+  }
+  .modal-head {
+    margin-bottom: 12px;
+  }
+  .modal-head h2 {
+    font-size: 19px;
+  }
+  .modal-actions button {
+    min-height: 44px;
+  }
+}

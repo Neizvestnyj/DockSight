@@ -3,8 +3,8 @@ import { openDemo } from './helpers/demo';
 import { chooseOption } from './helpers/select';
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
-import { demoAnswer, demoSystemStatus } from '../src/demo';
-import type { StartTurn } from '../src/investigation-contracts';
+import { demoAnswer, demoSystemStatus } from '../src/infrastructure/demo/demo';
+import type { StartTurn } from '../src/shared/contracts/investigation-contracts';
 
 for (const kind of ['container', 'compose'] as const) {
   test(`clarifies a same-name ${kind} follow-up without losing the conversation`, async ({ page }, info) => {

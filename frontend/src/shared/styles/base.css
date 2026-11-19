@@ -1,0 +1,154 @@
+:root {
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  color: var(--text);
+  background: var(--ground);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  --ground: #eef1f3;
+  --surface: #fff;
+  --raised: #f5f7f8;
+  --active: #e4e8eb;
+  --border: #e8eaec;
+  --rule: #f0f1f2;
+  --control: #c7cbce;
+  --text: #131416;
+  --muted: #5d5f60;
+  --faint: #696c70;
+  --primary: #202426;
+  --accent: #1b6c80;
+  --accent-soft: #edf5f7;
+  --positive: #1e7b4f;
+  --negative: #b52d35;
+  --warning: #8a5b13;
+  --warning-bg: #fbf6e9;
+  --negative-bg: #fff0ee;
+  --log-bg: #202224;
+  --log-text: #e4e7e9;
+  --log-muted: #a1aaaf;
+  --radius-card: 8px;
+  --radius-control: 6px;
+  --radius-sheet: 16px;
+  --gap: 24px;
+  --pad: 24px;
+  --sidebar-width: 228px;
+  font-size: 14px;
+  line-height: 1.45;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  min-width: 320px;
+}
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+  border: 1px solid var(--control);
+  border-radius: var(--radius-control);
+}
+button,
+select,
+summary {
+  cursor: pointer;
+}
+button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: var(--surface);
+}
+button:hover {
+  border-color: var(--muted);
+}
+button:active {
+  transform: translateY(1px);
+}
+button:disabled {
+  cursor: not-allowed;
+  color: var(--faint);
+  background: var(--raised);
+  border-color: var(--border);
+}
+button:disabled:active {
+  transform: none;
+}
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+/* stylelint-disable no-descending-specificity -- Preserve the established higher-specificity override. */
+button,
+a,
+input,
+textarea,
+select {
+  transition:
+    border-color 120ms,
+    outline-offset 120ms;
+}
+/* stylelint-enable no-descending-specificity */
+a {
+  color: var(--accent);
+}
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+h1 {
+  font-size: 22px;
+  line-height: 1.25;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+h2,
+h3 {
+  font-weight: 500;
+  font-size: 14px;
+  line-height: 1.4;
+}
+strong {
+  font-weight: 500;
+}
+code,
+pre {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+}
+svg {
+  flex: none;
+}
+dl,
+dd {
+  margin: 0;
+}
+select {
+  min-height: 34px;
+  padding: 5px 28px 5px 10px;
+  background: var(--surface);
+  max-width: 100%;
+}
+input,
+textarea {
+  background: var(--surface);
+  min-height: 40px;
+  padding: 9px 12px;
+}
+input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  min-height: 0;
+  accent-color: var(--primary);
+}
+textarea {
+  resize: vertical;
+}

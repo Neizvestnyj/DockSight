@@ -5,7 +5,7 @@ import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { InvestigationDetail, SavedTurn } from '../../src/investigation-contracts';
+import type { InvestigationDetail, SavedTurn } from '../../src/shared/contracts/investigation-contracts';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const python = resolve(
@@ -247,10 +247,18 @@ export class PersistentApi {
     await writeFile(join(this.directory, 'action-clock.txt'), String(seconds));
   }
 
-  /** Read the actor's currently acknowledged investigation. */
+  /** Wait for the actor's acknowledged investigation before reading its archive. */
   async current() {
-    const workspace = await this.api<{ last_investigation_id: string }>('/me/workspace');
-    return this.api<InvestigationDetail>(`/investigations/${workspace.last_investigation_id}`);
+    const acknowledged: { id: string | null } = { id: null };
+    await expect
+      .poll(async () => {
+        const workspace = await this.api<{ last_investigation_id: string | null }>('/me/workspace');
+        acknowledged.id = workspace.last_investigation_id;
+        return acknowledged.id;
+      })
+      .not.toBeNull();
+    if (!acknowledged.id) throw new Error('The actor has no acknowledged investigation.');
+    return this.api<InvestigationDetail>(`/investigations/${acknowledged.id}`);
   }
 
   /** Acknowledge an exact fixture scope through the real revisioned workspace API. */

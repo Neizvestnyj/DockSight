@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { test, expect } from './fixtures/persistent-api';
-import type { SavedTurn } from '../src/investigation-contracts';
+import type { SavedTurn } from '../src/shared/contracts/investigation-contracts';
 import type { Page } from '@playwright/test';
 
 /** Open the archived card's ordinary operations before reviewing the exact server action. */
@@ -8,6 +8,57 @@ async function reviewRestart(page: Page) {
   await page.locator('.card-actions-menu summary').click();
   await page.getByRole('button', { name: 'Review restart', exact: true }).click();
 }
+
+test('retains and saves a draft typed while the initial chat is being created', async ({ page, persistent }) => {
+  let release!: () => void;
+  let entered!: () => void;
+  let submissions = 0;
+  let executions = 0;
+  const blocked = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const requested = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  page.on('request', (request) => {
+    if (request.method() === 'POST' && /\/investigations\/[^/]+\/turns$/.test(request.url())) submissions++;
+    if (request.method() === 'POST' && /\/actions\/[^/]+\/execute$/.test(request.url())) executions++;
+  });
+  await page.route('**/api/v1/investigations', async (route) => {
+    if (route.request().method() === 'POST') {
+      entered();
+      await blocked;
+    }
+    await route.continue();
+  });
+  try {
+    await persistent.login(page);
+    await requested;
+    const input = page.getByRole('textbox');
+    await input.fill('A draft typed during startup');
+    await expect(page.getByRole('button', { name: 'Investigate', exact: true })).toBeDisabled();
+    await expect(input).toHaveValue('A draft typed during startup');
+    release();
+    await expect
+      .poll(async () => {
+        const workspace = await persistent.api<{ last_investigation_id: string | null }>('/me/workspace');
+        if (!workspace.last_investigation_id) return null;
+        const chat = await persistent.api<{ workspace: { draft: string } }>(
+          `/investigations/${workspace.last_investigation_id}`,
+        );
+        return chat.workspace.draft;
+      })
+      .toBe('A draft typed during startup');
+    await expect(input).toHaveValue('A draft typed during startup');
+    await page.reload();
+    await expect(page.getByRole('textbox')).toHaveValue('A draft typed during startup');
+    expect(submissions).toBe(0);
+    expect(executions).toBe(0);
+    expect((await persistent.events()).filter((row) => row.event.startsWith('model.'))).toHaveLength(0);
+  } finally {
+    release();
+  }
+});
 
 test('real cookie login and F5 restore one saved answer without another submit', async ({ page, persistent }) => {
   let submissions = 0;

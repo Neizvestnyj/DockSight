@@ -14,6 +14,7 @@ for (const locale of ['en', 'ru'] as const) {
 
     await field.fill('x'.repeat(4000));
     const submit = composer.getByRole('button', { name: locale === 'ru' ? 'Исследовать' : 'Investigate', exact: true });
+    if (info.project.name === 'desktop') await expect(hint).toBeVisible();
     if (await hint.isVisible()) {
       const text = (await hint.boundingBox())!;
       const button = (await submit.boundingBox())!;
@@ -22,6 +23,7 @@ for (const locale of ['en', 'ru'] as const) {
     await submit.click();
     const stop = composer.getByRole('button', { name: locale === 'ru' ? 'Остановить диагностику' : 'Stop diagnosis' });
     await expect(stop).toBeVisible();
+    if (info.project.name === 'desktop') await expect(hint).toBeVisible();
     if (await hint.isVisible()) {
       const text = (await hint.boundingBox())!;
       const button = (await stop.boundingBox())!;
@@ -30,6 +32,7 @@ for (const locale of ['en', 'ru'] as const) {
     await composer.scrollIntoViewIfNeeded();
     await page.screenshot({ path: `test-results/${info.project.name}-${locale}-composer-running.png` });
     await field.fill('y'.repeat(4000));
+    if (info.project.name === 'desktop') await expect(hint).toBeVisible();
     if (await hint.isVisible()) {
       const text = (await hint.boundingBox())!;
       const button = (await stop.boundingBox())!;

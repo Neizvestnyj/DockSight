@@ -1,0 +1,26 @@
+.language-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+.language-switch :global(.select-trigger) {
+  width: auto;
+  flex-shrink: 0;
+  font-size: 12px;
+}
+@media (max-width: 560px) {
+  .language-switch {
+    gap: 4px;
+  }
+  .language-switch :global(.select-trigger) {
+    min-height: 44px;
+  }
+  .language-switch > svg {
+    display: none;
+  }
+}
+.language-switch :global(.select-control) {
+  width: 140px;
+  flex: none;
+}

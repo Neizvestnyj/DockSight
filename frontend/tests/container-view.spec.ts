@@ -3,8 +3,8 @@ import { openDemo } from './helpers/demo';
 import { chooseOption } from './helpers/select';
 import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-import { demoAnswer, demoContainer, demoSystemStatus } from '../src/demo';
-import type { StartTurn } from '../src/investigation-contracts';
+import { demoAnswer, demoContainer, demoSystemStatus } from '../src/infrastructure/demo/demo';
+import type { StartTurn } from '../src/shared/contracts/investigation-contracts';
 
 /** Reach the same container from a persistent sidebar or the mobile navigation sheet. */
 async function chooseContainer(page: Page, name: string, russian = false) {

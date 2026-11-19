@@ -3,9 +3,9 @@ import { openDemo } from './helpers/demo';
 import { chooseOption } from './helpers/select';
 import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-import { DemoClient, demoAnswer, demoContainer, demoSystemStatus } from '../src/demo';
-import { demoGroupAnswer } from '../src/demoGroup';
-import type { StartTurn } from '../src/investigation-contracts';
+import { DemoClient, demoAnswer, demoContainer, demoSystemStatus } from '../src/infrastructure/demo/demo';
+import { demoGroupAnswer } from '../src/infrastructure/demo/demoGroup';
+import type { StartTurn } from '../src/shared/contracts/investigation-contracts';
 
 /** Locate optional diagnostic scope in the main workspace on every viewport. */
 async function openScope(page: Page) {

@@ -3,7 +3,7 @@ import AxeBuilder from '@axe-core/playwright';
 import { savedApi } from './helpers/saved-api';
 import { writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
-import type { SavedTurn } from '../src/investigation-contracts';
+import type { SavedTurn } from '../src/shared/contracts/investigation-contracts';
 
 /** Open the existing navigation sheet when the current breakpoint folds the sidebar. */
 async function navigation(page: Page) {

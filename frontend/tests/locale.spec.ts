@@ -3,7 +3,7 @@ import { openDemo } from './helpers/demo';
 import { chooseOption } from './helpers/select';
 import { expect, test } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-import { demoAnswer, demoContainer, demoSystemStatus } from '../src/demo';
+import { demoAnswer, demoContainer, demoSystemStatus } from '../src/infrastructure/demo/demo';
 
 test.use({ locale: 'ru-RU' });
 

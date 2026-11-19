@@ -1,0 +1,88 @@
+.select-control {
+  min-width: 0;
+  width: 100%;
+}
+.select-trigger {
+  width: 100%;
+  min-height: 36px;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 11px;
+  color: var(--text);
+  text-align: left;
+  font-size: 13px;
+  line-height: 20px;
+}
+.select-trigger > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.select-trigger > svg {
+  color: var(--faint);
+  transition: transform 120ms;
+}
+.select-trigger[aria-expanded='true'] {
+  border-color: var(--accent);
+}
+.select-trigger[aria-expanded='true'] > svg {
+  transform: rotate(180deg);
+}
+.select-popup {
+  position: fixed;
+  inset: auto;
+  display: block;
+  margin: 0;
+  z-index: 100;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 8px 28px rgb(19 20 22 / 12%);
+  padding: 5px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.select-option {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 8px 34px 8px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 20px;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.select-option[aria-selected='true'] {
+  font-weight: 500;
+}
+.select-option[data-active='true'] {
+  background: var(--active);
+}
+/* stylelint-disable no-descending-specificity -- Preserve the established higher-specificity override. */
+.select-option > svg {
+  position: absolute;
+  right: 10px;
+  color: var(--accent);
+}
+/* stylelint-enable no-descending-specificity */
+.select-option[aria-disabled='true'] {
+  color: var(--faint);
+  cursor: not-allowed;
+  background: none;
+}
+@media (max-width: 560px) {
+  .select-trigger,
+  .select-option {
+    min-height: 44px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .select-trigger > svg {
+    transition: none;
+  }
+}

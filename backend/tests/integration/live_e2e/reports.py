@@ -24,6 +24,8 @@ def record_run(
     events: list[dict[str, Any]],
     clarification_events: list[dict[str, Any]] | None = None,
     previous_turn: dict[str, Any] | None = None,
+    *,
+    browser: dict[str, Any] | None = None,
 ) -> None:
     """Retain successful and failed public responses without credentials or raw inspect documents."""
     target.write_text(
@@ -37,6 +39,7 @@ def record_run(
                 "events": events,
                 "clarification_events": clarification_events or [],
                 "previous_turn": previous_turn,
+                **({"browser": browser} if browser is not None else {}),
             },
             ensure_ascii=False,
             indent=2,

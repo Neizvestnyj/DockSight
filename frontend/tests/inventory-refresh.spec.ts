@@ -1,7 +1,7 @@
 import { routeSavedApi } from './helpers/saved-server';
 import { openDemo } from './helpers/demo';
 import { expect, test } from '@playwright/test';
-import { demoContainer, demoSystemStatus } from '../src/demo';
+import { demoContainer, demoSystemStatus } from '../src/infrastructure/demo/demo';
 
 test('updates inventory and exact selected state while preserving a draft across deletion', async ({ page }, info) => {
   let container = demoContainer(0, 'test-host', '2026-10-28T07:00:00Z');

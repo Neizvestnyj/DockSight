@@ -1,0 +1,28 @@
+.session-entry {
+  width: min(640px, calc(100% - 40px));
+  margin: 12vh auto;
+}
+.session-entry > :global(.brand-logo) {
+  width: 168px;
+  height: auto;
+  margin-bottom: 32px;
+}
+.session-entry h1 {
+  font-size: 24px;
+  margin: 0 0 12px;
+}
+.session-entry p {
+  color: var(--muted);
+}
+.entry-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 24px 0;
+}
+@media (max-width: 640px) {
+  .entry-actions button {
+    min-height: 44px;
+  }
+}

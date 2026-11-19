@@ -3,9 +3,9 @@ import { openDemo } from './helpers/demo';
 import { chooseOption } from './helpers/select';
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
-import { DemoClient, demoAnswer, demoContainer, demoSystemStatus } from '../src/demo';
-import { demoGroupAnswer } from '../src/demoGroup';
-import type { StartTurn } from '../src/investigation-contracts';
+import { DemoClient, demoAnswer, demoContainer, demoSystemStatus } from '../src/infrastructure/demo/demo';
+import { demoGroupAnswer } from '../src/infrastructure/demo/demoGroup';
+import type { StartTurn } from '../src/shared/contracts/investigation-contracts';
 
 for (const groupName of ['vintoria-infra', `vintoria-infra-${'x'.repeat(113)}`]) {
   test(`selects an observed group and retains draft, locale and history (${groupName.length} characters)`, async ({

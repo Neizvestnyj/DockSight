@@ -1,9 +1,9 @@
 import { routeSavedApi } from './helpers/saved-server';
 import { openDemo } from './helpers/demo';
 import { expect, test } from '@playwright/test';
-import { DemoClient, demoAnswer, demoContainer, demoSystemStatus } from '../src/demo';
-import { demoGroupAnswer } from '../src/demoGroup';
-import type { StartTurn } from '../src/investigation-contracts';
+import { DemoClient, demoAnswer, demoContainer, demoSystemStatus } from '../src/infrastructure/demo/demo';
+import { demoGroupAnswer } from '../src/infrastructure/demo/demoGroup';
+import type { StartTurn } from '../src/shared/contracts/investigation-contracts';
 
 test('continues a group diagnosis in one session, retains earlier evidence, and starts fresh from Diagnostics', async ({
   page,

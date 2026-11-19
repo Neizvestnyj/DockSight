@@ -1,0 +1,178 @@
+.container-view-nav,
+.container-view-heading,
+.container-view-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.container-view-nav {
+  justify-content: space-between;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+.runtime-feedback {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 16px 0;
+}
+.container-view-heading {
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+.container-view-heading > div:first-child {
+  flex: 1 1 280px;
+  min-width: 0;
+}
+.container-view-heading h2 {
+  font-size: 20px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.container-view-heading p {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 6px;
+  overflow-wrap: anywhere;
+}
+.container-view-actions {
+  flex-wrap: wrap;
+  flex: none;
+}
+.container-view-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(300px, 1fr);
+  gap: var(--gap);
+}
+.container-view-column {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+}
+.runtime-panel :global(.widget-head) > span {
+  font-size: 11px;
+  color: var(--muted);
+}
+.runtime-state {
+  padding: 0 16px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  overflow-wrap: anywhere;
+}
+.runtime-state code {
+  color: var(--muted);
+  max-width: 100%;
+}
+:global(.fact-strip).runtime-lifecycle {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.runtime-panel > :global(.section-note) {
+  padding: 0 16px 12px;
+}
+.runtime-metadata {
+  padding: 0 16px 16px;
+  font-size: 12px;
+}
+/* stylelint-disable no-descending-specificity -- Preserve the established higher-specificity override. */
+.runtime-metadata > div,
+.runtime-metrics > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding-top: 8px;
+}
+/* stylelint-enable no-descending-specificity */
+.runtime-metadata dt,
+.runtime-metrics dt {
+  color: var(--muted);
+}
+.runtime-metadata dd,
+.runtime-metrics dd {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.runtime-metrics {
+  padding: 0 16px 12px;
+}
+.runtime-metrics dd {
+  font-size: 18px;
+}
+.runtime-metrics dd:global(.unavailable) {
+  color: var(--muted);
+  font-size: 12px;
+}
+.runtime-error {
+  padding: 0 16px 16px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.runtime-error :global(.text-button) {
+  margin-top: 8px;
+}
+.runtime-error details {
+  margin-top: 8px;
+  color: var(--muted);
+}
+.runtime-loading {
+  min-height: 150px;
+  padding: 4px 16px 20px;
+  display: grid;
+  gap: 12px;
+}
+/* stylelint-disable no-descending-specificity -- Preserve the established higher-specificity override. */
+.runtime-loading span {
+  background: var(--raised);
+  height: 24px;
+  border-radius: var(--radius-control);
+}
+/* stylelint-enable no-descending-specificity */
+@media (max-width: 760px) {
+  .container-view-grid {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 560px) {
+  .container-view-actions {
+    width: 100%;
+  }
+  .container-view-actions button {
+    flex: 1;
+  }
+  :global(.fact-strip).runtime-lifecycle {
+    display: block;
+    padding: 0 16px 14px;
+  }
+  :global(.fact-strip).runtime-lifecycle > div {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 6px 0;
+    border: 0;
+  }
+  .runtime-lifecycle dt {
+    margin-bottom: 0;
+  }
+  /* stylelint-disable no-descending-specificity -- Preserve the established higher-specificity override. */
+  .runtime-lifecycle dt,
+  .container-view .runtime-metadata,
+  .runtime-panel .runtime-metrics dd:global(.unavailable),
+  .runtime-panel :global(.env-list) dt code,
+  .runtime-panel :global(.env-list) dd code,
+  .runtime-panel :global(.log-line) code,
+  .runtime-panel :global(.widget-head) h3 {
+    font-size: 14px;
+  }
+  /* stylelint-enable no-descending-specificity */
+  .runtime-panel :global(.widget-foot),
+  .runtime-panel :global(.widget-head) > span,
+  .runtime-panel :global(.log-toolbar) {
+    font-size: 12px;
+  }
+}

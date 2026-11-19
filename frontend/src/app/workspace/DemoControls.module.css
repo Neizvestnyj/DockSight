@@ -1,0 +1,42 @@
+.demo-controls {
+  font-size: 11px;
+  color: var(--muted);
+  margin: 7px 0 0;
+}
+.demo-controls > summary {
+  width: max-content;
+}
+.demo-controls > div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 320px));
+  gap: 16px;
+  align-items: start;
+  padding: 12px 0;
+}
+.demo-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.demo-controls :global(.select-trigger) {
+  font-size: 13px;
+}
+.demo-controls label > span {
+  font-weight: 400;
+  line-height: 1.5;
+}
+@media (max-width: 560px) {
+  .demo-controls {
+    font-size: 13px;
+  }
+  .demo-controls summary {
+    min-height: 36px;
+    padding: 8px 0;
+  }
+  .demo-controls > div {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .demo-controls :global(.select-trigger) {
+    min-height: 44px;
+  }
+}

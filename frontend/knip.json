@@ -1,0 +1,21 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "src/shared/contracts/*.ts",
+    "src/**/*.test.{ts,tsx}",
+    "tests/**/*.spec.ts",
+    "live-tests/**/*.spec.ts",
+    "tests/fixtures/persistence-vite.config.ts",
+    "*.config.{js,mjs,ts}",
+    "scripts/*.mjs"
+  ],
+  "project": [
+    "src/**/*.{ts,tsx}",
+    "tests/**/*.ts",
+    "test-utils/**/*.{ts,tsx}",
+    "live-tests/**/*.ts",
+    "*.config.{js,mjs,ts}",
+    "scripts/*.mjs"
+  ],
+  "ignoreDependencies": ["@fontsource/ibm-plex-mono", "@fontsource/ibm-plex-sans"]
+}

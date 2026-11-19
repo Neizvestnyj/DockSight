@@ -1,5 +1,5 @@
 import { mergeConfig } from 'vite';
-import config from '../../vite.config';
+import config from '../../vite.config.ts';
 
 const target = process.env.DOCKSIGHT_TEST_BACKEND_ORIGIN;
 if (!target) throw new Error('The persistence fixture must allocate its backend first.');
