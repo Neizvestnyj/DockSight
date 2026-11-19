@@ -7,6 +7,7 @@ from docksight.application.views.schemas import (
     DiagnosisResponse,
     GroupSelection,
     LogAnomalyCard,
+    TargetSelection,
 )
 from docksight.domain.runtime import ContainerSnapshot, StackSummary
 from tests.integration.live_e2e.cases import Case
@@ -26,11 +27,16 @@ def check_selection(events: list[dict[str, Any]], lab: ComposeLab) -> None:
     choices = [row for row in events if row["type"] == "clarification.required"]
     assert len(choices) == 1
     selection = GroupSelection.model_validate(choices[0]["selection"])
+    reads = {row["tool"] for row in events if row["type"] == "tool.started"}
+    check_selection_scope(selection, reads, lab)
+
+
+def check_selection_scope(selection: GroupSelection | TargetSelection, reads: set[str], lab: ComposeLab) -> None:
+    """Check exact Compose candidates and pre-selection reads across public transports."""
     assert {(row.kind, row.name) for row in selection.candidates} == {
         ("compose", lab.project),
         ("compose", lab.peer_project),
     }
-    reads = {row["tool"] for row in events if row["type"] == "tool.started"}
     # The server may intercept inspect_group and return alternatives before reading group evidence.
     assert reads <= {"resolve_target", "request_group_selection", "list_containers", "inspect_group"}, reads
 
@@ -89,10 +95,16 @@ def check_answer(events: list[dict[str, Any]], lab: ComposeLab, case: Case, lang
     ready = [row for row in events if row["type"] == "answer.ready"]
     assert len(ready) == 1
     answer = DiagnosisResponse.model_validate(ready[0]["answer"])
+    assert not any(row["type"] == "clarification.required" for row in events)
+    check_diagnosis(answer, lab, case, language)
+    return answer
+
+
+def check_diagnosis(answer: DiagnosisResponse, lab: ComposeLab, case: Case, language: str) -> None:
+    """Compare rendered diagnosis data with exact fixture identity and observed facts."""
     containers = {row.id: row for row in lab.containers.values()}
     if case.spelling == "unscoped":
         containers.update(lab.peers | lab.standalone)
-    assert not any(row["type"] == "clarification.required" for row in events)
     ids = set(containers)
     _check_references(answer, ids)
     names = {row.id: row.name for row in containers.values()}
@@ -103,7 +115,6 @@ def check_answer(events: list[dict[str, Any]], lab: ComposeLab, case: Case, lang
     _check_logs(answer, lab)
     if not case.group and case.causal_profile:
         check_causality(answer, case.causal_profile)
-    return answer
 
 
 def _check_diagnostic_scope(answer: DiagnosisResponse, lab: ComposeLab, case: Case, ids: set[str]) -> None:

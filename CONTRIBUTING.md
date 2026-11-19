@@ -33,17 +33,17 @@ make backend
 Run `make frontend` in another terminal. Backend configuration and credentials follow the
 [quick start](README.md#connect-your-docker-environment).
 
-| Command | Behavior |
-|---------|----------|
-| `make update-deps` | Upgrade backend and frontend runtime and dev dependencies within declared version ranges |
-| `make check` | Run backend and frontend static checks |
-| `make check-backend` / `make check-frontend` | Check one side only |
-| `make test` | Run backend tests and frontend unit tests |
-| `make test-backend` / `make test-frontend` | Test one side only |
-| `make test-browser` | Build the frontend, then run browser tests (requires Chrome) |
-| `make build` | Build the frontend |
-| `make verify` | Run all shared hooks, frontend static and unit checks, and browser tests with a fresh build |
-| `make test-all` | Run `make verify`, SQLite persistence browser tests, and the full local live HTTP and browser matrix |
+| Command                                      | Behavior                                                                                             |
+|----------------------------------------------|------------------------------------------------------------------------------------------------------|
+| `make update-deps`                           | Upgrade backend and frontend runtime and dev dependencies within declared version ranges             |
+| `make check`                                 | Run backend and frontend static checks                                                               |
+| `make check-backend` / `make check-frontend` | Check one side only                                                                                  |
+| `make test`                                  | Run backend tests and frontend unit tests                                                            |
+| `make test-backend` / `make test-frontend`   | Test one side only                                                                                   |
+| `make test-browser`                          | Build the frontend, then run browser tests (requires Chrome)                                         |
+| `make build`                                 | Build the frontend                                                                                   |
+| `make verify`                                | Run all shared hooks, frontend static and unit checks, and browser tests with a fresh build          |
+| `make test-all`                              | Run `make verify`, SQLite persistence browser tests, and the full local live HTTP and browser matrix |
 
 Targets run sequentially even with `make -j` to avoid concurrent frontend checks and builds.
 `make test-all` requires Docker, a running local Ollama server, Chrome, and the installed models `qwen3.5:9b` and
@@ -311,10 +311,10 @@ turn must ask for the two observed choices without individual evidence reads, an
 Follow-up cases diagnose a primary project, then ask about a dependency in the same session. They check fresh scoped
 cards and actual log content, retaining the first turn in the ignored report. No case executes product actions.
 
-| Case | Dependency and checks |
-|------|-----------------------|
-| `compose-follow-up` | Existing failure workload, with equal container/project names. No database engine |
-| `compose-follow-up-noisy` | Running dependency with long synthetic SQL history and retained final log lines |
+| Case                         | Dependency and checks                                                                    |
+|------------------------------|------------------------------------------------------------------------------------------|
+| `compose-follow-up`          | Existing failure workload, with equal container/project names. No database engine        |
+| `compose-follow-up-noisy`    | Running dependency with long synthetic SQL history and retained final log lines          |
 | `compose-follow-up-shutdown` | Real SIGTERM/exit 0, final log lines, and a follow-up on its single-member Compose group |
 
 Select each with `--e2e-case`. Noisy and shutdown cases cover explicit containers and container/project clarification.

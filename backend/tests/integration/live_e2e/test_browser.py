@@ -10,8 +10,9 @@ from typing import Any
 import pytest
 from pydantic import SecretStr
 
+from docksight.application.investigations.contracts import SavedTurn
 from tests.integration.live_e2e.cases import Case, Language
-from tests.integration.live_e2e.checks import check_answer, check_selection
+from tests.integration.live_e2e.checks import check_diagnosis, check_selection_scope
 from tests.integration.live_e2e.lab import ROOT, ComposeLab, run_command
 from tests.integration.live_e2e.reports import record_run, report_path
 from tests.integration.live_e2e.server import live_api
@@ -41,16 +42,13 @@ def test_live_browser(
     artifacts: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Drive Chrome without mocked routes and apply the same exact-resource checks to its real SSE response."""
+    """Drive Chrome against the saved investigation API and check real Docker observations."""
     with socket.socket() as listener:
         listener.bind(("127.0.0.1", 0))
         port = listener.getsockname()[1]
     monkeypatch.setenv("NO_PROXY", "127.0.0.1,localhost,::1")
     target = report_path(artifacts, model_name, case, language, "browser")
     started = datetime.now(UTC).isoformat()
-    payload: dict[str, Any] = {}
-    events: list[dict[str, Any]] = []
-    clarification_events: list[dict[str, Any]] = []
     with live_api(lab, model_name, model_endpoint, (f"http://127.0.0.1:{port}",)) as api:
         token = SecretStr(api.headers["Authorization"].removeprefix("Bearer "))
         options = {
@@ -71,18 +69,24 @@ def test_live_browser(
         }
         try:
             _run_browser(browser_ready, options, token)
-            recorded = json.loads(target.read_text(encoding="utf-8"))
-            payload, events = recorded["input"], recorded["events"]
-            clarification_events = recorded.get("clarification_events", [])
-            if case.needs_selection:
-                check_selection(clarification_events, lab)
-            check_answer(events, lab, case, language)
         finally:
-            if target.is_file():
-                recorded = json.loads(target.read_text(encoding="utf-8"))
-                payload, events = recorded.get("input") or {}, recorded["events"]
-                clarification_events = recorded.get("clarification_events", [])
-            record_run(target, lab, model_name, started, payload, events, clarification_events)
+            recorded: dict[str, Any] = json.loads(target.read_text(encoding="utf-8")) if target.is_file() else {}
+            snapshots = {"turn": recorded.get("turn"), "clarification": recorded.get("clarification")}
+            record_run(target, lab, model_name, started, recorded.get("input") or {}, [], browser=snapshots)
+    _check_browser_result(snapshots, lab, case, language)
+
+
+def _check_browser_result(snapshots: dict[str, Any], lab: ComposeLab, case: Case, language: Language) -> None:
+    """Apply the shared fixture checks to committed public browser snapshots."""
+    turn = SavedTurn.model_validate(snapshots["turn"])
+    assert turn.state == "completed" and turn.answer is not None
+    assert turn.selection is None and turn.error is None
+    if case.needs_selection:
+        parent = SavedTurn.model_validate(snapshots["clarification"])
+        assert parent.state == "awaiting_selection" and parent.selection is not None
+        assert turn.clarification_of == parent.id
+        check_selection_scope(parent.selection, {step.tool for step in parent.progress}, lab)
+    check_diagnosis(turn.answer, lab, case, language)
 
 
 def _run_browser(node: str, options: dict[str, str], token: SecretStr) -> None:
