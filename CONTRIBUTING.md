@@ -77,7 +77,8 @@ Remove the override when ESLint and TypeScript ESLint require a fixed version.
   Group related outcomes in the current version section. Use the intended numeric version, not `Unreleased`.
   Keep that section for ongoing work on the same branch.
   Choose PATCH for compatible fixes, MINOR for compatible additions, and MAJOR for breaking changes.
-  Keep the backend package metadata and lockfile aligned. Documentation alone needs no bump.
+  Set the DockSight version in `backend/pyproject.toml`, match it in `frontend/package.json`, and regenerate both
+  lockfiles. Shared checks enforce the version across package metadata. Documentation alone needs no bump.
   Follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/): group notable outcomes under applicable categories and
   omit empty ones. Use linked `[version] - YYYY-MM-DD` headings for merged versions, dated by the merge into `master`
   unless a separate release date is recorded. Several commits can contribute to one entry.

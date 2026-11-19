@@ -39,6 +39,13 @@ repos:
 
   - repo: local
     hooks:
+      - id: release-version
+        name: Check shared DockSight release version
+        entry: uv run --locked --project backend python scripts/check_release_version.py
+        language: system
+        pass_filenames: false
+        always_run: true
+
       - id: frontend-check
         name: Check frontend quality gates
         entry: npm --prefix frontend run check

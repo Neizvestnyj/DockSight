@@ -13,6 +13,7 @@ Dates record merges into `master`. Version links show the corresponding changes.
 ### Changed
 
 - Raise backend and frontend coverage floors in CI and show measured coverage in the README badges.
+- Use one DockSight release version for the backend and frontend and enforce it in CI.
 
 ### Removed
 
