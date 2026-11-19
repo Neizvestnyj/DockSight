@@ -10,6 +10,8 @@ jobs:
   checks:
     name: Backend checks
     runs-on: ubuntu-24.04
+    outputs:
+      coverage: ${{ steps.coverage.outputs.percent }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -30,6 +32,19 @@ jobs:
         env:
           # Branch guards apply locally; CI also validates master after PR merges.
           SKIP: no-commit-to-branch
+      - name: Read combined Python 3.14 coverage
+        id: coverage
+        run: |
+          percent=$(python - <<'PY'
+          import json
+          from pathlib import Path
+
+          report = json.loads(Path(".test-artifacts/backend-coverage.json").read_text(encoding="utf-8"))
+          coverage = report["totals"]["percent_covered"]
+          print(f"{coverage:.2f}")
+          PY
+          )
+          printf 'percent=%s\n' "$percent" >> "$GITHUB_OUTPUT"
       - run: uv run --project backend pytest backend/tests/integration -m docker --no-cov
         env:
           DOCKSIGHT_TEST_DOCKER: "1"
@@ -56,3 +71,13 @@ jobs:
           cache-dependency-glob: backend/uv.lock
       - run: uv sync --project backend --locked --python ${{ matrix.python }}
       - run: uv run --project backend --python ${{ matrix.python }} pytest backend/tests
+
+  coverage-badge:
+    needs: [checks, compatibility]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    permissions:
+      contents: write
+    uses: ./.github/workflows/publish-coverage.yml
+    with:
+      component: backend
+      percent: ${{ needs.checks.outputs.coverage }}

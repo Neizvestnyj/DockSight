@@ -134,7 +134,7 @@ uv run --project backend pytest backend/tests --dead-fixtures --no-cov
 
 Backend test runs measure line and branch coverage for the entire `docksight` package, including modules not imported
 by tests. The terminal report lists missing lines and branches and hides fully covered files. Local hooks and CI use
-the same defaults and fail below 90% combined line and branch coverage. Opt-in external tests stay disabled by default.
+the same defaults and fail below 92% combined line and branch coverage. Opt-in external tests stay disabled by default.
 
 From the repository root, generate a browsable report with:
 
@@ -143,7 +143,7 @@ uv run --project backend pytest backend/tests --cov-report=html
 ```
 
 Open `htmlcov/index.html`. Coverage data and HTML reports are ignored by Git. Use `--no-cov` for debugging or
-collection-only fixture checks and focused test runs. Use the full suite to check the 90% backend coverage requirement.
+collection-only fixture checks and focused test runs. Use the full suite to check the backend coverage requirement.
 Individual Docker and image checks in CI use `--no-cov` because they do not represent the full suite.
 
 For frontend changes:
@@ -156,10 +156,14 @@ npm --prefix frontend run test:browser
 ```
 
 `check` runs the frontend static quality gates. `test` measures coverage across production TypeScript and TSX files.
+It requires 85% line, 74% branch, 81% statement, and 76% function coverage.
 The ordinary browser suite requires installed Chrome and uses the production preview with mocked HTTP responses.
 Build first.
 Set `PLAYWRIGHT_PORT` if the default preview port is occupied. Reports and failure screenshots are temporary test
 artifacts.
+
+Each successful `master` push workflow publishes its coverage to the generated `coverage-badges` branch for the README.
+The backend badge shows combined line and branch coverage on Python 3.14. The frontend badge shows line coverage.
 
 Persistence recovery checks use a real local backend and temporary SQLite with deterministic model/runtime ports.
 Mocked history endpoints alone cannot verify restart, active-turn reload, or cross-tab revisions. Isolate each state
@@ -199,7 +203,7 @@ The Docker case explicitly restarts its owned fixture to exercise lost delivery,
 
 In repository Settings, configure a branch rule for `master`:
 
-- Require pull requests and the Backend and Frontend checks. `Backend checks` enforces the 90% coverage threshold.
+- Require pull requests and the Backend and Frontend checks. Both workflows enforce their coverage thresholds.
 - Apply the rule to administrators.
 - Disable force pushes and branch deletion.
 - For a solo maintainer, require pull requests without requiring another reviewer's approval.

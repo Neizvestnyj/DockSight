@@ -1,6 +1,6 @@
 [project]
 name = "docksight"
-version = "0.8.1"
+version = "0.8.2"
 description = "Docker diagnostics with typed UI responses and confirmed actions"
 requires-python = ">=3.12"
 dependencies = [
@@ -61,7 +61,7 @@ addopts = [
   "--cov-branch",
   "--cov-report=term-missing:skip-covered",
   "--cov-precision=2",
-  "--cov-fail-under=90",
+  "--cov-fail-under=92",
 ]
 markers = ["docker: opt-in real Docker tests", "live: opt-in configured model tests", "remote: opt-in configured SSH or mTLS host tests"]
 

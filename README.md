@@ -2,6 +2,8 @@
 
 [![Backend CI][backend-ci-badge]][backend-ci]
 [![Frontend CI][frontend-ci-badge]][frontend-ci]
+[![Backend coverage][backend-coverage-badge]][backend-ci]
+[![Frontend line coverage][frontend-coverage-badge]][frontend-ci]
 [![License: Apache-2.0][license-badge]](LICENSE)
 ![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
@@ -156,4 +158,6 @@ DockSight is licensed under [Apache-2.0](LICENSE). Frontend builds include
 [backend-ci]: https://github.com/Neizvestnyj/DockSight/actions/workflows/backend.yml
 [frontend-ci-badge]: https://github.com/Neizvestnyj/DockSight/actions/workflows/frontend.yml/badge.svg?branch=master
 [frontend-ci]: https://github.com/Neizvestnyj/DockSight/actions/workflows/frontend.yml
+[backend-coverage-badge]: https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FNeizvestnyj%2FDockSight%2Frefs%2Fheads%2Fcoverage-badges%2Fbackend.json&query=%24.coverage&suffix=%25&label=backend%20coverage&color=brightgreen
+[frontend-coverage-badge]: https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FNeizvestnyj%2FDockSight%2Frefs%2Fheads%2Fcoverage-badges%2Ffrontend.json&query=%24.coverage&suffix=%25&label=frontend%20line%20coverage&color=brightgreen
 [license-badge]: https://img.shields.io/badge/license-Apache--2.0-blue

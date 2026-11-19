@@ -15,7 +15,7 @@ export default defineConfig({
       exclude: ['src/**/*.test.{ts,tsx}', 'src/**/*.d.ts'],
       reporter: ['text', 'json', 'json-summary'],
       reportsDirectory: '../.test-artifacts/frontend-architecture/coverage',
-      thresholds: { lines: 81.7, branches: 72.72, statements: 78.03, functions: 73.8 },
+      thresholds: { lines: 85, branches: 74, statements: 81, functions: 76 },
     },
   },
 });
