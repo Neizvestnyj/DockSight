@@ -1,7 +1,7 @@
 name: docksight-demo
 services:
   worker:
-    image: python:3.12-alpine@sha256:b658b05ce9c4eb97ec6fc19424818a1f31993659c2b505a532f470e83807815d
+    image: python:3.12-alpine@sha256:c5ba3deef00c7758561a0f03c26f44f10589263d40e732b8748e0d1f38f6dd89
     command: [python, -u, /app/worker.py]
     restart: "no"
     environment:

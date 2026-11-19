@@ -4,7 +4,7 @@ from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final, Literal
+from typing import IO, Final, Literal
 
 import portalocker
 from alembic import command
@@ -69,7 +69,7 @@ class PersistentDatabase:
         self.recoveries = tuple(recoveries)
         self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="docksight-state")
         self._pending = asyncio.Semaphore(32)
-        self._lock: portalocker.Lock | None = None
+        self._lock: portalocker.Lock[IO[bytes]] | None = None
         self._engine: Engine | None = None
         self._connection: Connection | None = None
         self._mode: MaintenanceMode | None = None

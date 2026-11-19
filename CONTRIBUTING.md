@@ -2,7 +2,8 @@
 
 ## Development setup
 
-Use Python 3.14, uv, Node.js 24 LTS, and Git. The backend supports Python 3.12+. CI covers 3.12, 3.13, and 3.14.
+Use Python 3.14, uv, Node.js 24 LTS (24.15 or later), and Git. The backend supports Python 3.12+.
+CI covers 3.12, 3.13, and 3.14.
 Docker and a model provider are needed for real diagnostics, but not for unit tests or the browser demo.
 
 From the repository root:
@@ -54,12 +55,9 @@ live-model tests remain separate opt-in commands described below.
 `make update-deps` updates both lockfiles and local environments. Review the diff, then run `make verify`.
 If a security fix requires a version outside the declared range, update that constraint first.
 
-Pytest stays below `9.2` while `pytest-deadfixtures` relies on removed fixture internals.
-Remove this limit when the plugin supports newer pytest versions.
-
 The frontend overrides minimatch to `^11.0.1` for
 [CVE-2026-118764](https://github.com/advisories/GHSA-g3hv-75wg-m249).
-Remove the override when ESLint and TypeScript ESLint require a fixed version.
+Remove the override when `eslint-plugin-jsx-a11y-x` requires a fixed version.
 
 ## Making changes
 

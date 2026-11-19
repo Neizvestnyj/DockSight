@@ -39,7 +39,7 @@ Run all commands below from the repository root.
 
 ### Try the demo
 
-Requires [Node.js 24 LTS](https://nodejs.org/).
+Requires [Node.js 24 LTS](https://nodejs.org/), version 24.15 or later.
 
 ```sh
 npm --prefix frontend ci
