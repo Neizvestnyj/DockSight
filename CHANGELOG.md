@@ -15,6 +15,8 @@ Dates record merges into `master`. Version links show the corresponding changes.
 - Enforce frontend type, accessibility, style, dependency, and unused-code checks locally and in CI.
 - Enforce source ownership and provision frontend dependencies for shared backend CI checks.
 - Document frontend module boundaries and investigation recovery behavior.
+- Add a single command for verification, SQLite browser checks, and the local live test matrix.
+- Preserve manual Markdown table alignment when updating documentation.
 
 ### Fixed
 

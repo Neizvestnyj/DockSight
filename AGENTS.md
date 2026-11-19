@@ -37,6 +37,8 @@ actions. Models provide explanations and select from approved tools and widgets.
   Product UI copy may be localized through the message catalog. Keep external evidence text verbatim.
 - Keep Markdown brief and factual. Document decisions, contracts, and commands. Omit promotional language, repeated
   summaries, and obvious explanations.
+- Align Markdown tables in source and preserve the user's manual alignment. Match existing column widths and spacing
+  when adding rows. Do not undo manual table formatting as unrelated cleanup.
 - Use short, direct sentences in Markdown. Avoid semicolons in prose, rhetorical headings, conversational introductions,
   and narration about what a document explains. Put procedures in steps and related facts in lists or tables.
 - In README files and all Markdown except `AGENTS.md`, show commands without `rtk` wrappers such as `rtk proxy`

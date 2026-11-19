@@ -1,6 +1,7 @@
 .DEFAULT_GOAL := help
 .NOTPARALLEL:
 .PHONY: help
+E2E_MODELS ?= qwen3.5:9b ministral-3:8b-instruct-2512-q4_K_M
 
 # Help prints through Make itself, so suppress its empty-recipe status message.
 ifeq ($(filter-out help,$(MAKECMDGOALS)),)
@@ -88,3 +89,10 @@ $(eval $(call describe,verify           ,Run all hooks and frontend validation i
 verify:
 	uv run --project backend pre-commit run --all-files
 	$(MAKE) check-frontend test-frontend test-browser
+
+$(eval $(call describe,test-all         ,Run verification and the SQLite and local live test matrix))
+test-all:
+	$(if $(strip $(E2E_MODELS)),,$(error E2E_MODELS must contain at least one model))
+	$(MAKE) verify
+	npm --prefix frontend run test:browser:persistence
+	uv run --project backend pytest backend/tests/integration/live_e2e --no-cov --live-e2e --e2e-browser $(foreach model,$(E2E_MODELS),--e2e-model $(model)) -vv -s

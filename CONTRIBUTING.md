@@ -43,9 +43,13 @@ Run `make frontend` in another terminal. Backend configuration and credentials f
 | `make test-browser` | Build the frontend, then run browser tests (requires Chrome) |
 | `make build` | Build the frontend |
 | `make verify` | Run all shared hooks, frontend static and unit checks, and browser tests with a fresh build |
+| `make test-all` | Run `make verify`, SQLite persistence browser tests, and the full local live HTTP and browser matrix |
 
 Targets run sequentially even with `make -j` to avoid concurrent frontend checks and builds.
-Docker and live-model tests remain separate opt-in commands described below.
+`make test-all` requires Docker, a running local Ollama server, Chrome, and the installed models `qwen3.5:9b` and
+`ministral-3:8b-instruct-2512-q4_K_M`. It runs all default live cases in Russian and English. Override the model list
+with `make test-all E2E_MODELS="model-one model-two"`. The command stops at the first failed stage. Other Docker and
+live-model tests remain separate opt-in commands described below.
 
 `make update-deps` updates both lockfiles and local environments. Review the diff, then run `make verify`.
 If a security fix requires a version outside the declared range, update that constraint first.
