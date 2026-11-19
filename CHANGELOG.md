@@ -14,6 +14,10 @@ Dates record merges into `master`. Version links show the corresponding changes.
 
 - Raise backend and frontend coverage floors in CI and show measured coverage in the README badges.
 
+### Removed
+
+- Remove generated Design Taste files from version control.
+
 ## [0.8.1] - 2026-11-19
 
 ### Changed
