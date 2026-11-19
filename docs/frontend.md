@@ -129,6 +129,8 @@ An archive opens with action review closed. Opening review reads the existing ac
 container ID, and operation before enabling confirmation. Missing, foreign, expired, or indeterminate actions remain
 unavailable. Review never prepares a replacement. Confirmation is separate and identifies the current server-prepared
 target, operation, and expiry.
+Every later read and execution result must match that original identity. Failed or mismatched reads block confirmation
+until a matching read succeeds. Results from a previous connection cannot update the current review.
 
 Each execution uses one idempotency key. A lost response triggers an action read, never an automatic Docker mutation
 retry. A confirmed request can be repeated with its original key only after a read shows the action is still prepared.

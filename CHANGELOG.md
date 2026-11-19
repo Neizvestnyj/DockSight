@@ -20,6 +20,7 @@ Dates record merges into `master`. Version links show the corresponding changes.
 
 - Keep text entered during initial chat creation visible and save it after the chat is acknowledged.
 - Ignore late initial chat replies after their workspace disconnects, preventing stale draft and preference writes.
+- Block action confirmation after failed or mismatched reads until the original target is checked again.
 
 ## [0.8.0]
 
