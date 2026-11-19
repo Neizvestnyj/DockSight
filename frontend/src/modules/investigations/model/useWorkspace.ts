@@ -268,7 +268,7 @@ export function useWorkspace(history?: HistoryTransport) {
   useEffect(() => {
     const controller = new AbortController();
     const epoch = ++generation.current;
-    const accountEpoch = ++accountGeneration.current;
+    ++accountGeneration.current;
     const changedHistory = historyOwner.current !== history;
     if (changedHistory) {
       historyOwner.current = history;
@@ -315,8 +315,11 @@ export function useWorkspace(history?: HistoryTransport) {
       controller.abort();
       active.current?.abort();
       clearPendingSave();
-      generation.current = epoch + 1;
-      accountGeneration.current = accountEpoch + 1;
+      // Invalidate the latest operation, including creates started after bootstrap.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      generation.current++;
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- Invalidate the latest preference operation as well.
+      accountGeneration.current++;
     };
   }, [history, attempt, install, clearPendingSave]);
 

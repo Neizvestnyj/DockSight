@@ -13,11 +13,13 @@ Dates record merges into `master`. Version links show the corresponding changes.
 - Measure frontend coverage for all production TypeScript files and check module dependency boundaries.
 - Keep frontend presentation styles with their owning controls and product modules.
 - Enforce frontend type, accessibility, style, dependency, and unused-code checks locally and in CI.
+- Enforce source ownership and provision frontend dependencies for shared backend CI checks.
 - Document frontend module boundaries and investigation recovery behavior.
 
 ### Fixed
 
 - Keep text entered during initial chat creation visible and save it after the chat is acknowledged.
+- Ignore late initial chat replies after their workspace disconnects, preventing stale draft and preference writes.
 
 ## [0.8.0]
 

@@ -24,6 +24,51 @@ afterEach(() => {
 });
 
 describe('revisioned workspace', () => {
+  it('does not write a provisional draft or preferences after its owner unmounts during creation', async () => {
+    const api = new ApiClient();
+    vi.spyOn(api, 'actorWorkspace').mockResolvedValue({
+      revision: 0,
+      last_investigation_id: null,
+      host: null,
+      model: null,
+    });
+    const preferences = vi.spyOn(api, 'saveActorWorkspace').mockResolvedValue({
+      revision: 1,
+      last_investigation_id: id,
+      host: 'local',
+      model: null,
+    });
+    const writes = vi.spyOn(api, 'saveWorkspace').mockResolvedValue({ ...empty, revision: 1 });
+    let acknowledge: (value: typeof detail) => void = () => {};
+    vi.spyOn(api, 'createInvestigation').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          acknowledge = resolve;
+        }),
+    );
+    const { result, unmount } = renderHook(() => useWorkspace(api));
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    vi.useFakeTimers();
+    let creating: Promise<void>;
+    act(() => {
+      creating = result.current.create('local');
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    act(() => result.current.setDraft('Pending old connection draft'));
+    unmount();
+    expect(preferences).not.toHaveBeenCalled();
+    expect(writes).not.toHaveBeenCalled();
+    await act(async () => {
+      acknowledge(detail);
+      await creating!;
+      await vi.advanceTimersByTimeAsync(350);
+    });
+    expect(preferences).not.toHaveBeenCalled();
+    expect(writes).not.toHaveBeenCalled();
+  });
+
   it('retains an initial draft and saves it 300 ms after chat acknowledgement', async () => {
     const api = new ApiClient();
     vi.spyOn(api, 'actorWorkspace').mockResolvedValue({

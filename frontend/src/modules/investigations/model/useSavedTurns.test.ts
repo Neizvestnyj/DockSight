@@ -3,6 +3,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { ApiClient } from '../../../infrastructure/api/api';
 import { ApiError } from '../../../shared/contracts/errors';
 import { useSavedTurns, type SavedContext } from './useSavedTurns';
+import { useWorkspace } from './useWorkspace';
 import type { SavedTurn } from '../../../shared/contracts/investigation-contracts';
 
 /** Supply a complete safe snapshot while varying only behavior relevant to the case. */
@@ -161,7 +162,9 @@ it('keeps cancellation ownership on a newer refreshed turn when an older Stop re
     reads.push(id);
     return id === first.id ? first : second;
   });
-  vi.spyOn(api, 'observeTurn').mockImplementation(async (_id, _receive, signal) => {
+  let secondSignal: AbortSignal | undefined;
+  vi.spyOn(api, 'observeTurn').mockImplementation(async (id, _receive, signal) => {
+    if (id === second.id) secondSignal = signal;
     await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
   });
   let finish: (row: SavedTurn) => void = () => {};
@@ -186,9 +189,14 @@ it('keeps cancellation ownership on a newer refreshed turn when an older Stop re
     rerender({ saved: context([{ ...first, state: 'stopped', revision: 1 }, second]) });
   });
   await waitFor(() => expect(reads).toEqual([first.id, second.id]));
+  await waitFor(() => expect(secondSignal).toBeDefined());
   await act(async () => {
     finish({ ...first, state: 'stopped', revision: 1 });
     await stopping!;
+  });
+  expect(secondSignal?.aborted).toBe(false);
+  expect(result.current.running).toBe(true);
+  await act(async () => {
     await result.current.stop();
   });
   expect(cancellations).toEqual([first.id, second.id]);
@@ -326,6 +334,53 @@ it('reports an unresolved lost acceptance without submitting again or observing 
   expect(result.current.errorSource).toBe('client');
   expect(result.current.error).toBe('Could not submit the question. Check saved history before trying again.');
   expect(saved.detail?.workspace.draft).toBe('My draft');
+});
+
+it('preserves the live workspace draft when recovery finds an unrelated submission', async () => {
+  const api = new ApiClient();
+  const initial = context([]).detail!;
+  const unrelated = snapshot();
+  const recovered = { ...initial, turns: { items: [unrelated], next_cursor: null }, turn_count: 1 };
+  vi.spyOn(api, 'actorWorkspace').mockResolvedValue({
+    revision: 0,
+    last_investigation_id: initial.id,
+    host: 'local',
+    model: null,
+  });
+  const reads = vi.spyOn(api, 'investigation').mockResolvedValueOnce(initial).mockResolvedValue(recovered);
+  const writes = vi.spyOn(api, 'saveWorkspace').mockImplementation(async (_id, revision, changes) => ({
+    ...initial.workspace,
+    ...changes,
+    revision: revision + 1,
+  }));
+  const submissions = vi.spyOn(api, 'startTurn').mockRejectedValue(new TypeError('Lost response'));
+  const observations = vi.spyOn(api, 'observeTurn');
+  const { result } = renderHook(() => {
+    const workspace = useWorkspace(api);
+    const turns = useSavedTurns(api, 'local', undefined, {
+      ...workspace,
+      enabled: !workspace.loading,
+      conflict: workspace.conflictWith,
+      changed: () => {},
+    });
+    return { workspace, turns };
+  });
+  await waitFor(() => expect(result.current.workspace.ready).toBe(true));
+  vi.useFakeTimers();
+  act(() => result.current.workspace.setDraft('Live unsent draft'));
+  await act(async () => {
+    await result.current.turns.run('Original question');
+    await vi.advanceTimersByTimeAsync(30_000);
+  });
+  expect(submissions).toHaveBeenCalledOnce();
+  expect(submissions.mock.calls[0]?.[1].submission_id).not.toBe(unrelated.submission_id);
+  expect(reads).toHaveBeenCalledTimes(2); // bootstrap and one recovery read
+  expect(observations).not.toHaveBeenCalled();
+  expect(writes).toHaveBeenCalledWith(initial.id, 4, { draft: 'Live unsent draft' });
+  expect(result.current.workspace.draft).toBe('Live unsent draft');
+  expect(result.current.turns.turns).toEqual([]);
+  expect(result.current.turns.errorSource).toBe('client');
+  expect(result.current.turns.error).toBe('Could not submit the question. Check saved history before trying again.');
 });
 
 it('waits for both visibility and connectivity before reading the existing running turn', async () => {

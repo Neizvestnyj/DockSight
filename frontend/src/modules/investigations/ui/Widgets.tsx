@@ -7,7 +7,7 @@ import { ArrowUpRight, ChevronDown, FileText, Layers, LockKeyhole, Terminal, Box
 import type { Action, Evidence, Widget } from '../../../shared/contracts/contracts';
 import { HealthFact, Status } from '../../../shared/ui/ui';
 import { bytes, utc } from '../../../shared/lib/format';
-import { EnvironmentContent, LogContent } from '../../runtime';
+import { EnvironmentContent, LogContent } from '../../runtime/presentation';
 import { CardActions } from '../../actions';
 import { widgetSource } from '../model/evidence';
 import styles from '../../../shared/ui/Widget.module.css';
