@@ -159,6 +159,7 @@ npm --prefix frontend run test:browser
 `check` runs the frontend static quality gates. `test` measures coverage across production TypeScript and TSX files.
 It requires 85% line, 74% branch, 81% statement, and 76% function coverage.
 The ordinary browser suite requires installed Chrome and uses the production preview with mocked HTTP responses.
+Its `live-diagnostics-smoke` project runs the shared live diagnosis scenario once on desktop against a fixture API.
 Build first.
 Set `PLAYWRIGHT_PORT` if the default preview port is occupied. Reports and failure screenshots are temporary test
 artifacts.

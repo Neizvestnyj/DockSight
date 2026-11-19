@@ -14,6 +14,7 @@ Dates record merges into `master` unless a release date is set separately. Versi
 
 - Raise backend and frontend coverage floors in CI and show measured coverage in the README badges.
 - Use one DockSight release version for the backend and frontend and enforce it in CI.
+- Run the live browser diagnostics scenario once with a test API in frontend CI to catch UI and API contract drift.
 
 ### Removed
 
