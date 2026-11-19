@@ -2,9 +2,9 @@
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versions: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-Dates record merges into `master`. Version links show the corresponding changes.
+Dates record merges into `master` unless a release date is set separately. Version links show the corresponding changes.
 
-## [0.8.2]
+## [0.8.2] - 2026-11-19
 
 ### Added
 
@@ -40,7 +40,7 @@ Dates record merges into `master`. Version links show the corresponding changes.
 - Block action confirmation after failed or mismatched reads until the original target is checked again.
 - Restore live browser checks for saved investigations and the CSS Modules interface.
 
-## [0.8.0]
+## [0.8.0] - 2026-11-11
 
 ### Added
 
@@ -103,7 +103,7 @@ Dates record merges into `master`. Version links show the corresponding changes.
 - Configuration and contributor guides document exact browser origins, durable volume ownership, offline state recovery,
   and dedicated persistence checks. Native backend diagrams and English Demo screenshots match the saved-chat workflow.
 
-## [0.7.0]
+## [0.7.0] - 2026-11-01
 
 ### Added
 
@@ -325,8 +325,8 @@ Dates record merges into `master`. Version links show the corresponding changes.
 
 [0.8.2]: https://github.com/Neizvestnyj/DockSight/compare/master...feature/coverage-badges-and-browser-smoke
 [0.8.1]: https://github.com/Neizvestnyj/DockSight/compare/35d18d7...0fc86b6
-[0.8.0]: https://github.com/Neizvestnyj/DockSight/compare/feature/security-fixes...feature/persistent-investigations
-[0.7.0]: https://github.com/Neizvestnyj/DockSight/compare/3c69d1ac9d2316bf84582ec230c5290779967cf7...feature/security-fixes
+[0.8.0]: https://github.com/Neizvestnyj/DockSight/compare/ea1929b...35d18d7
+[0.7.0]: https://github.com/Neizvestnyj/DockSight/compare/3c69d1a...ea1929b
 [0.6.0]: https://github.com/Neizvestnyj/DockSight/compare/093f3c7e0a90251cfe73aba503576bd2280cca12...3c69d1ac9d2316bf84582ec230c5290779967cf7
 [0.5.0]: https://github.com/Neizvestnyj/DockSight/compare/83c8fa477bfc63aa4c0d4f21f33bf676c0649e41...093f3c7e0a90251cfe73aba503576bd2280cca12
 [0.4.0]: https://github.com/Neizvestnyj/DockSight/compare/5ac9a9ed6db7ec57b6ae3848365fb24adfc25b32...83c8fa477bfc63aa4c0d4f21f33bf676c0649e41
