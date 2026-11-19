@@ -1,6 +1,6 @@
 [project]
 name = "docksight"
-version = "0.8.1"
+version = "0.8.2"
 description = "Docker diagnostics with typed UI responses and confirmed actions"
 requires-python = ">=3.12"
 dependencies = [
@@ -12,14 +12,14 @@ dependencies = [
   "httpx>=0.28",
   "openai>=2.0",
   "paramiko>=3.5,<6",
-  "portalocker>=3.2,<4",
+  "portalocker>=4.4,<5",
   "pydantic>=2.8,<3",
   "pydantic-settings>=2.8",
   "python-dotenv>=1.0",
   "pyyaml>=6.0",
   "pywin32>=308; sys_platform == 'win32'",
   "requests>=2.32,<3",
-  "sqlalchemy>=2.0.46,<2.1",
+  "sqlalchemy>=2.1,<2.2",
   "starlette>=0.40,<2",
   "uvicorn>=0.34",
 ]
@@ -33,18 +33,18 @@ packages = ["src/docksight"]
 
 [dependency-groups]
 dev = [
-  "complexipy>=6.1,<7",
+  # Complexipy 9 changes scoring and requires refactoring existing violations.
+  "complexipy>=8,<9",
   "hadolint-py>=2.15.1.2,<3",
   "httpx2>=2.16",
   "import-linter>=2.3",
   "interrogate>=1.7,<2",
   "pre-commit>=4.5,<5",
   "pyright>=1.1.400",
-  # pytest-deadfixtures 3.1 uses fixture internals removed in pytest 9.2.
-  "pytest>=8.3,<9.2",
+  "pytest>=9.2,<10",
   "pytest-asyncio>=0.25",
   "pytest-cov>=7.1,<8",
-  "pytest-deadfixtures>=3.1,<4",
+  "pytest-deadfixtures>=4,<5",
   "ruff>=0.11",
   "types-docker>=7.1",
   "types-pyyaml>=6.0",
@@ -54,6 +54,7 @@ dev = [
 testpaths = ["tests"]
 pythonpath = ["src", "."]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "fixture-scope"
 addopts = [
   "-ra",
   "--import-mode=importlib",
@@ -61,7 +62,7 @@ addopts = [
   "--cov-branch",
   "--cov-report=term-missing:skip-covered",
   "--cov-precision=2",
-  "--cov-fail-under=90",
+  "--cov-fail-under=92",
 ]
 markers = ["docker: opt-in real Docker tests", "live: opt-in configured model tests", "remote: opt-in configured SSH or mTLS host tests"]
 

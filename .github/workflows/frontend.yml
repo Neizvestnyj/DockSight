@@ -18,6 +18,8 @@ jobs:
   checks:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    outputs:
+      coverage: ${{ steps.coverage.outputs.percent }}
     defaults:
       run:
         working-directory: frontend
@@ -29,7 +31,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@v7
         with:
-          node-version: "24"
+          node-version-file: frontend/package.json
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - name: Install dependencies
@@ -38,6 +40,11 @@ jobs:
         run: npm run check
       - name: Run unit and component tests
         run: npm test
+      - name: Read frontend line coverage
+        id: coverage
+        run: |
+          percent=$(node -p 'require("../.test-artifacts/frontend-architecture/coverage/coverage-summary.json").total.lines.pct')
+          printf 'percent=%s\n' "$percent" >> "$GITHUB_OUTPUT"
       - name: Build production frontend
         run: npm run build
       - name: Install Chrome and system dependencies
@@ -54,3 +61,13 @@ jobs:
             frontend/test-results/
           if-no-files-found: ignore
           retention-days: 7
+
+  coverage-badge:
+    needs: checks
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    permissions:
+      contents: write
+    uses: ./.github/workflows/publish-coverage.yml
+    with:
+      component: frontend
+      percent: ${{ needs.checks.outputs.coverage }}

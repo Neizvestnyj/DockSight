@@ -2,7 +2,8 @@
 
 ## Development setup
 
-Use Python 3.14, uv, Node.js 24 LTS, and Git. The backend supports Python 3.12+. CI covers 3.12, 3.13, and 3.14.
+Use Python 3.14, uv, Node.js 24 LTS (24.15 or later), and Git. The backend supports Python 3.12+.
+CI covers 3.12, 3.13, and 3.14.
 Docker and a model provider are needed for real diagnostics, but not for unit tests or the browser demo.
 
 From the repository root:
@@ -54,12 +55,9 @@ live-model tests remain separate opt-in commands described below.
 `make update-deps` updates both lockfiles and local environments. Review the diff, then run `make verify`.
 If a security fix requires a version outside the declared range, update that constraint first.
 
-Pytest stays below `9.2` while `pytest-deadfixtures` relies on removed fixture internals.
-Remove this limit when the plugin supports newer pytest versions.
-
 The frontend overrides minimatch to `^11.0.1` for
 [CVE-2026-118764](https://github.com/advisories/GHSA-g3hv-75wg-m249).
-Remove the override when ESLint and TypeScript ESLint require a fixed version.
+Remove the override when `eslint-plugin-jsx-a11y-x` requires a fixed version.
 
 ## Making changes
 
@@ -77,7 +75,8 @@ Remove the override when ESLint and TypeScript ESLint require a fixed version.
   Group related outcomes in the current version section. Use the intended numeric version, not `Unreleased`.
   Keep that section for ongoing work on the same branch.
   Choose PATCH for compatible fixes, MINOR for compatible additions, and MAJOR for breaking changes.
-  Keep the backend package metadata and lockfile aligned. Documentation alone needs no bump.
+  Set the DockSight version in `backend/pyproject.toml`, match it in `frontend/package.json`, and regenerate both
+  lockfiles. Shared checks enforce the version across package metadata. Documentation alone needs no bump.
   Follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/): group notable outcomes under applicable categories and
   omit empty ones. Use linked `[version] - YYYY-MM-DD` headings for merged versions, dated by the merge into `master`
   unless a separate release date is recorded. Several commits can contribute to one entry.
@@ -134,7 +133,7 @@ uv run --project backend pytest backend/tests --dead-fixtures --no-cov
 
 Backend test runs measure line and branch coverage for the entire `docksight` package, including modules not imported
 by tests. The terminal report lists missing lines and branches and hides fully covered files. Local hooks and CI use
-the same defaults and fail below 90% combined line and branch coverage. Opt-in external tests stay disabled by default.
+the same defaults and fail below 92% combined line and branch coverage. Opt-in external tests stay disabled by default.
 
 From the repository root, generate a browsable report with:
 
@@ -143,7 +142,7 @@ uv run --project backend pytest backend/tests --cov-report=html
 ```
 
 Open `htmlcov/index.html`. Coverage data and HTML reports are ignored by Git. Use `--no-cov` for debugging or
-collection-only fixture checks and focused test runs. Use the full suite to check the 90% backend coverage requirement.
+collection-only fixture checks and focused test runs. Use the full suite to check the backend coverage requirement.
 Individual Docker and image checks in CI use `--no-cov` because they do not represent the full suite.
 
 For frontend changes:
@@ -156,10 +155,15 @@ npm --prefix frontend run test:browser
 ```
 
 `check` runs the frontend static quality gates. `test` measures coverage across production TypeScript and TSX files.
+It requires 85% line, 74% branch, 81% statement, and 76% function coverage.
 The ordinary browser suite requires installed Chrome and uses the production preview with mocked HTTP responses.
+Its `live-diagnostics-smoke` project runs the shared live diagnosis scenario once on desktop against a fixture API.
 Build first.
 Set `PLAYWRIGHT_PORT` if the default preview port is occupied. Reports and failure screenshots are temporary test
 artifacts.
+
+Each successful `master` push workflow publishes its coverage to the generated `coverage-badges` branch for the README.
+The backend badge shows combined line and branch coverage on Python 3.14. The frontend badge shows line coverage.
 
 Persistence recovery checks use a real local backend and temporary SQLite with deterministic model/runtime ports.
 Mocked history endpoints alone cannot verify restart, active-turn reload, or cross-tab revisions. Isolate each state
@@ -199,7 +203,7 @@ The Docker case explicitly restarts its owned fixture to exercise lost delivery,
 
 In repository Settings, configure a branch rule for `master`:
 
-- Require pull requests and the Backend and Frontend checks. `Backend checks` enforces the 90% coverage threshold.
+- Require pull requests and the Backend and Frontend checks. Both workflows enforce their coverage thresholds.
 - Apply the rule to administrators.
 - Disable force pushes and branch deletion.
 - For a solo maintainer, require pull requests without requiring another reviewer's approval.

@@ -22,7 +22,7 @@ superpowers/
 *.log
 node_modules/
 .npm-cache/
-.taste-skill/inspect/
+.taste-skill/
 frontend/test-results/
 frontend/playwright-report/
 *.tsbuildinfo

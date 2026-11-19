@@ -1,5 +1,5 @@
 x-worker: &worker
-  image: python:3.12-alpine@sha256:b658b05ce9c4eb97ec6fc19424818a1f31993659c2b505a532f470e83807815d
+  image: python:3.12-alpine@sha256:c5ba3deef00c7758561a0f03c26f44f10589263d40e732b8748e0d1f38f6dd89
   entrypoint: [python, -u, /e2e/workload.py]
   volumes:
     - ./workload.py:/e2e/workload.py:ro
@@ -19,7 +19,7 @@ services:
     <<: *worker
     command: [dependency]
   grafana:
-    image: grafana/grafana:13.2@sha256:ac461fb352abc50da10a51c7d02462e9c05488f11f53f14b3ad79a8145f638a0
+    image: grafana/grafana:13.2@sha256:b21409d7951ddcfd63a4b49083e4ef2cc35bc1437d071813bf82bfb238b00bca
     environment:
       GF_ANALYTICS_REPORTING_ENABLED: "false"
       GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
@@ -33,7 +33,7 @@ services:
     restart: "no"
     networks: [fixture]
   nginx:
-    image: nginx:1.28-alpine@sha256:a8b39bd9cf0f83869a2162827a0caf6137ddf759d50a171451b335cecc87d236
+    image: nginx:1.30-alpine@sha256:3bc3836dc0be3b811f238210360bf8e7ca8a2d0effdae46160bf1f3578710051
     labels:
       com.docksight.e2e: ${DOCKSIGHT_E2E_OWNER:?Set a unique run owner}
     mem_limit: 64m

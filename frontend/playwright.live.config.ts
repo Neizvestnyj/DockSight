@@ -6,6 +6,7 @@ const port = Number(process.env.DOCKSIGHT_E2E_PREVIEW_PORT);
 
 export default defineConfig({
   testDir: './live-tests',
+  metadata: { liveDiagnostics: true },
   fullyParallel: false,
   workers: 1,
   retries: 0,

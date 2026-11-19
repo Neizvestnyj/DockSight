@@ -266,7 +266,6 @@
     flex-wrap: wrap;
     height: auto;
     min-height: 96px;
-    padding-block: 4px;
     row-gap: 0;
     padding: 0 16px;
   }

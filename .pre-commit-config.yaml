@@ -20,7 +20,7 @@ repos:
       - id: check-added-large-files
 
   - repo: https://github.com/DavidAnson/markdownlint-cli2
-    rev: v0.24.0
+    rev: v0.24.1
     hooks:
       - id: markdownlint-cli2
 
@@ -39,6 +39,13 @@ repos:
 
   - repo: local
     hooks:
+      - id: release-version
+        name: Check shared DockSight release version
+        entry: uv run --locked --project backend python scripts/check_release_version.py
+        language: system
+        pass_filenames: false
+        always_run: true
+
       - id: frontend-check
         name: Check frontend quality gates
         entry: npm --prefix frontend run check
@@ -95,8 +102,9 @@ repos:
         always_run: true
 
       - id: pytest
-        name: Run backend tests with 90% coverage and report duplicate fixtures
+        name: Run backend tests with coverage and report duplicate fixtures
         entry: uv run --project backend pytest backend/tests -q --dup-fixtures
+        args: [--cov-report=json:.test-artifacts/backend-coverage.json]
         language: system
         pass_filenames: false
         always_run: true

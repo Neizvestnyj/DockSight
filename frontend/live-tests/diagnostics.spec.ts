@@ -8,6 +8,7 @@ import {
   type SavedTurn,
   type StartTurn,
 } from '../src/shared/contracts/investigation-contracts';
+import { routeLiveDiagnosticsSmoke } from '../tests/helpers/live-diagnostics-api';
 import { chooseOption } from '../tests/helpers/select';
 
 interface Input {
@@ -18,7 +19,7 @@ interface Input {
   peer_project: string;
   language: 'en' | 'ru';
   query: string;
-  output: string;
+  output?: string;
 }
 
 declare global {
@@ -53,10 +54,32 @@ async function captureTurnResponses(page: Page) {
   });
 }
 
-const input: Input | undefined = process.env.DOCKSIGHT_E2E_BROWSER_INPUT
-  ? (JSON.parse(process.env.DOCKSIGHT_E2E_BROWSER_INPUT) as Input)
-  : undefined;
-test.skip(!input, 'Run through pytest with --live-e2e --e2e-browser; no external calls by default.');
+/** Select the real loopback API only for the explicitly opted-in pytest configuration. */
+async function configureRun(page: Page, live: boolean): Promise<{ scenario: Input; apiBase: string; token: string }> {
+  if (live) {
+    const input = process.env.DOCKSIGHT_E2E_BROWSER_INPUT;
+    test.skip(!input, 'Run through pytest with --live-e2e --e2e-browser.');
+    return {
+      scenario: JSON.parse(input!) as Input,
+      apiBase: `${process.env.DOCKSIGHT_E2E_API}/api/v1`,
+      token: process.env.DOCKSIGHT_E2E_TOKEN!,
+    };
+  }
+  const { project, apiBase, token } = await routeLiveDiagnosticsSmoke(page);
+  return {
+    scenario: {
+      project,
+      explicit: false,
+      clarify: false,
+      host_overview: false,
+      peer_project: '',
+      language: 'en',
+      query: `Show the current state of the container in Compose project ${project}.`,
+    },
+    apiBase,
+    token,
+  };
+}
 
 const copy = {
   en: {
@@ -228,8 +251,8 @@ async function checkCards(page: Page, answer: Answer, locale: 'en' | 'ru') {
   }
 }
 
-test('shows scoped host or group observations from the real backend', async ({ page }) => {
-  const scenario = input!;
+test('shows scoped host or group observations from a saved diagnosis', async ({ page }, info) => {
+  const { scenario, apiBase, token } = await configureRun(page, info.config.metadata.liveDiagnostics === true);
   // Free chat deliberately uses a different interface locale from the question's language.
   const locale = scenario.explicit ? scenario.language : scenario.language === 'ru' ? 'en' : 'ru';
   const labels = copy[locale];
@@ -243,8 +266,8 @@ test('shows scoped host or group observations from the real backend', async ({ p
     await expect(language).toBeVisible();
     await chooseOption(language, locale);
     await page.getByRole('button', { name: labels.connectApi, exact: true }).click();
-    await page.getByLabel(labels.endpoint, { exact: true }).fill(`${process.env.DOCKSIGHT_E2E_API}/api/v1`);
-    await page.getByLabel(labels.token, { exact: true }).fill(process.env.DOCKSIGHT_E2E_TOKEN!);
+    await page.getByLabel(labels.endpoint, { exact: true }).fill(apiBase);
+    await page.getByLabel(labels.token, { exact: true }).fill(token);
     await page.getByRole('button', { name: labels.connect, exact: true }).click();
     await expect(page.locator('.composer-foot')).toContainText('e2e');
     const scope = page.getByRole('combobox', { name: labels.scope, exact: true });
@@ -309,7 +332,9 @@ test('shows scoped host or group observations from the real backend', async ({ p
       answer.widgets.filter((row) => row.widget_type === 'container_status').length,
     );
   } finally {
-    await writeFile(scenario.output, JSON.stringify({ input: payload, turn, clarification }, null, 2), 'utf8');
-    await page.screenshot({ path: scenario.output.replace(/\.json$/, '.png'), fullPage: true });
+    if (scenario.output) {
+      await writeFile(scenario.output, JSON.stringify({ input: payload, turn, clarification }, null, 2), 'utf8');
+      await page.screenshot({ path: scenario.output.replace(/\.json$/, '.png'), fullPage: true });
+    }
   }
 });
