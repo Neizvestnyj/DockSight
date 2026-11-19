@@ -7,24 +7,36 @@ import {
   type ActorWorkspace,
   type HistoryTransport,
   type InvestigationDetail,
+  type InvestigationView,
   type InvestigationWorkspace,
   type WorkspaceChanges,
 } from '../../../shared/contracts/investigation-contracts';
 
 import { useWorkspaceWrites, type InitialCreation, type InitialDraft, type SaveState } from './workspace-writes';
 
-interface ContainerDiagnosis {
+interface InitialDiagnosis {
   query: string;
-  target: Extract<DiagnosticTarget, { kind: 'container' }>;
+  target: DiagnosticTarget;
+}
+
+interface DraftChat {
+  id: string;
+  host: string;
+}
+
+interface CreationIntent {
+  localId?: string;
+  diagnosis?: InitialDiagnosis;
 }
 
 /** Keep acknowledged server revisions separate from unsent text and serialize local writes. */
-export function useWorkspace(history?: HistoryTransport) {
+export function useWorkspace(history?: HistoryTransport, onDraftCreated?: () => Promise<void>) {
   const [ready, setReady] = useState(!history);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [actor, setActor] = useState<ActorWorkspace>();
   const [detail, setDetail] = useState<InvestigationDetail>();
+  const [draftChat, setDraftChat] = useState<DraftChat>();
   const [diagnosisChatId, setDiagnosisChatId] = useState<string>();
   const [draft, showDraft] = useState('');
   const [saveState, setSaveState] = useState<SaveState>('saved');
@@ -37,22 +49,26 @@ export function useWorkspace(history?: HistoryTransport) {
   const actorWriting = useRef<Promise<boolean> | null>(null);
   const conflict = useRef<InvestigationWorkspace | null>(null);
   const generation = useRef(0);
-  const pendingDiagnosis = useRef<(ContainerDiagnosis & { id: string; epoch: number }) | undefined>(undefined);
+  const pendingDiagnosis = useRef<(InitialDiagnosis & { id: string; epoch: number }) | undefined>(undefined);
   const accountGeneration = useRef(0);
   const active = useRef<AbortController | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const initialDraft = useRef<InitialDraft | null>(null);
   const initialCreation = useRef<InitialCreation | null>(null);
+  const provisionalChat = useRef<DraftChat | undefined>(undefined);
+  const draftCreation = useRef<{ intent: CreationIntent; operation: Promise<void> } | undefined>(undefined);
   const historyOwner = useRef(history);
   const clearPendingSave = useCallback(() => clearTimeout(timer.current), []);
 
-  /** Install only a server-acknowledged workspace for the selected chat. */
-  const install = useCallback((value: InvestigationDetail) => {
+  /** Install an acknowledged workspace or clear it before opening a local editor. */
+  const install = useCallback((value?: InvestigationDetail) => {
     current.current = value;
+    provisionalChat.current = undefined;
+    setDraftChat(undefined);
     pending.current = {};
     conflict.current = null;
     setDetail(value);
-    showDraft(value.workspace.draft);
+    showDraft(value?.workspace.draft ?? '');
     setSaveState('saved');
   }, []);
 
@@ -104,12 +120,52 @@ export function useWorkspace(history?: HistoryTransport) {
     timer,
     initialDraft,
     initialCreation,
+    provisionalChat,
     draft,
     showDraft,
     setSaveState,
     setDetail,
     install,
   });
+
+  /** Wait for typed text to have an acknowledged owner before leaving the editor. */
+  async function flushNavigation(): Promise<boolean> {
+    if (draftCreation.current) await draftCreation.current.operation;
+    if (provisionalChat.current && initialDraft.current?.value.trim()) return false;
+    return flush();
+  }
+
+  /** Open a local editor or focus the same host's empty chat again. */
+  async function beginDraft(host: string): Promise<boolean> {
+    if (!history || !host || !(await flushNavigation())) return false;
+    const chat = current.current;
+    if (provisionalChat.current?.host === host || (chat?.host === host && !chat.turn_count && !chat.workspace.draft))
+      return true;
+    active.current?.abort();
+    generation.current++;
+    initialDraft.current = null;
+    initialCreation.current = null;
+    install();
+    provisionalChat.current = { id: crypto.randomUUID(), host };
+    setDraftChat(provisionalChat.current);
+    setLoading(false);
+    setError('');
+    return true;
+  }
+
+  /** Commit the local editor once text is entered, retaining its ID through retries. */
+  async function saveNewDraft() {
+    const chat = provisionalChat.current;
+    if (!chat || !initialDraft.current?.value.trim() || draftCreation.current) return;
+    await create(chat.host, undefined, chat.id);
+    if (current.current?.id === chat.id) void onDraftCreated?.();
+  }
+
+  /** Queue the draft without allocating durable storage for an untouched editor. */
+  function setDraft(value: string) {
+    patch({ draft: value });
+    void saveNewDraft();
+  }
 
   /** Reject replies after their workspace generation was detached. */
   function detached(epoch: number, signal: AbortSignal): boolean {
@@ -177,7 +233,7 @@ export function useWorkspace(history?: HistoryTransport) {
   /** Detach old reads before opening another owned archive. */
   async function open(id: string) {
     if (!history) return;
-    if (!(await flush())) return;
+    if (!(await flushNavigation())) return;
     const openingInitial = !current.current;
     active.current?.abort();
     const controller = new AbortController();
@@ -212,10 +268,8 @@ export function useWorkspace(history?: HistoryTransport) {
     }
   }
 
-  /** Create one explicit chat and hand its ID to a caller only while this navigation still owns it. */
-  async function create(host: string, diagnosis?: ContainerDiagnosis) {
-    if (!history || !host) return;
-    if (!(await flush())) return;
+  /** Take ownership of the read and any text entered while creation is in flight. */
+  function beginCreation(host: string) {
     active.current?.abort();
     const initial = !current.current;
     prepareInitialDraft(initial, host);
@@ -227,17 +281,65 @@ export function useWorkspace(history?: HistoryTransport) {
     clearTimeout(timer.current);
     setLoading(true);
     setError('');
+    return { initial, epoch };
+  }
+
+  /** Replay changes only into the acknowledged ID that owned the local editor. */
+  function installCreated(result: InvestigationView, initial: boolean, epoch: number, localId?: string) {
+    const retained = takeInitialDraft(initial, epoch);
+    const changes: WorkspaceChanges = localId ? pending.current : {};
+    if (retained !== undefined) changes.draft = retained;
+    install({ ...result, turns: { items: [], next_cursor: null } });
+    if (Object.keys(changes).length) patch(changes);
+  }
+
+  /** Only an exact local draft ID may be used without first saving the current editor. */
+  async function canCreate(localId?: string) {
+    if (!localId) return flushNavigation();
+    return (await flush()) && provisionalChat.current?.id === localId;
+  }
+
+  /** Use the open draft's ID when an explicit diagnosis creates it. */
+  function creationId(host: string, diagnosis?: InitialDiagnosis, draftId?: string) {
+    const draft = provisionalChat.current;
+    return draftId ?? (diagnosis && draft?.host === host ? draft.id : undefined);
+  }
+
+  /** Make an initial diagnosis claimable once its exact chat has mounted. */
+  function queueDiagnosis(id: string, epoch: number, diagnosis: InitialDiagnosis) {
+    pendingDiagnosis.current = { id, epoch, ...diagnosis };
+    setDiagnosisChatId(id);
+  }
+
+  /** Keep one in-flight creation per local editor, including a diagnosis requested during its first save. */
+  function create(host: string, diagnosis?: InitialDiagnosis, draftId?: string) {
+    const localId = creationId(host, diagnosis, draftId);
+    const intent: CreationIntent = { localId, diagnosis };
+    if (!localId) return createInvestigation(host, intent);
+    const ongoing = draftCreation.current;
+    if (ongoing?.intent.localId === localId) {
+      ongoing.intent.diagnosis ??= diagnosis;
+      return ongoing.operation;
+    }
+    const operation = createInvestigation(host, intent).finally(() => {
+      if (draftCreation.current?.intent === intent) draftCreation.current = undefined;
+    });
+    draftCreation.current = { intent, operation };
+    return operation;
+  }
+
+  /** Create one explicit chat and hand its ID to a caller only while this navigation still owns it. */
+  async function createInvestigation(host: string, intent: CreationIntent) {
+    if (!history || !host) return;
+    const { localId } = intent;
+    if (!(await canCreate(localId))) return;
+    const { initial, epoch } = beginCreation(host);
     try {
-      const result = await history.createInvestigation(crypto.randomUUID(), host);
+      const result = await history.createInvestigation(localId ?? crypto.randomUUID(), host);
       if (generation.current !== epoch) return;
       if (!(await flush()) || generation.current !== epoch) return;
-      const retained = takeInitialDraft(initial, epoch);
-      install({ ...result, turns: { items: [], next_cursor: null } });
-      if (diagnosis) {
-        pendingDiagnosis.current = { id: result.id, epoch, ...diagnosis };
-        setDiagnosisChatId(result.id);
-      }
-      if (retained !== undefined) patch({ draft: retained });
+      installCreated(result, initial, epoch, localId);
+      if (intent.diagnosis) queueDiagnosis(result.id, epoch, intent.diagnosis);
       await savePreferences({ last_investigation_id: result.id, host });
     } catch {
       if (generation.current === epoch) {
@@ -302,6 +404,8 @@ export function useWorkspace(history?: HistoryTransport) {
       conflict.current = null;
       initialDraft.current = null;
       initialCreation.current = null;
+      provisionalChat.current = undefined;
+      draftCreation.current = undefined;
     }
     queueMicrotask(() => {
       if (!controller.signal.aborted) {
@@ -309,6 +413,7 @@ export function useWorkspace(history?: HistoryTransport) {
           setLoading(false);
           setActor(undefined);
           setDetail(undefined);
+          setDraftChat(undefined);
           showDraft('');
           setSaveState('saved');
         }
@@ -350,16 +455,20 @@ export function useWorkspace(history?: HistoryTransport) {
     error,
     actor,
     detail,
+    chat: detail ?? draftChat,
+    draftChat,
     draft,
     saveState,
     open,
     create,
+    beginDraft,
+    saveNewDraft,
     diagnosisChatId,
     takeDiagnosis,
     patch,
     flush,
     refresh,
-    setDraft: (value: string) => patch({ draft: value }),
+    setDraft,
     reloadConflict,
     useDraft,
     savePreferences,

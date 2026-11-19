@@ -33,11 +33,62 @@ test('saves pending drafts before same-row, other-chat and new-chat navigation',
   expect(first.workspace.draft).toBe('Second immediate draft');
   const second = api.chats[1]!;
   await page.getByRole('textbox').fill('Before new investigation');
-  await navigation(page);
-  await page.locator('.workspace-nav:visible').getByRole('button', { name: 'New investigation', exact: true }).click();
-  await expect(page.getByRole('textbox')).toHaveValue('');
+  const initialCount = api.chats.length;
+  const plus = page.locator('.workspace-nav:visible').getByRole('button', { name: 'New investigation', exact: true });
+  const input = page.getByRole('textbox');
+  for (const press of [1, 2, 3]) {
+    await navigation(page);
+    await plus.click();
+    await expect(input).toHaveValue('');
+    expect(api.chats).toHaveLength(initialCount);
+    expect(
+      api.reads.filter((request) => request === 'POST /investigations'),
+      `press ${press}`,
+    ).toEqual([]);
+  }
   expect(second.workspace.draft).toBe('Before new investigation');
+  await input.fill('An unsent question about Redis');
+  await navigation(page);
+  await plus.click();
+  await expect(input).toHaveValue('');
+  await expect.poll(() => api.chats[0]?.workspace.draft).toBe('An unsent question about Redis');
+  expect(api.chats).toHaveLength(initialCount + 1);
+  await navigation(page);
+  await page.getByRole('button', { name: /^Untitled chat local/ }).click();
+  await expect(input).toHaveValue('An unsent question about Redis');
   expect(api.submissions).toEqual([]);
+});
+
+test('waits for model verification before warning about a saved model', async ({ page }) => {
+  const api = await savedApi(page);
+  const model = { provider: 'ollama', model: 'test-model' } as const;
+  api.actor.model = model;
+  let complete!: () => void;
+  const lookup = new Promise<void>((resolve) => {
+    complete = resolve;
+  });
+  await page.route('**/api/v1/model-providers', async (route) => {
+    await lookup;
+    await route.fulfill({
+      json: {
+        schema_version: 1,
+        default: model,
+        providers: [{ id: model.provider, name: 'Ollama', configured: false, default_model: null }],
+      },
+    });
+  });
+  await page.goto('/');
+  try {
+    await expect(page.getByRole('textbox')).toHaveValue('Acknowledged draft');
+    const warning = page.getByText(
+      'A saved model or target is unavailable. Choose a current model or scope to continue.',
+    );
+    await expect(warning).toHaveCount(0);
+    complete();
+    await expect(warning).toBeVisible();
+  } finally {
+    complete();
+  }
 });
 
 test('retains a conflicted draft when selecting another chat or new investigation', async ({ page }) => {

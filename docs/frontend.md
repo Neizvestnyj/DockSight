@@ -51,6 +51,9 @@ not a retention limit. Older chats remain available through pagination. Last-act
 Focus refreshes the open chat and list without following another tab's navigation. Deletion requires confirmation and
 cannot remove a running diagnosis. Server action protection survives history deletion.
 
+**New investigation** opens a local editor. Repeated clicks in an empty editor focus the same input. The first
+nonblank draft or an explicit diagnosis creates a saved chat. Drafts with text remain in history.
+
 Draft writes are serialized, revisioned, and scheduled after 300 ms of inactivity. Text typed during initial chat
 creation remains in the tab until the matching server acknowledgement, then enters normal revisioned saving. Reload
 restores acknowledged data only. Navigation waits for pending saves. A failure or conflict preserves the local draft and

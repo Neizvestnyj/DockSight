@@ -31,6 +31,7 @@ interface WriteContext {
   timer: RefObject<ReturnType<typeof setTimeout> | undefined>;
   initialDraft: RefObject<InitialDraft | null>;
   initialCreation: RefObject<InitialCreation | null>;
+  provisionalChat: RefObject<{ id: string } | undefined>;
   draft: string;
   showDraft: (value: string) => void;
   setSaveState: (value: SaveState) => void;
@@ -49,6 +50,7 @@ export function useWorkspaceWrites({
   timer,
   initialDraft,
   initialCreation,
+  provisionalChat,
   draft,
   showDraft,
   setSaveState,
@@ -104,20 +106,22 @@ export function useWorkspaceWrites({
     }
   }
 
+  /** Keep draft text and selection with their local editor before any server acknowledgement. */
+  function patchInitial(changes: WorkspaceChanges) {
+    if (provisionalChat.current) pending.current = { ...pending.current, ...changes };
+    if (changes.draft === undefined || !history) return;
+    initialDraft.current = {
+      value: changes.draft,
+      host: initialCreation.current?.host ?? initialDraft.current?.host ?? null,
+      epoch: initialCreation.current?.epoch ?? initialDraft.current?.epoch ?? null,
+    };
+    showDraft(changes.draft);
+    setSaveState('unsaved');
+  }
+
   /** Queue a bounded draft or exact selection, with one debounce shared by local changes. */
   function patch(changes: WorkspaceChanges) {
-    if (!current.current) {
-      if (changes.draft !== undefined && history) {
-        initialDraft.current = {
-          value: changes.draft,
-          host: initialCreation.current?.host ?? initialDraft.current?.host ?? null,
-          epoch: initialCreation.current?.epoch ?? initialDraft.current?.epoch ?? null,
-        };
-        showDraft(changes.draft);
-        setSaveState('unsaved');
-      }
-      return;
-    }
+    if (!current.current) return patchInitial(changes);
     pending.current = { ...pending.current, ...changes };
     if (changes.draft !== undefined) showDraft(changes.draft);
     if (!conflict.current) {

@@ -5,6 +5,7 @@ import { useLocale } from '../../shared/i18n/locale';
 import { useEffect, useState } from 'react';
 import { ArrowRight, ChevronDown, ChevronRight, FlaskConical, Menu, MessageSquarePlus } from 'lucide-react';
 import type { Container, DiagnosticTarget, Host } from '../../shared/contracts/contracts';
+import { ApiError } from '../../shared/contracts/errors';
 import { DemoClient, demoAnswer, scenarios, type ScenarioId } from '../../infrastructure/demo/demo';
 import { DemoControls } from './DemoControls';
 import { Select } from '../../shared/ui/Select';
@@ -114,7 +115,9 @@ export function WorkspacePage({
   const [composerVisible, setComposerVisible] = useState(false);
   const name = hostName();
   const configured = hosts.some((row) => row.id === host);
-  const [targetAvailable, setTargetAvailable] = useState(scopeTarget?.kind !== 'container');
+  const [targetAvailable, setTargetAvailable] = useState<boolean | undefined>(
+    scopeTarget?.kind === 'container' ? undefined : true,
+  );
   const [selectionError, setSelectionError] = useState(false);
   const modelAvailable = modelIsAvailable();
   const groupAvailable = groupIsAvailable();
@@ -156,13 +159,33 @@ export function WorkspacePage({
     );
   }
 
+  /** Report an unavailable preference only after its provider or catalog has answered. */
+  function savedModelIsMissing() {
+    if (!modelSelection || !catalog.providers) return false;
+    const provider = catalog.providers.providers.find((row) => row.id === modelSelection.provider);
+    if (!provider?.configured) return true;
+    const result = catalog.catalogs[modelSelection.provider]?.data;
+    return Boolean(
+      result?.state === 'ready' && !result.refreshing && !result.models.some((row) => row.id === modelSelection.model),
+    );
+  }
+
+  /** Keep starting and checking a scope separate from a confirmed unavailable choice. */
+  function unavailableSavedScope() {
+    return (
+      savedModelIsMissing() ||
+      targetAvailable === false ||
+      (!groupAvailable && !groupScope.loading && !groupScope.error)
+    );
+  }
+
   /** Keep archived group scope readable until the same current group is selected. */
   function groupIsAvailable() {
     return !scopeTarget || scopeTarget.kind === 'container' || Boolean(groupScope.group);
   }
 
   /** Block continuation while its exact saved scope or revision is unavailable. */
-  function continuationIsBlocked() {
+  function continuationIsBlocked(requireSaved = true) {
     return (
       !demo &&
       (!configured ||
@@ -170,7 +193,7 @@ export function WorkspacePage({
         !targetAvailable ||
         !groupAvailable ||
         saved.loading ||
-        !saved.detail ||
+        (requireSaved && !saved.detail) ||
         saved.saveState === 'conflict' ||
         saved.saveState === 'error')
     );
@@ -192,8 +215,9 @@ export function WorkspacePage({
       .then(() => {
         if (!controller.signal.aborted) setTargetAvailable(true);
       })
-      .catch(() => {
-        if (!controller.signal.aborted) setTargetAvailable(false);
+      .catch((failure: unknown) => {
+        if (!controller.signal.aborted && failure instanceof ApiError && failure.code === 'container_not_found')
+          setTargetAvailable(false);
       });
     return () => controller.abort();
   }, [client, host, demo, scopeTarget]);
@@ -306,15 +330,16 @@ export function WorkspacePage({
   function diagnoseGroup() {
     if (!groupScope.group || investigation.running || availability.blockedReason) return;
     const { kind, name: groupName } = groupScope.group;
+    const query = t('Investigate the {kind} group {name}. Check every member and explain the failures.', {
+      kind: kind === 'compose' ? 'Compose' : 'Swarm',
+      name: groupName,
+    });
+    if (!demo && !saved.detail) {
+      void saved.create(host, { query, target: { kind, name: groupName } }).then(() => history.refresh());
+      return;
+    }
     openInvestigation();
-    void investigation.run(
-      t('Investigate the {kind} group {name}. Check every member and explain the failures.', {
-        kind: kind === 'compose' ? 'Compose' : 'Swarm',
-        name: groupName,
-      }),
-      true,
-      { kind, name: groupName },
-    );
+    void investigation.run(query, true, { kind, name: groupName });
   }
 
   /** Assemble the same host and chat navigation for desktop and mobile. */
@@ -350,12 +375,11 @@ export function WorkspacePage({
         if (demoChats) {
           if (!demoChats.newChat({ draft, scenario })) return;
           setDraft('');
+          openInvestigation(true);
         } else if (configured)
-          void saved.create(host).then(() => {
-            void history.refresh();
-            requestAnimationFrame(() => document.getElementById('query')?.focus());
+          void saved.beginDraft(host).then((opened) => {
+            if (opened) openInvestigation(true);
           });
-        openInvestigation(true);
       },
       openInvestigation: () => openInvestigation(),
       about: () => {
@@ -511,12 +535,12 @@ export function WorkspacePage({
             </button>
           </div>
         )}
-        {!demo && !saved.detail && configured && (
+        {!demo && !saved.detail && !saved.draftChat && configured && (
           <button className={`secondary ${controlStyles['secondary']}`} onClick={() => void saved.create(host)}>
             {t('New investigation')}
           </button>
         )}
-        {!demo && saved.loading && <p role="status">{t('Loading saved chat…')}</p>}
+        {!demo && saved.loading && !saved.draftChat && <p role="status">{t('Loading saved chat…')}</p>}
         {!demo && saved.error && (
           <p role="alert">
             {t(isMessageKey(saved.error) ? saved.error : 'Could not refresh saved chat. Retry the read.')}
@@ -530,13 +554,13 @@ export function WorkspacePage({
   function draftStatus() {
     return (
       <>
-        {!demo && saved.detail && (
+        {!demo && (saved.detail || (saved.draftChat && draft.trim())) && (
           <div className={`${styles['workspace-save']}`} role="status">
             <span>
               {t(
                 saved.saveState === 'saved'
                   ? 'Draft saved'
-                  : saved.saveState === 'saving'
+                  : saved.saveState === 'saving' || (saved.draftChat && saved.loading)
                     ? 'Saving draft…'
                     : saved.saveState === 'conflict'
                       ? 'This chat changed in another tab. Your draft is unsaved.'
@@ -555,6 +579,14 @@ export function WorkspacePage({
             )}
             {saved.saveState === 'error' && (
               <button className={`text-button ${controlStyles['text-button']}`} onClick={() => void saved.flush()}>
+                {t('Retry save')}
+              </button>
+            )}
+            {saved.draftChat && saved.error && !saved.loading && (
+              <button
+                className={`text-button ${controlStyles['text-button']}`}
+                onClick={() => void saved.saveNewDraft()}
+              >
                 {t('Retry save')}
               </button>
             )}
@@ -607,10 +639,10 @@ export function WorkspacePage({
                 },
               }}
               diagnose={diagnoseGroup}
-              blocked={continuingBlocked || investigation.running || Boolean(availability.blockedReason)}
+              blocked={continuationIsBlocked(false) || investigation.running || Boolean(availability.blockedReason)}
             />
           ))}
-        {!demo && (!modelAvailable || !targetAvailable || !groupAvailable) && (
+        {!demo && unavailableSavedScope() && (
           <p className={`inline-warning ${controlStyles['inline-warning']}`} role="status">
             {t('A saved model or target is unavailable. Choose a current model or scope to continue.')}
           </p>
