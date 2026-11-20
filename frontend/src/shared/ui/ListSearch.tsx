@@ -1,4 +1,13 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode, type Ref } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+  type ReactNode,
+  type Ref,
+  type RefObject,
+} from 'react';
 import { X } from 'lucide-react';
 import type { SearchPage } from '../contracts/search-contracts';
 import { useLocale } from '../i18n/locale';
@@ -12,6 +21,7 @@ interface Props<Row> {
   load: (query: string, signal: AbortSignal, before?: string) => Promise<SearchPage<Row>>;
   row: (item: Row) => ReactNode;
   close: () => void;
+  trigger?: RefObject<HTMLButtonElement | null>;
   browsing?: ReactNode;
   scope?: string;
   maxLength?: number;
@@ -26,6 +36,7 @@ export function ListSearch<Row>({
   load,
   row,
   close,
+  trigger,
   browsing,
   scope,
   maxLength = 128,
@@ -37,6 +48,7 @@ export function ListSearch<Row>({
   const [page, setPage] = useState<SearchPage<Row>>();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
+  const panel = useRef<HTMLDivElement>(null);
   const field = useRef<HTMLInputElement>(null);
   const results = useRef<HTMLDivElement>(null);
   const continuation = useRef<HTMLButtonElement>(null);
@@ -73,6 +85,18 @@ export function ListSearch<Row>({
   );
 
   useEffect(() => field.current?.focus(), []);
+  const dismiss = useEffectEvent((event: MouseEvent) => {
+    const path = event.composedPath();
+    const toggle = trigger?.current;
+    if (!panel.current || path.includes(panel.current) || (toggle && path.includes(toggle))) return;
+    close();
+  });
+  useEffect(() => {
+    const handleClick = (event: MouseEvent) => dismiss(event);
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
+  }, []);
+
   useEffect(() => {
     if (!query) return;
     const timer = setTimeout(() => void read(query), 250);
@@ -96,7 +120,7 @@ export function ListSearch<Row>({
   }
 
   return (
-    <div className={styles.search}>
+    <div ref={panel} className={styles.search}>
       <div className={styles.field}>
         <input
           ref={field}
@@ -111,6 +135,7 @@ export function ListSearch<Row>({
             event.preventDefault();
             event.stopPropagation();
             close();
+            trigger?.current?.focus();
           }}
         />
         {input && (

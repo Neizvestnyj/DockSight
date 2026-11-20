@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { Box } from 'lucide-react';
 import type { Container, GroupTarget } from '../../../shared/contracts/contracts';
 import type { ContainerSearchResult } from '../../../shared/contracts/search-contracts';
@@ -16,11 +16,12 @@ interface Props {
   selected: string;
   choose: (container: Container) => void;
   close: () => void;
+  trigger?: RefObject<HTMLButtonElement | null>;
   browsing: ReactNode;
 }
 
 /** Search lightweight Docker summaries and inspect only the selected exact identity. */
-export function ContainerSearch({ client, host, group, selected, choose, close, browsing }: Props) {
+export function ContainerSearch({ client, host, group, selected, choose, close, trigger, browsing }: Props) {
   const { t } = useLocale();
   const [opening, setOpening] = useState<string>();
   const [failed, setFailed] = useState<string>();
@@ -92,6 +93,7 @@ export function ContainerSearch({ client, host, group, selected, choose, close, 
       load={load}
       row={row}
       close={close}
+      trigger={trigger}
       browsing={browsing}
       onQueryChange={() => {
         active.current?.abort();

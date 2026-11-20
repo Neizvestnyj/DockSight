@@ -62,6 +62,9 @@ test('searches the active Demo inventory and opens the selected container', asyn
   await expect(field).toBeFocused();
   await field.fill('missing-worker');
   await expect(page.getByText('No matching containers.')).toBeVisible();
+  await page.getByRole('button', { name: 'Clear search' }).click();
+  await expect(field).toBeFocused();
+  await expect(field).toHaveValue('');
   await field.fill('reports:1.6');
   const result = page.getByRole('button', { name: /report-worker.*exited/ });
   await expect(result).toBeVisible();
@@ -95,4 +98,26 @@ test('a title-only match opens the current chat from container facts', async ({ 
   await page.getByRole('button', { name: /^Archived question 1 local/ }).click();
   await expect(heading).toBeVisible();
   expect(server.submissions).toEqual([]);
+});
+
+test('switches search sections and dismisses search on an outside click', async ({ page }) => {
+  await savedApi(page);
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'Archived question 1' })).toBeVisible();
+  await openSidebar(page);
+
+  const chats = page.getByRole('button', { name: 'Search chats', exact: true });
+  const containers = page.getByRole('button', { name: 'Search containers', exact: true });
+  await chats.click();
+  await expect(page.getByRole('searchbox', { name: 'Search chats' })).toBeFocused();
+  await containers.click();
+  await expect(chats).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.getByRole('searchbox', { name: 'Search containers' })).toBeFocused();
+  await containers.click();
+  await expect(containers).toHaveAttribute('aria-expanded', 'false');
+  await containers.click();
+
+  await page.getByText('Configured host', { exact: true }).filter({ visible: true }).click();
+  await expect(page.getByRole('searchbox')).toHaveCount(0);
+  await expect(containers).toHaveAttribute('aria-expanded', 'false');
 });

@@ -288,10 +288,8 @@ export function Sidebar({
             group={searchGroup}
             selected={selected}
             choose={chooseContainer}
-            close={() => {
-              setSearchOpen(false);
-              searchTrigger.current?.focus();
-            }}
+            close={() => setSearchOpen(false)}
+            trigger={searchTrigger}
             browsing={containerList()}
           />
         ) : (

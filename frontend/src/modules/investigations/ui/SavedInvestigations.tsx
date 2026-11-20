@@ -1,6 +1,6 @@
 import sharedStyles from '../../../shared/ui/Shared.module.css';
 import controlStyles from '../../../shared/ui/Controls.module.css';
-import { useCallback, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { RefreshCw, Search, Trash2 } from 'lucide-react';
 import { useLocale } from '../../../shared/i18n/locale';
 import { Modal } from '../../../shared/ui/ui';
@@ -159,10 +159,8 @@ export function SavedInvestigations({
           history={searchHistory}
           selected={selected}
           open={open}
-          close={() => {
-            setSearchOpen(false);
-            searchTrigger.current?.focus();
-          }}
+          close={() => setSearchOpen(false)}
+          trigger={searchTrigger}
           browsing={browsing()}
         />
       ) : (
@@ -200,12 +198,14 @@ function SavedChatSearch({
   selected,
   open,
   close,
+  trigger,
   browsing,
 }: {
   history: HistoryTransport;
   selected?: string;
   open: Props['open'];
   close: () => void;
+  trigger: RefObject<HTMLButtonElement | null>;
   browsing: ReactNode;
 }) {
   const { t } = useLocale();
@@ -245,6 +245,7 @@ function SavedChatSearch({
       load={load}
       row={result}
       close={close}
+      trigger={trigger}
       browsing={browsing}
       maxLength={120}
       resultsClassName={styles['saved-chat-list']}

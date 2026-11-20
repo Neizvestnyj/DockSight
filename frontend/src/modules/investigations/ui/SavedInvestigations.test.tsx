@@ -87,4 +87,11 @@ it('keeps chat search separate from recent history and opens the matched questio
   expect(trigger).toHaveFocus();
   expect(screen.queryByRole('searchbox')).toBeNull();
   expect(screen.getByText('No saved chats yet.')).toBeVisible();
+
+  fireEvent.click(trigger);
+  const refresh = screen.getByRole('button', { name: 'Refresh saved chats' });
+  refresh.focus();
+  fireEvent.click(refresh);
+  expect(screen.queryByRole('searchbox')).toBeNull();
+  expect(refresh).toHaveFocus();
 });

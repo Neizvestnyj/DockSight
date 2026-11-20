@@ -11,6 +11,10 @@ Dates record merges into `master` unless a release date is set separately. Versi
 - Search saved chats by question text, title, or host and open the matching question directly.
 - Find containers on the selected host or group by name, ID prefix, image, or Compose project.
 
+### Changed
+
+- Close chat and container search when the operator clicks outside the search panel.
+
 ## [0.8.3] - 2026-11-20
 
 ### Changed
