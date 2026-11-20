@@ -16,7 +16,7 @@ import styles from './SessionEntry.module.css';
 export function Bootstrap() {
   const { t } = useLocale();
   const [connection, setConnection] = useState<ConnectionState>();
-  const [state, setState] = useState<'loading' | 'signed-out' | 'error'>('loading');
+  const [state, setState] = useState<'loading' | 'signed-out' | 'sign-in-required' | 'error'>('loading');
   const [attempt, setAttempt] = useState(0);
   const [connecting, setConnecting] = useState(false);
   useEffect(() => {
@@ -28,8 +28,12 @@ export function Bootstrap() {
         if (!controller.signal.aborted) setConnection({ client, demo: false, id: 0 });
       })
       .catch((failure: unknown) => {
-        if (!controller.signal.aborted)
-          setState(failure instanceof ApiError && failure.httpStatus === 401 ? 'signed-out' : 'error');
+        if (controller.signal.aborted) return;
+        if (failure instanceof ApiError && failure.httpStatus === 401) {
+          setState(attempt > 0 ? 'sign-in-required' : 'signed-out');
+        } else {
+          setState('error');
+        }
       });
     return () => controller.abort();
   }, [attempt]);
@@ -58,12 +62,18 @@ export function Bootstrap() {
           {t(
             state === 'loading'
               ? 'Restoring your workspace…'
-              : state === 'signed-out'
-                ? 'Sign in to DockSight'
-                : 'Could not restore your session.',
+              : state === 'error'
+                ? 'Could not restore your session.'
+                : 'Sign in to DockSight',
           )}
         </h1>
-        <p>{t('Saved chats stay on your DockSight backend. Sign in to reopen your workspace.')}</p>
+        <p role="status">
+          {t(
+            state === 'sign-in-required'
+              ? 'Your session is no longer valid. Sign in again.'
+              : 'Saved chats stay on your DockSight backend. Sign in to reopen your workspace.',
+          )}
+        </p>
         {state !== 'loading' && (
           <div className={`${styles['entry-actions']}`}>
             {state === 'error' && (

@@ -22,6 +22,7 @@ Dates record merges into `master` unless a release date is set separately. Versi
 - Allow saved questions when the API confirms the selected model and the browser cannot read its catalog.
 - Show active diagnoses in saved chats and remove the open-chat prompt from a new empty editor.
 - Open saved chats directly from container details, including chats previously left on a container.
+- Explain why sign-in is required when a connection retry finds an invalid session.
 
 ## [0.8.3] - 2026-11-20
 

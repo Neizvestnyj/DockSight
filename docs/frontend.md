@@ -27,7 +27,8 @@ component styles. `src/shared/styles/` supplies global fonts, foundation, respon
 ## Connection and recovery
 
 At startup the client probes the first-party cookie session. A valid session opens API mode. An unauthorized response
-offers sign-in or explicit **Explore Demo**. A network failure offers retry. Demo is labeled and uses fictional data,
+offers sign-in or explicit **Explore Demo**. A network failure offers retry. If the retry returns an unauthorized
+response, the sign-in screen explains that the session is no longer valid. Demo is labeled and uses fictional data,
 separate transport, and no Docker or model calls. Its history lives in the tab.
 
 Same-origin sign-in exchanges a bearer token for an opaque HttpOnly cookie. JavaScript keeps the session identity and

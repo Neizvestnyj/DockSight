@@ -20,6 +20,7 @@ const russian = {
   'Restoring your workspace…': 'Восстанавливаем рабочее пространство…',
   'Sign in to DockSight': 'Войти в DockSight',
   'Could not restore your session.': 'Не удалось восстановить сеанс.',
+  'Your session is no longer valid. Sign in again.': 'Сессия недействительна. Войдите снова.',
   'Saved chats stay on your DockSight backend. Sign in to reopen your workspace.':
     'Сохранённые чаты хранятся на сервере DockSight. Войдите, чтобы продолжить работу.',
   'Explore Demo': 'Открыть демо',

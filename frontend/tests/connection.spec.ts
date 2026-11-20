@@ -1,4 +1,39 @@
 import { expect, test } from '@playwright/test';
+import { savedApi } from './helpers/saved-api';
+import { chooseOption } from './helpers/select';
+
+test('explains why sign-in is required after retrying the connection', async ({ page }) => {
+  let attempts = 0;
+  await page.route('**/api/v1/auth/session', (route) => {
+    attempts++;
+    return attempts < 3
+      ? route.abort('failed')
+      : route.fulfill({ status: 401, json: { code: 'unauthorized', message: 'Unauthorized' } });
+  });
+  await page.goto('/');
+  const retry = page.getByRole('button', { name: 'Retry connection', exact: true });
+  const error = page.getByRole('heading', { name: 'Could not restore your session.' });
+  await expect(error).toBeVisible();
+  await retry.click();
+  await expect(error).toBeVisible();
+  await retry.click();
+  await expect(page.getByRole('heading', { name: 'Sign in to DockSight' })).toBeVisible();
+  await expect(page.getByRole('status')).toHaveText('Your session is no longer valid. Sign in again.');
+  await expect(retry).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Connect API', exact: true })).toBeEnabled();
+  await chooseOption(page.getByRole('combobox', { name: 'Language' }), 'ru');
+  await expect(page.getByRole('status')).toHaveText('Сессия недействительна. Войдите снова.');
+  expect(attempts).toBe(3);
+});
+
+test('restores the workspace when the connection retry succeeds', async ({ page }) => {
+  await savedApi(page);
+  await page.route('**/api/v1/auth/session', (route) => route.abort('failed'), { times: 1 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Retry connection', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Archived question 1' })).toBeVisible();
+  await expect(page.getByText('Your session is no longer valid. Sign in again.')).toHaveCount(0);
+});
 
 for (const [code, hint] of [
   ['origin_not_allowed', 'DOCKSIGHT_BROWSER_ORIGIN'],
@@ -12,6 +47,7 @@ for (const [code, hint] of [
       route.fulfill({ status: 403, json: { code, message: 'Browser login was rejected' } }),
     );
     await page.goto('/');
+    await expect(page.getByText('Your session is no longer valid. Sign in again.')).toHaveCount(0);
     await page.getByRole('button', { name: 'Connect API', exact: true }).click();
     const address = page.getByLabel('API base URL');
     await expect(address).toHaveValue(`${new URL(page.url()).origin}/api/v1`);
