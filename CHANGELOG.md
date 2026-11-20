@@ -23,6 +23,7 @@ Dates record merges into `master` unless a release date is set separately. Versi
 - Show active diagnoses in saved chats and remove the open-chat prompt from a new empty editor.
 - Open saved chats directly from container details, including chats previously left on a container.
 - Explain why sign-in is required when a connection retry finds an invalid session.
+- Block diagnosis while another chat is working on the same host and localize the busy message.
 
 ## [0.8.3] - 2026-11-20
 

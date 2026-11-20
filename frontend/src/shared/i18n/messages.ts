@@ -364,6 +364,8 @@ const russian = {
   'Continue in current chat': 'Продолжить в текущем чате',
   'Why diagnosis is unavailable': 'Почему диагностика недоступна',
   'A request is running in the current chat.': 'В текущем чате выполняется запрос.',
+  'A diagnosis is running in another chat on this host.': 'На этом хосте выполняется диагностика в другом чате.',
+  'A diagnosis is already running on this host.': 'На этом хосте уже выполняется диагностика.',
   'Opening the chat…': 'Открываем чат…',
   'Open or create a chat to start a diagnosis.': 'Откройте или создайте чат, чтобы начать диагностику.',
   'Could not save the chat. Retry saving to continue.': 'Не удалось сохранить чат. Повторите сохранение.',

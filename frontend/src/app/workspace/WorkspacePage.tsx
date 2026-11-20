@@ -196,6 +196,8 @@ export function WorkspacePage({
   function diagnosisBlockReason(): MessageKey | undefined {
     if (availability.blockedReason) return availability.blockedReason;
     if (demo) return undefined;
+    if (history.items.some((row) => row.host === host && row.id !== saved.detail?.id && row.active_turn_id))
+      return 'A diagnosis is running in another chat on this host.';
     if (saved.loading) return 'Opening the chat…';
     if (saved.saveState === 'conflict') return 'This chat changed in another tab. Your draft is unsaved.';
     if (saved.saveState === 'error') return 'Could not save the chat. Retry saving to continue.';
@@ -355,7 +357,7 @@ export function WorkspacePage({
 
   /** Start an explicitly scoped group investigation without changing historical observations. */
   function diagnoseGroup() {
-    if (!groupScope.group || investigation.running || availability.blockedReason) return;
+    if (!groupScope.group || investigation.running || continuationBlockReason(false)) return;
     const { kind, name: groupName } = groupScope.group;
     const query = t('Investigate the {kind} group {name}. Check every member and explain the failures.', {
       kind: kind === 'compose' ? 'Compose' : 'Swarm',

@@ -51,6 +51,8 @@ API chats belong to the authenticated actor and each is scoped to one configured
 not a retention limit. Older chats remain available through pagination. Last-active chat is restored only at bootstrap.
 An active diagnosis replaces its chat's delete control with a progress indicator. The list checks active chats for
 completion while the page is visible, including when another chat is open.
+Known activity in another chat blocks a new diagnosis on the same host. If activity changes before the server admits a
+question, the client explains the conflict and refreshes the saved chat list.
 Focus refreshes the open chat and list without following another tab's navigation. Deletion requires confirmation and
 cannot remove a running diagnosis. Server action protection survives history deletion.
 

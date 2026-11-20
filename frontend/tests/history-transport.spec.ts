@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { savedApi } from './helpers/saved-api';
+import { chooseOption } from './helpers/select';
 import { writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import type { SavedTurn } from '../src/shared/contracts/investigation-contracts';
@@ -123,9 +124,10 @@ test('opens the current and another saved chat directly from container facts', a
   expect(api.cancellations).toEqual([]);
 });
 
-test('submits the first question in a new chat while another chat is working', async ({ page }) => {
+test('submits the first question while a chat on another host is working', async ({ page }) => {
   const api = await savedApi(page);
   const background = api.chats[1]!;
+  background.host = 'other-host';
   background.active_turn_id = background.turns.items[0]!.id;
   await page.goto('/');
   await expect(page.getByRole('textbox')).toHaveValue('Acknowledged draft');
@@ -143,6 +145,59 @@ test('submits the first question in a new chat while another chat is working', a
   await expect(page.getByRole('heading', { name: query, exact: true })).toBeVisible();
   expect(api.submissions).toMatchObject([{ kind: 'question', query }]);
   expect(background.active_turn_id).not.toBeNull();
+  expect(api.cancellations).toEqual([]);
+});
+
+test('blocks diagnosis from container facts while another chat on the same host is running', async ({ page }) => {
+  const api = await savedApi(page);
+  const background = api.chats[1]!;
+  background.active_turn_id = randomUUID();
+  await page.clock.install();
+  await page.goto('/');
+  await expect(page.getByRole('textbox')).toHaveValue('Acknowledged draft');
+  await navigation(page);
+  await expect(page.getByRole('status', { name: 'Diagnosis running: Archived question 2' })).toBeVisible();
+  await page.locator('.workspace-nav:visible').getByRole('button', { name: 'New investigation', exact: true }).click();
+  await navigation(page);
+  await page.getByTitle('payments-api', { exact: true }).filter({ visible: true }).click();
+  await expect(page.getByRole('region', { name: 'Container facts', exact: true })).toBeVisible();
+  await chooseOption(page.getByRole('combobox', { name: 'Language' }), 'ru');
+
+  const facts = page.getByRole('region', { name: 'Факты о контейнере', exact: true });
+  const diagnose = facts.getByRole('button', { name: 'Диагностировать', exact: true });
+  await expect(diagnose).toBeDisabled();
+  await facts.getByRole('button', { name: 'Почему диагностика недоступна' }).click();
+  await expect(facts.getByRole('tooltip')).toHaveText('На этом хосте выполняется диагностика в другом чате.');
+  expect(api.submissions).toEqual([]);
+  expect(api.chats).toHaveLength(12);
+
+  background.active_turn_id = null;
+  await page.clock.runFor(6000);
+  await expect(diagnose).toBeEnabled();
+  await expect(facts).toBeVisible();
+});
+
+test('localizes host-busy conflicts and refreshes activity without resubmitting', async ({ page }) => {
+  const api = await savedApi(page);
+  let admissions = 0;
+  await page.route('**/api/v1/investigations/*/turns', (route) => {
+    admissions++;
+    api.chats[1]!.active_turn_id = randomUUID();
+    return route.fulfill({
+      status: 409,
+      json: { code: 'turn_busy', message: 'A diagnostic turn is already running on this host' },
+    });
+  });
+  await page.goto('/');
+  const input = page.getByRole('textbox');
+  await expect(input).toHaveValue('Acknowledged draft');
+  await chooseOption(page.getByRole('combobox', { name: 'Language' }), 'ru');
+  const submit = page.getByRole('button', { name: 'Исследовать', exact: true });
+  await submit.click();
+  await expect(page.getByText('На этом хосте уже выполняется диагностика.', { exact: true })).toBeVisible();
+  await expect(submit).toBeDisabled();
+  await expect(input).toHaveValue('Acknowledged draft');
+  expect(admissions).toBe(1);
   expect(api.cancellations).toEqual([]);
 });
 
