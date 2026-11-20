@@ -27,9 +27,12 @@ export function Status({ state, action = false }: { state: string; action?: bool
   );
 }
 
+type HealthObservation = { state: string } & Pick<Container, 'health' | 'last_healthcheck'>;
+
 /** Label process state and healthcheck separately in compact inventory and member lists. */
-export function ContainerStatus({ state, health }: { state: string; health: Container['health'] }) {
+export function ContainerStatus(observation: HealthObservation) {
   const { t } = useLocale();
+  const { state } = observation;
   return (
     <span className={`${styles['container-status']} container-status`}>
       <Status state={state} />
@@ -37,44 +40,38 @@ export function ContainerStatus({ state, health }: { state: string; health: Cont
         <span className={`${styles['health-caption']} health-caption`}>
           {t(state === 'running' ? 'Healthcheck' : 'Last healthcheck')}
         </span>
-        <HealthStatus health={health} />
+        <HealthStatus {...observation} />
       </span>
     </span>
   );
 }
 
 /** Keep the reported healthcheck in its own fact row, identifying retained results for stopped processes. */
-export function HealthFact({ state, health }: { state: string; health: Container['health'] }) {
+export function HealthFact(observation: HealthObservation) {
   const { t } = useLocale();
   return (
     <dl className={`${styles['health-fact']} health-fact`}>
-      <dt>{t(state === 'running' ? 'Healthcheck' : 'Last healthcheck')}</dt>
+      <dt>{t(observation.state === 'running' ? 'Healthcheck' : 'Last healthcheck')}</dt>
       <dd>
-        <HealthStatus health={health} />
+        <HealthStatus {...observation} />
       </dd>
     </dl>
   );
 }
 
-/** Render only the observed health result without interpreting process state or missing checks. */
-function HealthStatus({ health }: { health: Container['health'] }) {
+const healthPresentation = {
+  healthy: { label: 'Health: healthy', tone: 'positive' },
+  unhealthy: { label: 'Health: unhealthy', tone: 'negative' },
+  starting: { label: 'Health: starting', tone: 'warning' },
+  passed: { label: 'Healthcheck passed', tone: 'positive' },
+  failed: { label: 'Healthcheck failed', tone: 'negative' },
+  unknown: { label: 'Health: not reported', tone: 'neutral' },
+} as const;
+
+/** Use live monitor health for running processes and recorded probe results elsewhere. */
+function HealthStatus({ state, health, last_healthcheck }: HealthObservation) {
   const { t } = useLocale();
-  const tone =
-    health === 'unhealthy'
-      ? 'negative'
-      : health === 'starting'
-        ? 'warning'
-        : health === 'healthy'
-          ? 'positive'
-          : 'neutral';
-  const label =
-    health === 'unhealthy'
-      ? 'Health: unhealthy'
-      : health === 'starting'
-        ? 'Health: starting'
-        : health === 'healthy'
-          ? 'Health: healthy'
-          : 'Health: not reported';
+  const { label, tone } = healthPresentation[(state === 'running' ? health : last_healthcheck) ?? 'unknown'];
   return (
     <span
       className={`${styles.status} ${styles['health-status']} status health-status ${tone} ${feedbackStyles[tone]}`}

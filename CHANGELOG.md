@@ -15,6 +15,10 @@ Dates record merges into `master` unless a release date is set separately. Versi
 
 - Close empty chat and container searches on outside clicks and retain entered queries.
 
+### Fixed
+
+- Show the last recorded healthcheck result for stopped containers and avoid false failures after normal stops.
+
 ## [0.8.3] - 2026-11-20
 
 ### Changed

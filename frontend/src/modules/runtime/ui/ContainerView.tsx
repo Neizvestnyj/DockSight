@@ -57,7 +57,7 @@ export function ContainerView({
             <Status state={state.state} />
             <code>{state.image}</code>
           </div>
-          <HealthFact state={state.state} health={state.health} />
+          <HealthFact state={state.state} health={state.health} last_healthcheck={state.last_healthcheck} />
           <dl className={`${factStyles['fact-strip']} fact-strip ${styles['runtime-lifecycle']}`}>
             <div>
               <dt>{t('Exit code')}</dt>

@@ -31,7 +31,7 @@ class HostRuntime(FakeRuntime):
             replace(self.rows[1], state="running", exit_code=0, health="unhealthy"),
             replace(self.rows[2], compose_project=None, oom_killed=True, exit_code=137),
             replace(self.rows[3], state="running", exit_code=0, health="healthy"),
-            replace(self.rows[4], exit_code=0),
+            replace(self.rows[4], exit_code=0, last_healthcheck="passed"),
             replace(self.rows[5], state="restarting"),
         )
         self.reads: list[str] = []
@@ -85,6 +85,7 @@ def _assert_host_members(report: HostInspection) -> None:
     assert (report.total, report.running, report.attention) == (6, 2, 5)
     assert {row.group.name for row in report.members if row.group} == {"project-0", "project-1"}
     assert any(row.container_id == f"{3:064x}" and row.group is None for row in report.members)
+    assert next(row for row in report.members if row.container_id == f"{5:064x}").last_healthcheck == "passed"
     assert [row.state for row in report.logs].count("not_collected") == 1
 
 

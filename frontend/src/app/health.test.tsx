@@ -19,7 +19,7 @@ function renderCard(
   health: 'healthy' | 'unhealthy' | 'starting' | null | undefined,
   embedded = false,
   locale: Locale = 'en',
-  lifecycle?: Pick<Container, 'state' | 'exit_code'>,
+  lifecycle?: Pick<Container, 'state' | 'exit_code' | 'last_healthcheck'>,
 ) {
   const answer = demoAnswer('dependency');
   const original = answer.widgets.find((row) => row.widget_type === 'container_status')!;
@@ -114,13 +114,27 @@ describe('container health observations', async () => {
     expect(screen.getByText('ghcr.io/northstar/checkout:3.2.4')).toBeVisible();
   });
 
-  it.each([false, true])('separates a stopped process from its last healthcheck (embedded=%s)', (embedded) => {
-    const { container } = renderCard('unhealthy', embedded, 'ru', { state: 'exited', exit_code: 0 });
+  it.each([false, true])('shows a successful last check after a normal stop (embedded=%s)', (embedded) => {
+    const { container } = renderCard('unhealthy', embedded, 'ru', {
+      state: 'exited',
+      exit_code: 0,
+      last_healthcheck: 'passed',
+    });
     const heading = container.querySelector(embedded ? '.widget-head' : '.container-heading')!;
     expect(within(heading as HTMLElement).getByText('завершён')).toHaveClass('neutral');
     expect(within(heading as HTMLElement).queryByText('Сбой')).not.toBeInTheDocument();
-    expect(screen.getByText('Последняя проверка').nextElementSibling).toHaveTextContent('Сбой');
-    expect(screen.getByText('Сбой')).toHaveClass('negative');
+    expect(screen.getByText('Последняя проверка').nextElementSibling).toHaveTextContent('Пройдена');
+    expect(screen.getByText('Пройдена')).toHaveClass('positive');
+  });
+
+  it.each([
+    ['failed', 'Не пройдена', 'negative'],
+    [null, 'Нет данных', 'neutral'],
+    [undefined, 'Нет данных', 'neutral'],
+  ] as const)('shows last check %s independently of the aggregate Docker status', (result, label, tone) => {
+    renderCard('unhealthy', true, 'ru', { state: 'exited', exit_code: 1, last_healthcheck: result });
+    expect(screen.getByText('Последняя проверка').nextElementSibling).toHaveTextContent(label);
+    expect(screen.getByText(label)).toHaveClass(tone);
   });
 
   it.each([0, 1])('distinguishes exit code %s from a neutral exited process', (exit_code) => {
@@ -138,6 +152,7 @@ describe('container health observations', async () => {
       ...demoContainer(2, 'demo-eu', '2026-10-27T12:00:00Z'),
       state: 'running' as const,
       health: 'unhealthy' as const,
+      last_healthcheck: 'passed' as const,
     };
     vi.spyOn(DemoClient.prototype, 'containers').mockResolvedValue([snapshot]);
     vi.spyOn(DemoClient.prototype, 'container').mockResolvedValue(snapshot);

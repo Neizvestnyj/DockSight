@@ -29,6 +29,78 @@ def test_inspect_keeps_health_separate_from_process_state_and_discards_probe_out
 
 
 @pytest.mark.parametrize(
+    ("probe_start", "probe_end", "probe_code", "expected"),
+    [
+        ("18:38:38", "18:38:39", 0, "passed"),
+        ("18:38:38", "18:38:39", 1, "failed"),
+        ("18:38:38", "18:38:39", -1, "failed"),
+        ("18:38:38", "18:38:39", 7, "failed"),
+        ("18:38:38", "18:38:39", 22, "failed"),
+        ("18:38:38", "18:38:39", 2, None),
+        ("18:38:08", "18:38:11", 0, None),
+        ("18:38:38", "18:38:50", 1, None),
+        ("18:38:38", "18:38:49", 137, None),
+        ("18:38:38", "18:38:49", 143, None),
+        ("18:38:38", "18:38:39", False, None),
+    ],
+)
+def test_stopped_container_reports_only_a_completed_healthcheck_from_its_latest_run(
+    probe_start: str, probe_end: str, probe_code: int, expected: str | None
+) -> None:
+    result = map_container(
+        {
+            "Id": "a" * 64,
+            "Name": "/cadvisor",
+            "State": {
+                "Status": "exited",
+                "StartedAt": "2026-11-01T18:38:10Z",
+                "FinishedAt": "2026-11-01T18:38:49Z",
+                "Health": {
+                    "Status": "unhealthy",
+                    "Log": [
+                        {
+                            "Start": f"2026-11-01T{probe_start}Z",
+                            "End": f"2026-11-01T{probe_end}Z",
+                            "ExitCode": probe_code,
+                            "Output": "probe-secret-sentinel",
+                        }
+                    ],
+                },
+            },
+        },
+        "local",
+        (),
+        Redactor(),
+    )
+    assert asdict(result)["last_healthcheck"] == expected
+    assert result.health == "unhealthy"
+    assert "probe-secret-sentinel" not in str(asdict(result))
+
+
+@pytest.mark.parametrize("finished_at", [None, 1, "unknown"])
+def test_stopped_container_healthcheck_is_unknown_without_a_valid_finish_time(finished_at: object) -> None:
+    result = map_container(
+        {
+            "Id": "a" * 64,
+            "Name": "/cadvisor",
+            "State": {
+                "Status": "exited",
+                "StartedAt": "2026-11-01T18:38:10Z",
+                "FinishedAt": finished_at,
+                "Health": {
+                    "Status": "unhealthy",
+                    "Log": [{"Start": "2026-11-01T18:38:38Z", "End": "2026-11-01T18:38:39Z", "ExitCode": 0}],
+                },
+            },
+        },
+        "local",
+        (),
+        Redactor(),
+    )
+    assert result.last_healthcheck is None
+
+
+@pytest.mark.parametrize(
     "state",
     [{"Status": "running"}, {"Status": "running", "Health": None}, {"Status": "running", "Health": {"Status": "none"}}],
 )

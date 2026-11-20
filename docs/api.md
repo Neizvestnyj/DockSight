@@ -77,10 +77,14 @@ Pass the cursor as `before` with the same host, query, and group.
 
 ### Container health
 
-Container snapshots and Compose container members include `health`: `starting`, `healthy`, `unhealthy`, or `null`.
-Health is independent of process `state`. A running process can be unhealthy. Missing observations and Docker's `none`
-map to `null`. Probe commands, output, and healthcheck history are excluded.
-Swarm service summaries do not infer container health from running replica counts and retain `health=null`.
+Container snapshots, host overview members, and Compose container members expose `health` and `last_healthcheck`.
+`health` is Docker's aggregate status: `starting`, `healthy`, `unhealthy`, or `null`. It is independent of process
+`state` and can report `unhealthy` after Docker stops monitoring a container.
+`last_healthcheck` is `passed` or `failed` for the latest recorded probe completed within the latest container run.
+Exit code `0` records a pass. Docker probe errors and ordinary nonzero command exits record failures. Missing or
+inconclusive results are `null`, including reserved exit code `2` and exit codes consistent with signals.
+Older observations may omit this field. Probe commands, output, and the probe history are excluded.
+Swarm service summaries retain `null` for both fields.
 See Docker's [healthcheck semantics](https://docs.docker.com/reference/dockerfile/#healthcheck).
 
 ## Browser client

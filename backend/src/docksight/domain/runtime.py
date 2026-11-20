@@ -4,6 +4,7 @@ from typing import Literal
 
 type ContainerState = Literal["created", "running", "paused", "restarting", "removing", "exited", "dead"]
 type ContainerHealth = Literal["starting", "healthy", "unhealthy"]
+type HealthcheckResult = Literal["passed", "failed"]
 
 
 @dataclass(frozen=True)
@@ -41,6 +42,7 @@ class ContainerSnapshot:
     environment: tuple[tuple[str, str], ...] = ()
     compose_project: str | None = None
     health: ContainerHealth | None = None
+    last_healthcheck: HealthcheckResult | None = None
 
     @property
     def fingerprint(self) -> str:
@@ -76,6 +78,7 @@ class StackMember:
     running: int
     exit_code: int | None = None
     health: ContainerHealth | None = None
+    last_healthcheck: HealthcheckResult | None = None
 
 
 @dataclass(frozen=True)

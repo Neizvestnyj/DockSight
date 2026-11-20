@@ -55,6 +55,7 @@ describe('host overview transport', () => {
       { members: Array.from({ length: 33 }, () => overview.members[0]) },
       { members: [{ ...overview.members[0], container_id: 'abc' }] },
       { members: [{ ...overview.members[0], health: 'ready' }] },
+      { members: [{ ...overview.members[0], last_healthcheck: 'healthy' }] },
       { members: [{ ...overview.members[0], state: 'failed' }] },
       { members: [{ ...overview.members[0], observed_at: 'yesterday' }] },
       { members: [{ ...overview.members[0], name: 'a'.repeat(4097) }] },

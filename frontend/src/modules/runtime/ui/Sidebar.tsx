@@ -137,7 +137,11 @@ export function Sidebar({
                   <Box size={14} />
                   <span>{container.name}</span>
                 </span>
-                <ContainerStatus state={container.state} health={container.health} />
+                <ContainerStatus
+                  state={container.state}
+                  health={container.health}
+                  last_healthcheck={container.last_healthcheck}
+                />
                 {container.state === 'exited' && container.exit_code !== 0 && (
                   <span className={`${styles['container-exit']} negative ${feedbackStyles['negative']}`}>
                     {t('Exit code')} {container.exit_code}

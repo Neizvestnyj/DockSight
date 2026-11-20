@@ -136,6 +136,8 @@ const russian = {
   'Docker healthcheck': 'Проверка здоровья Docker',
   Healthcheck: 'Проверка здоровья',
   'Last healthcheck': 'Последняя проверка',
+  'Healthcheck passed': 'Пройдена',
+  'Healthcheck failed': 'Не пройдена',
   'The model context window is full. Narrow the question or increase the configured context size.':
     'Контекстное окно модели заполнено. Уточните вопрос или увеличьте размер контекста в настройках.',
   'The model response reached its output limit. Ask for a shorter answer or increase the output limit.':
@@ -700,6 +702,8 @@ const englishOverrides: Partial<Record<MessageKey, string | Plurals>> = {
   'Health: unhealthy': 'Unhealthy',
   'Health: starting': 'Starting',
   'Health: not reported': 'Not reported',
+  'Healthcheck passed': 'Passed',
+  'Healthcheck failed': 'Failed',
   awaiting_selection: 'Awaiting resource selection',
   actionRunning: 'running',
   '{count} lines returned': { one: '{count} line returned', other: '{count} lines returned' },

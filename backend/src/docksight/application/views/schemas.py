@@ -6,7 +6,14 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from docksight.domain.actions import ActionState, Operation
 from docksight.domain.diagnostics import EvidenceRef
-from docksight.domain.runtime import ContainerHealth, ContainerSnapshot, ContainerState, LogBatch, StackSummary
+from docksight.domain.runtime import (
+    ContainerHealth,
+    ContainerSnapshot,
+    ContainerState,
+    HealthcheckResult,
+    LogBatch,
+    StackSummary,
+)
 
 
 def _readable_explanation(value: str) -> None:
@@ -104,6 +111,7 @@ class HostMember(Contract):
     observed_at: datetime
     group: GroupTarget | None
     attention: bool
+    last_healthcheck: HealthcheckResult | None = None
 
 
 class HostInspection(Contract):

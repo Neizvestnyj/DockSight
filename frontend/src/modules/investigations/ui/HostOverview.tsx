@@ -90,7 +90,7 @@ export function HostOverview({
                 </span>
               </div>
               <div className={`${styles['host-member-state']}`}>
-                <ContainerStatus state={row.state} health={row.health} />
+                <ContainerStatus state={row.state} health={row.health} last_healthcheck={row.last_healthcheck} />
                 <span className={`section-note ${controlStyles['section-note']}`}>
                   {t('Exit code')} {row.exit_code} · {t('Restarts')} {row.restart_count.toLocaleString(locale)}
                   {row.oom_killed ? ` · ${t('OOM killed')}` : ''}

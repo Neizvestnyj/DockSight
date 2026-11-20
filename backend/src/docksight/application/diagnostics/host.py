@@ -44,6 +44,7 @@ def _member(snapshot: ContainerSnapshot) -> HostMember:
         name=snapshot.name,
         state=snapshot.state,
         health=snapshot.health,
+        last_healthcheck=snapshot.last_healthcheck,
         exit_code=snapshot.exit_code,
         oom_killed=snapshot.oom_killed,
         restart_count=snapshot.restart_count,
