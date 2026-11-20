@@ -62,7 +62,8 @@ restores acknowledged data only. Navigation waits for pending saves. A failure o
 workspace. The operator explicitly retries, reloads the saved draft, or chooses to use the local draft. Focus reads do
 not silently rebase a dirty workspace revision.
 
-Saved host, model, scope, container selection, and view come from the server workspace. A removed host or model leaves
+Saved host, model, scope, container selection, and view come from the server workspace. Selecting a saved chat from the
+sidebar opens its diagnostics directly, even if its last view was a container. A removed host or model leaves
 the archive readable but requires an explicit valid choice before continuation. Changing host starts another chat.
 An unavailable container retains its full historical ID. A replacement with the same name is never substituted.
 See [saved investigations and workspaces](api.md#saved-investigations-and-workspaces) and

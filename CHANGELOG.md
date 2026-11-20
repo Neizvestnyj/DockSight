@@ -4,7 +4,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versions: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Dates record merges into `master` unless a release date is set separately. Version links show the corresponding changes.
 
-## [0.9.0]
+## [0.9.0] - 2026-11-21
 
 ### Added
 
@@ -21,6 +21,7 @@ Dates record merges into `master` unless a release date is set separately. Versi
 - Explain blocked diagnosis controls and show both destinations when the current chat has questions or a draft.
 - Allow saved questions when the API confirms the selected model and the browser cannot read its catalog.
 - Show active diagnoses in saved chats and remove the open-chat prompt from a new empty editor.
+- Open saved chats directly from container details, including chats previously left on a container.
 
 ## [0.8.3] - 2026-11-20
 

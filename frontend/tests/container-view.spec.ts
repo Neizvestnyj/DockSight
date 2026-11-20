@@ -33,6 +33,7 @@ test('keeps reported health separate from lifecycle state across inventory and r
   let health: 'healthy' | 'unhealthy' | 'starting' | null = 'unhealthy';
   let state: 'running' | 'exited' = 'running';
   let exit_code = 0;
+  let last_healthcheck: 'failed' | null = null;
   await routeSavedApi(page, (route) => {
     const request = route.request();
     expect(request.method()).toBe('GET');
@@ -45,7 +46,7 @@ test('keeps reported health separate from lifecycle state across inventory and r
     if (url.pathname.endsWith('/stats')) return route.fulfill({ json: snapshot.metrics });
     if (url.pathname.endsWith('/logs')) return route.fulfill({ json: { entries: [], truncated: false } });
     return route.fulfill({
-      json: { ...snapshot, health, state, exit_code, last_healthcheck: state === 'exited' ? 'failed' : null },
+      json: { ...snapshot, health, state, exit_code, last_healthcheck },
     });
   });
   await openDemo(page);
@@ -75,7 +76,11 @@ test('keeps reported health separate from lifecycle state across inventory and r
   }
   state = 'exited';
   health = 'unhealthy';
+  await facts.getByRole('button', { name: 'Refresh data' }).click();
+  await expect(facts.locator('.runtime-state').getByText('exited', { exact: true })).toHaveClass(/neutral/);
+  await expect(facts.locator('.health-fact').getByText('Not reported')).toHaveClass(/neutral/);
   exit_code = 1;
+  last_healthcheck = 'failed';
   await facts.getByRole('button', { name: 'Refresh data' }).click();
   await expect(facts.locator('.runtime-state').getByText('exited', { exact: true })).toHaveClass(/neutral/);
   await expect(facts.locator('.health-fact')).toContainText('Last healthcheck');
@@ -203,7 +208,7 @@ test('opens a new chat for another container and continues a chat only by explic
     .getByRole('region', { name: 'Saved chats' })
     .getByRole('button', { name: /^Investigate checkout-api/ })
     .click();
-  await facts.getByRole('button', { name: 'Back to investigation' }).click();
+  await expect(page.getByRole('heading', { name: originalTitle, exact: true })).toBeVisible();
   await expect(page.getByRole('textbox')).toHaveValue('Keep this draft in its original chat.');
   await expect(historical.locator('footer time')).toHaveAttribute('datetime', snapshot.observed_at);
   await chooseContainer(page, other.name);

@@ -241,7 +241,7 @@ export function WorkspacePage({
   }, [client, host, demo, scopeTarget]);
 
   useEffect(() => {
-    if (demo || !saved.detail || saved.searchOpened || saved.detail.workspace.view !== 'containers' || hostLoading)
+    if (demo || !saved.detail || saved.openedFromHistory || saved.detail.workspace.view !== 'containers' || hostLoading)
       return;
     const target = saved.detail.workspace.selected_container;
     if (!target || !configured) return;
@@ -258,9 +258,9 @@ export function WorkspacePage({
         if (!controller.signal.aborted) setSelectionError(true);
       });
     return () => controller.abort();
-    // Restore exact selection only when this chat opens, never match by name.
+    // Restore the exact selection when hydrating a workspace. Chat navigation opens diagnostics.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [client, host, saved.detail?.id, hostLoading, saved.searchOpened]);
+  }, [client, host, saved.detail?.id, hostLoading, saved.openedFromHistory]);
 
   useEffect(() => {
     const input = document.getElementById('query');
@@ -435,11 +435,8 @@ export function WorkspacePage({
           searchHistory={client.history}
           open={(id, turnId) => {
             setMenu(false);
-            if (turnId === undefined) {
-              void saved.open(id);
-              return;
-            }
-            void saved.openResult(id, turnId).then((opened) => {
+            const opening = turnId === undefined ? saved.open(id) : saved.openResult(id, turnId);
+            void opening.then((opened) => {
               if (opened && id === saved.detail?.id) setViewingContainer(false);
             });
           }}

@@ -82,6 +82,70 @@ test('saves pending drafts before same-row, other-chat and new-chat navigation',
   expect(api.submissions).toEqual([]);
 });
 
+test('opens the current and another saved chat directly from container facts', async ({ page }) => {
+  const api = await savedApi(page);
+  const current = api.chats[0]!;
+  const other = api.chats[1]!;
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'Archived question 1' })).toBeVisible();
+  const pageLoads: string[] = [];
+  page.on('request', (request) => {
+    if (request.isNavigationRequest()) pageLoads.push(request.url());
+  });
+  const facts = page.getByRole('region', { name: 'Container facts', exact: true });
+
+  await navigation(page);
+  await page.getByTitle('payments-api', { exact: true }).filter({ visible: true }).click();
+  await expect(facts).toBeVisible();
+  await expect.poll(() => current.workspace.view).toBe('containers');
+  await navigation(page);
+  await page.getByRole('button', { name: /^Archived question 1 local/ }).click();
+  await expect(page.getByRole('heading', { name: 'Archived question 1' })).toBeVisible();
+  await expect(page.getByRole('textbox')).toHaveValue('Acknowledged draft');
+  await expect(facts).toBeHidden();
+  await expect.poll(() => current.workspace.view).toBe('diagnostics');
+
+  await navigation(page);
+  await page.getByTitle('payments-api', { exact: true }).filter({ visible: true }).click();
+  await expect(facts).toBeVisible();
+  other.workspace = {
+    ...other.workspace,
+    view: 'containers',
+    selected_container: current.workspace.selected_container,
+  };
+  await navigation(page);
+  await page.getByRole('button', { name: /^Archived question 2 local/ }).click();
+  await expect(page.getByRole('heading', { name: 'Archived question 2' })).toBeVisible();
+  await expect(facts).toBeHidden();
+  await expect.poll(() => other.workspace.view).toBe('diagnostics');
+  expect(pageLoads).toEqual([]);
+  expect(api.submissions).toEqual([]);
+  expect(api.cancellations).toEqual([]);
+});
+
+test('submits the first question in a new chat while another chat is working', async ({ page }) => {
+  const api = await savedApi(page);
+  const background = api.chats[1]!;
+  background.active_turn_id = background.turns.items[0]!.id;
+  await page.goto('/');
+  await expect(page.getByRole('textbox')).toHaveValue('Acknowledged draft');
+  await navigation(page);
+  await page.locator('.workspace-nav:visible').getByRole('button', { name: 'New investigation', exact: true }).click();
+  const input = page.getByRole('textbox');
+  const submit = page.getByRole('button', { name: 'Investigate', exact: true });
+  await expect(input).toHaveValue('');
+  await expect(submit).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Why diagnosis is unavailable' })).toHaveCount(0);
+  const query = 'What happened to the gateway?';
+  await input.fill(query);
+  await expect(submit).toBeEnabled();
+  await submit.click();
+  await expect(page.getByRole('heading', { name: query, exact: true })).toBeVisible();
+  expect(api.submissions).toMatchObject([{ kind: 'question', query }]);
+  expect(background.active_turn_id).not.toBeNull();
+  expect(api.cancellations).toEqual([]);
+});
+
 test('waits for model verification before warning about a saved model', async ({ page }) => {
   const api = await savedApi(page);
   const model = { provider: 'ollama', model: 'test-model' } as const;

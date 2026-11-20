@@ -37,7 +37,7 @@ export function useWorkspace(history?: HistoryTransport, onDraftCreated?: () => 
   const [error, setError] = useState('');
   const [actor, setActor] = useState<ActorWorkspace>();
   const [detail, setDetail] = useState<InvestigationDetail>();
-  const [search, setSearch] = useState<{ turn?: SavedTurn }>();
+  const [historySelection, setHistorySelection] = useState<{ turn?: SavedTurn }>();
   const [draftChat, setDraftChat] = useState<DraftChat>();
   const [diagnosisChatId, setDiagnosisChatId] = useState<string>();
   const [draft, showDraft] = useState('');
@@ -68,14 +68,14 @@ export function useWorkspace(history?: HistoryTransport, onDraftCreated?: () => 
   }, []);
 
   /** Install an acknowledged workspace or clear it before opening a local editor. */
-  const install = useCallback((value?: InvestigationDetail, fromSearch?: { turn?: SavedTurn }) => {
+  const install = useCallback((value?: InvestigationDetail, selection?: { turn?: SavedTurn }) => {
     current.current = value;
     provisionalChat.current = undefined;
     setDraftChat(undefined);
     pending.current = {};
     conflict.current = null;
     setDetail(value);
-    setSearch(fromSearch);
+    setHistorySelection(selection);
     showDraft(value?.workspace.draft ?? '');
     setSaveState('saved');
   }, []);
@@ -248,7 +248,7 @@ export function useWorkspace(history?: HistoryTransport, onDraftCreated?: () => 
       const result = await history.turn(turnId, controller.signal);
       if (detached(epoch, controller.signal)) return false;
       verifyQuestion(chat, result);
-      setSearch({ turn: result });
+      setHistorySelection({ turn: result });
       return true;
     } catch {
       if (!detached(epoch, controller.signal)) setError('Could not open saved chat. Retry the read.');
@@ -258,7 +258,7 @@ export function useWorkspace(history?: HistoryTransport, onDraftCreated?: () => 
 
   /** Open an archive from the recent chat list. */
   async function open(id: string) {
-    if (history) await openArchive(history, id);
+    return history ? openArchive(history, id) : false;
   }
 
   /** Keep same-chat search navigation independent of workspace and turn ownership. */
@@ -268,13 +268,13 @@ export function useWorkspace(history?: HistoryTransport, onDraftCreated?: () => 
     const chat = current.current;
     if (chat?.id === id && !loading) {
       if (turnId) return openCurrentQuestion(history, chat, turnId);
-      setSearch({});
+      setHistorySelection({});
       return true;
     }
     return openArchive(history, id, turnId);
   }
 
-  /** Detach old reads before opening another owned archive. */
+  /** Detach old reads before opening an owned archive in the diagnostic view. */
   async function openArchive(history: HistoryTransport, id: string, turnId?: string | null) {
     if (!(await flushNavigation())) return false;
     const openingInitial = !current.current;
@@ -293,7 +293,8 @@ export function useWorkspace(history?: HistoryTransport, onDraftCreated?: () => 
         initialDraft.current = null;
         initialCreation.current = null;
       }
-      install({ ...result, workspace }, searchSelection(turnId, matchedTurn));
+      install({ ...result, workspace }, { turn: matchedTurn });
+      if (turnId === undefined && workspace.view === 'containers') patch({ view: 'diagnostics' });
       await savePreferences({ last_investigation_id: id });
       return !detached(epoch, controller.signal);
     } catch {
@@ -497,8 +498,8 @@ export function useWorkspace(history?: HistoryTransport, onDraftCreated?: () => 
     error,
     actor,
     detail,
-    searchOpened: Boolean(search),
-    searchTurn: search?.turn,
+    openedFromHistory: Boolean(historySelection),
+    searchTurn: historySelection?.turn,
     chat: detail ?? draftChat,
     draftChat,
     draft,
@@ -538,9 +539,4 @@ async function readArchive(history: HistoryTransport, id: string, signal: AbortS
 function verifyQuestion(chat: InvestigationDetail, question: SavedTurn) {
   if (question.investigation_id !== chat.id || question.host !== chat.host)
     throw new Error('Search result is outside the selected investigation.');
-}
-
-/** Distinguish a title-only hit from ordinary archive navigation. */
-function searchSelection(turnId?: string | null, turn?: SavedTurn) {
-  return turnId === undefined ? undefined : { turn };
 }
