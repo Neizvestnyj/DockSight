@@ -223,7 +223,7 @@ describe('automatic runtime refresh', async () => {
     expect(facts).toHaveTextContent('This container no longer exists on the selected host.');
     expect(facts).toHaveTextContent('1'.repeat(64));
     expect(facts).not.toHaveTextContent('f'.repeat(64));
-    expect(within(facts).getByRole('button', { name: 'Diagnose' })).toBeDisabled();
+    expect(within(facts).getByRole('button', { name: 'Diagnose' })).toHaveAttribute('aria-disabled', 'true');
     const inspectPath = `/api/v1/hosts/test-host/containers/${'1'.repeat(64)}`;
     const inspections = api.reads.filter((path) => path === inspectPath).length;
     await advance(60_000);

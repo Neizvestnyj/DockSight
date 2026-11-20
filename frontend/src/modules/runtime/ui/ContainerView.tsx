@@ -145,33 +145,36 @@ export function ContainerView({
     return undefined;
   }
 
-  /** Show explicit chat destinations and share one help trigger across unavailable actions. */
+  /** Show explicit chat destinations and attach their shared guidance to the existing action. */
   function diagnosisActions() {
     const reason = diagnosisReason();
-    const actions = (
-      <span className={styles['diagnosis-actions']}>
-        <button
-          className={`primary ${controlStyles['primary']}`}
-          disabled={Boolean(reason)}
-          onClick={() => state && diagnose(state)}
-        >
-          {t(continueDiagnosis ? 'Diagnose in a new chat' : 'Diagnose')}
-          <ArrowRight size={14} />
-        </button>
-        {continueDiagnosis && (
-          <button
-            className={`text-button ${controlStyles['text-button']} ${styles['continue-diagnosis']}`}
-            disabled={Boolean(reason)}
-            onClick={() => state && continueDiagnosis(state)}
-          >
-            {t('Continue in current chat')}
-          </button>
-        )}
-      </span>
-    );
+    const primaryClass = `primary ${controlStyles['primary']}`;
     return (
       <div className={styles['diagnosis-controls']}>
-        <Hint label={t('Why diagnosis is unavailable')} control={actions}>
+        <Hint
+          control={
+            continueDiagnosis && (
+              <button className={primaryClass} disabled={Boolean(reason)} onClick={() => state && diagnose(state)}>
+                {t('Diagnose in a new chat')}
+                <ArrowRight size={14} />
+              </button>
+            )
+          }
+          button={{
+            className: continueDiagnosis
+              ? `text-button ${controlStyles['text-button']} ${styles['continue-diagnosis']}`
+              : primaryClass,
+            content: continueDiagnosis ? (
+              t('Continue in current chat')
+            ) : (
+              <>
+                {t('Diagnose')}
+                <ArrowRight size={14} />
+              </>
+            ),
+            onClick: () => state && (continueDiagnosis ?? diagnose)(state),
+          }}
+        >
           {reason ? t(reason) : undefined}
         </Hint>
       </div>

@@ -18,7 +18,7 @@ Dates record merges into `master` unless a release date is set separately. Versi
 ### Fixed
 
 - Show the last recorded healthcheck result for stopped containers and avoid false failures after normal stops.
-- Explain blocked diagnosis controls and show both destinations when the current chat has questions or a draft.
+- Show both diagnosis destinations for chats with questions or a draft and explain blocked actions on the button.
 - Allow saved questions when the API confirms the selected model and the browser cannot read its catalog.
 - Show active diagnoses in saved chats and remove the open-chat prompt from a new empty editor.
 - Open saved chats directly from container details, including chats previously left on a container.

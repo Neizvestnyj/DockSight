@@ -16,6 +16,9 @@
   line-height: 1.6;
   overflow: auto;
 }
+.hint-popup[data-action] {
+  width: max-content;
+}
 .hint {
   display: inline-flex;
 }

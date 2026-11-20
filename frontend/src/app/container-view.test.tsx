@@ -64,6 +64,11 @@ describe('read-only container viewing', async () => {
       .mockResolvedValueOnce(demoContainer(1, 'demo-eu', '2026-10-27T12:00:00Z'));
     await renderDemoApp();
     fireEvent.click(await screen.findByTitle('payments-api'));
+    const continueChat = screen.getByRole('button', { name: 'Continue in current chat' });
+    expect(continueChat).toHaveAttribute('aria-disabled', 'true');
+    expect(continueChat).toHaveAccessibleDescription('Refreshing container data…');
+    fireEvent.focus(continueChat);
+    expect(screen.getByRole('tooltip', { hidden: true })).toHaveTextContent('Refreshing container data…');
     fireEvent.click(screen.getByTitle('report-worker'));
     const facts = screen.getByRole('region', { name: 'Container facts' });
     expect(await within(facts).findByText('137')).toBeInTheDocument();

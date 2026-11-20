@@ -3,14 +3,23 @@ import { CircleHelp } from 'lucide-react';
 import { useFloatingPanel } from './useFloatingPanel';
 import styles from './Hint.module.css';
 
+type Props = { children?: string; control?: ReactNode } & (
+  | { label: string; button?: never }
+  | { label?: never; button: { className: string; content: ReactNode; onClick: () => void } }
+);
+
 /** Make optional guidance available to pointer, keyboard, and touch users without permanent page copy. */
-export function Hint({ label, children, control }: { label: string; children?: string; control?: ReactNode }) {
+export function Hint({ label, children, control, button }: Props) {
   const id = useId();
   const root = useRef<HTMLSpanElement>(null);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [open, setOpen] = useState(false);
   const visible = open && Boolean(children);
-  const { anchor: trigger, panel } = useFloatingPanel<HTMLButtonElement, HTMLSpanElement>(visible);
+  const { anchor: trigger, panel } = useFloatingPanel<HTMLButtonElement, HTMLSpanElement>(
+    visible,
+    false,
+    button ? 'above' : 'below',
+  );
   useEffect(() => {
     if (!visible) return;
     /** Close touch-opened help when the operator continues elsewhere. */
@@ -46,6 +55,26 @@ export function Hint({ label, children, control }: { label: string; children?: s
     }, 160);
   }
 
+  /** Keep a blocked action focusable while limiting its activation to showing the reason. */
+  function renderTrigger() {
+    if (!button && !children) return null;
+    return (
+      <button
+        ref={trigger}
+        type="button"
+        className={button?.className ?? styles['hint-trigger']}
+        aria-label={label}
+        aria-disabled={button && Boolean(children)}
+        aria-describedby={visible || (button && children) ? id : undefined}
+        onFocus={children ? show : undefined}
+        onBlur={children ? () => setOpen(false) : undefined}
+        onClick={children ? show : button?.onClick}
+      >
+        {button ? button.content : <CircleHelp size={14} aria-hidden="true" />}
+      </button>
+    );
+  }
+
   return (
     <span
       ref={root}
@@ -54,24 +83,26 @@ export function Hint({ label, children, control }: { label: string; children?: s
       onMouseLeave={visible ? hideSoon : undefined}
     >
       {control}
-      {children && (
-        <button
-          ref={trigger}
-          type="button"
-          className={styles['hint-trigger']}
-          aria-label={label}
-          aria-describedby={visible ? id : undefined}
-          onFocus={show}
-          onBlur={() => setOpen(false)}
-          onClick={show}
+      {renderTrigger()}
+      {visible ? (
+        <span
+          key="popup"
+          ref={panel}
+          id={id}
+          role="tooltip"
+          className={styles['hint-popup']}
+          data-action={button ? '' : undefined}
+          popover="manual"
         >
-          <CircleHelp size={14} aria-hidden="true" />
-        </button>
-      )}
-      {visible && (
-        <span ref={panel} id={id} role="tooltip" className={styles['hint-popup']} popover="manual">
           {children}
         </span>
+      ) : (
+        button &&
+        children && (
+          <span key="description" id={id} hidden>
+            {children}
+          </span>
+        )
       )}
     </span>
   );
