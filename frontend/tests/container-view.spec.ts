@@ -92,29 +92,36 @@ test('keeps reported health separate from lifecycle state across inventory and r
   });
 });
 
-test('reads and refreshes facts without LLM calls, then diagnoses in a separate session', async ({ page }) => {
+test('opens a new chat for another container and continues a chat only by explicit choice', async ({ page }, info) => {
   const snapshot = demoContainer(0, 'test-host', '2026-10-20T09:00:00Z');
+  const other = demoContainer(2, 'test-host', snapshot.observed_at);
   const answer = demoAnswer('crash_loop', snapshot.host);
   const status = answer.widgets.find((row) => row.widget_type === 'container_status')!;
   status.snapshot = snapshot;
-  const requests: StartTurn[] = [];
+  const requests: { chatId: string; question: StartTurn }[] = [];
+  let releaseFirst!: () => void;
+  const firstTurn = new Promise<void>((resolve) => {
+    releaseFirst = resolve;
+  });
   let reads = 0;
-  await routeSavedApi(page, (route) => {
+  await routeSavedApi(page, async (route) => {
     const request = route.request();
     expect(request.headers()['authorization']).toBeUndefined();
     const path = new URL(request.url()).pathname;
     if (path.endsWith('/system/status'))
       return route.fulfill({ json: demoSystemStatus(new URL(request.url()).searchParams.get('host')) });
     if (path.endsWith('/hosts')) return route.fulfill({ json: [{ id: snapshot.host, name: 'Test host' }] });
-    if (path.endsWith('/containers')) return route.fulfill({ json: [snapshot] });
+    if (path.endsWith('/containers')) return route.fulfill({ json: [snapshot, other] });
     if (path.endsWith('/stats')) return route.fulfill({ json: { ...snapshot.metrics, cpu_percent: 0 } });
     if (path.endsWith('/logs')) return route.fulfill({ json: { entries: [], truncated: false } });
     if (path.endsWith(`/${snapshot.id}`)) {
       reads++;
       return route.fulfill({ json: { ...snapshot, restart_count: 19, observed_at: '2026-10-27T12:00:00Z' } });
     }
+    if (path.endsWith(`/${other.id}`)) return route.fulfill({ json: other });
     expect(path.endsWith('/turns')).toBe(true);
-    requests.push(request.postDataJSON() as StartTurn);
+    requests.push({ chatId: path.split('/')[4]!, question: request.postDataJSON() as StartTurn });
+    if (requests.length === 1) await firstTurn;
     const envelope = { schema_version: 1, request_id: 'r', turn_id: `t-${requests.length}` };
     const events = [
       { ...envelope, type: 'turn.started', session_id: '4a59a145-0037-4934-92e0-f422105583b9' },
@@ -128,37 +135,69 @@ test('reads and refreshes facts without LLM calls, then diagnoses in a separate 
   });
   await openDemo(page);
   await connectApi(page);
-  await page.getByRole('textbox').fill('Original investigation');
-  await page.getByRole('button', { name: 'Investigate', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Review stop' })).toBeVisible();
+  await chooseContainer(page, other.name);
+  await page.getByRole('button', { name: 'Diagnose', exact: true }).click();
+  await expect.poll(() => requests.length).toBe(1);
   await chooseContainer(page, snapshot.name);
   const facts = page.getByRole('region', { name: 'Container facts', exact: true });
+  await expect(facts.getByRole('button', { name: 'Diagnose in a new chat' })).toBeDisabled();
+  expect(requests).toHaveLength(1);
+  await facts.getByRole('button', { name: 'Back to investigation' }).click();
+  await expect(page.getByRole('button', { name: 'Stop diagnosis' })).toBeVisible();
+  releaseFirst();
+  await expect(page.getByRole('button', { name: 'Review stop' })).toBeVisible();
+  const originalTitle = `Investigate ${other.name} (${other.id}). What happened, and what evidence supports it?`;
+  await page.getByRole('textbox').fill('Keep this draft in its original chat.');
+  await chooseContainer(page, snapshot.name);
   await expect(facts.getByText('APP_ENV')).toBeVisible();
   await expect(facts.getByText('0.0%')).toBeVisible();
   await expect(facts.getByText('19', { exact: true })).toBeVisible();
   expect(requests).toHaveLength(1);
+  const readsBeforeRefresh = reads;
   await facts.getByRole('button', { name: 'Refresh data' }).click();
   await expect(facts.getByRole('button', { name: 'Refresh data' })).toBeEnabled();
-  expect(reads).toBe(2);
+  expect(reads).toBeGreaterThan(readsBeforeRefresh);
   expect(requests).toHaveLength(1);
   await facts.getByRole('button', { name: 'Back to investigation' }).click();
   const historical = page.getByRole('group', { name: 'Container status', exact: true });
   await expect(historical.locator('footer time')).toHaveAttribute('datetime', snapshot.observed_at);
   await expect(historical.getByText('9', { exact: true })).toBeVisible();
   await chooseContainer(page, snapshot.name);
-  await expect.poll(() => reads).toBe(3);
-  await facts.getByRole('button', { name: 'Diagnose', exact: true }).click();
+  await expect(facts.getByText('19', { exact: true })).toBeVisible();
+  await facts.screenshot({ path: `test-results/${info.project.name}-container-diagnosis.png` });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  const newChat = facts.getByRole('button', { name: 'Diagnose in a new chat', exact: true });
+  const continueChat = facts.getByRole('button', { name: 'Continue in current chat', exact: true });
+  await newChat.click();
   await expect.poll(() => requests.length).toBe(2);
-  expect(requests[1]).toMatchObject({
+  expect(requests[1]?.chatId).not.toBe(requests[0]?.chatId);
+  expect(requests[1]?.question).toMatchObject({
     kind: 'question',
     target: { kind: 'container', id: snapshot.id, name: snapshot.name },
     query: `Investigate ${snapshot.name} (${snapshot.id}). What happened, and what evidence supports it?`,
   });
-  if (requests[1]?.kind !== 'question') throw new Error('Expected an explicit container question');
-  await expect(page.getByRole('heading', { name: requests[1].query, exact: true })).toBeVisible();
-  await page.locator('.session-turns summary').click();
-  await page.locator('.history-row').filter({ hasText: 'Original investigation' }).click();
+  const current = requests[1]?.question;
+  if (current?.kind !== 'question') throw new Error('Expected an explicit container question');
+  await expect(page.getByRole('heading', { name: current.query, exact: true })).toBeVisible();
+  await chooseContainer(page, other.name);
+  await continueChat.click();
+  await expect.poll(() => requests.length).toBe(3);
+  expect(requests[2]).toMatchObject({ chatId: requests[1]?.chatId, question: { target: { id: other.id } } });
+  await expect(page.getByRole('heading', { name: originalTitle, exact: true })).toBeVisible();
+  if ((page.viewportSize()?.width ?? 1440) <= 1100)
+    await page.getByRole('button', { name: 'Open host and containers' }).click();
+  await page
+    .getByRole('region', { name: 'Saved chats' })
+    .getByRole('button', { name: /^Investigate checkout-api/ })
+    .click();
+  await facts.getByRole('button', { name: 'Back to investigation' }).click();
+  await expect(page.getByRole('textbox')).toHaveValue('Keep this draft in its original chat.');
   await expect(historical.locator('footer time')).toHaveAttribute('datetime', snapshot.observed_at);
+  await chooseContainer(page, other.name);
+  await facts.getByRole('button', { name: 'Diagnose', exact: true }).click();
+  await expect.poll(() => requests.length).toBe(4);
+  expect(requests[3]).toMatchObject({ chatId: requests[0]?.chatId, question: { target: { id: other.id } } });
 });
 
 test('keeps large untrusted observations bounded and retains successful data after a failed refresh', async ({

@@ -1,7 +1,8 @@
 import asyncio
 import json
 import struct
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
+from contextlib import suppress
 from dataclasses import dataclass, field
 from http.client import HTTPResponse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -39,6 +40,14 @@ class LogServer:
         """Use the real SDK against an isolated loopback endpoint without version discovery."""
         return DockerClient(base_url=self.url, version="1.45", timeout=timeout)
 
+    def reply_to_inspect(self, reply: Callable[[bytes], None]) -> None:
+        """Serve container metadata or hold its headers until the client times out."""
+        if self.mode == "inspect_headers":
+            self.release.wait(2)
+            return
+        body = json.dumps({"Config": {"Tty": self.tty, "Env": ["DB_PASSWORD=secret-value"]}}).encode()
+        reply(body)
+
     def body(self) -> bytes:
         """Return timestamped TTY bytes or Docker's multiplexed stdout/stderr frames."""
         if self.mode == "empty":
@@ -68,8 +77,7 @@ def log_server() -> Iterator[LogServer]:
         def do_GET(self) -> None:
             """Send valid Docker metadata or a log body that can deliberately stop progressing."""
             if self.path.endswith("/json"):
-                body = json.dumps({"Config": {"Tty": state.tty, "Env": ["DB_PASSWORD=secret-value"]}}).encode()
-                self.reply(body)
+                state.reply_to_inspect(self.reply)
             elif self.path.endswith("/_ping"):
                 self.reply(b"OK")
             else:
@@ -77,10 +85,11 @@ def log_server() -> Iterator[LogServer]:
 
         def reply(self, body: bytes) -> None:
             """Finish a normal bounded HTTP response."""
-            self.send_response(200)
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
+            with suppress(ConnectionError):
+                self.send_response(200)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
 
         def log_body(self) -> None:
             """Keep a declared response incomplete until cancellation or fixture cleanup."""
@@ -165,6 +174,21 @@ async def test_finite_logs_keep_decoding_redaction_and_the_actual_final_event(lo
 
 async def test_log_deadline_also_bounds_the_wait_for_response_headers(log_server: LogServer) -> None:
     log_server.mode = "headers"
+    runtime = DockerRuntime((HostConfig(id="local"),), Redactor(), timeout=0.2)
+    try:
+        with (
+            patch("docksight.adapters.outbound.docker.runtime.connect", side_effect=log_server.connect),
+            pytest.raises(DockSightError) as caught,
+        ):
+            await asyncio.wait_for(runtime.logs("local", "a" * 64, 200, 4096), timeout=1)
+        assert caught.value.code == "runtime_timeout"
+    finally:
+        log_server.release.set()
+        await runtime.close()
+
+
+async def test_log_deadline_classifies_a_stalled_container_inspect_as_a_timeout(log_server: LogServer) -> None:
+    log_server.mode = "inspect_headers"
     runtime = DockerRuntime((HostConfig(id="local"),), Redactor(), timeout=0.2)
     try:
         with (

@@ -108,7 +108,7 @@ export function ModelPicker({
           />
         </label>
         <div className={`${styles['model-search-row']}`}>
-          <label className={`${styles['model-search']}`}>
+          <label className={`${styles['model-search']} ${controlStyles['editable-frame']}`}>
             <Search size={15} aria-hidden="true" />
             <span className={`sr-only ${sharedStyles['sr-only']}`}>{t('Search models')}</span>
             <input

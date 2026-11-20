@@ -24,6 +24,13 @@ from docksight.domain.runtime import (
 MAX_LOG_SCAN_BYTES: Final = 8 * 1024 * 1024
 
 
+def _transport_failure(deadline: float | None) -> DockSightError:
+    """Distinguish a transport failure after an operation deadline from an early disconnect."""
+    if deadline is not None and monotonic() >= deadline:
+        return DockSightError("runtime_timeout", "Docker operation timed out", ErrorKind.TIMEOUT)
+    return DockSightError("runtime_unavailable", "Docker operation failed", ErrorKind.UNAVAILABLE)
+
+
 class DockerAPI(SwarmAPI, LogAPI, Protocol):
     """Describe the low-level SDK surface whose upstream stubs are incomplete."""
 
@@ -74,7 +81,14 @@ class DockerRuntime:
         """Return public identifiers and display names for configured hosts."""
         return tuple(Host(item.id, item.name or item.id) for item in self._hosts.values())
 
-    async def _call[T](self, host: str, operation: Callable[[DockerAPI], T], sdk_timeout: float | None = None) -> T:
+    async def _call[T](
+        self,
+        host: str,
+        operation: Callable[[DockerAPI], T],
+        sdk_timeout: float | None = None,
+        *,
+        deadline: float | None = None,
+    ) -> T:
         """Run SDK work off-loop and retain its slot until the worker actually finishes."""
         config = self._hosts.get(host)
         if config is None:
@@ -92,7 +106,7 @@ class DockerRuntime:
             except NotFound as exc:
                 raise DockSightError("container_not_found", "Container not found", ErrorKind.NOT_FOUND) from exc
             except (DockerException, RequestException, SSHException, OSError) as exc:
-                raise DockSightError("runtime_unavailable", "Docker operation failed", ErrorKind.UNAVAILABLE) from exc
+                raise _transport_failure(deadline) from exc
 
         try:
             async with asyncio.timeout(effective_timeout + 5):
@@ -158,7 +172,7 @@ class DockerRuntime:
             )
             return parse_logs(chunks, redactor, max_bytes, lines)
 
-        return await self._call(host, read)
+        return await self._call(host, read, deadline=deadline)
 
     async def stats(self, host: str, container_id: str) -> ResourceMetrics:
         """Read resource metrics only when the container is running."""

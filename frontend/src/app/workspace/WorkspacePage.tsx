@@ -3,8 +3,9 @@ import controlStyles from '../../shared/ui/Controls.module.css';
 import { LanguageSwitch } from '../providers/LocaleProvider';
 import { useLocale } from '../../shared/i18n/locale';
 import { useEffect, useState } from 'react';
-import { ArrowRight, ChevronDown, ChevronRight, FlaskConical, Menu, MessageSquarePlus } from 'lucide-react';
+import { ArrowRight, ChevronDown, ChevronRight, FlaskConical, LogOut, Menu, MessageSquarePlus } from 'lucide-react';
 import type { Container, DiagnosticTarget, Host } from '../../shared/contracts/contracts';
+import { ApiError } from '../../shared/contracts/errors';
 import { DemoClient, demoAnswer, scenarios, type ScenarioId } from '../../infrastructure/demo/demo';
 import { DemoControls } from './DemoControls';
 import { Select } from '../../shared/ui/Select';
@@ -25,8 +26,9 @@ import { ModelPicker, ModelTrigger } from '../../modules/model-selection';
 import { useModelCatalog } from '../../modules/model-selection';
 import { ApiClient } from '../../infrastructure/api/api';
 import type { useWorkspace, useSavedInvestigations } from '../../modules/investigations';
-import { SavedInvestigations } from '../../modules/investigations';
+import { DemoInvestigations, SavedInvestigations } from '../../modules/investigations';
 import { hostPickerTriggerId, type ConnectionState } from './types';
+import { useContainerDiagnosis } from './useContainerDiagnosis';
 import styles from './WorkspacePage.module.css';
 
 interface WorkspaceProps {
@@ -113,11 +115,25 @@ export function WorkspacePage({
   const [composerVisible, setComposerVisible] = useState(false);
   const name = hostName();
   const configured = hosts.some((row) => row.id === host);
-  const [targetAvailable, setTargetAvailable] = useState(scopeTarget?.kind !== 'container');
+  const [targetAvailable, setTargetAvailable] = useState<boolean | undefined>(
+    scopeTarget?.kind === 'container' ? undefined : true,
+  );
   const [selectionError, setSelectionError] = useState(false);
   const modelAvailable = modelIsAvailable();
   const groupAvailable = groupIsAvailable();
   const continuingBlocked = continuationIsBlocked();
+  const demoChats = investigation.demoChats;
+  const containerDiagnosis = useContainerDiagnosis({
+    host,
+    selected,
+    draft,
+    saved,
+    investigation,
+    blocked: Boolean(availability.blockedReason),
+    openInvestigation,
+    refreshHistory: history.refresh,
+    startDemo: startDemoContainerDiagnosis,
+  });
 
   /** Display the explicit model or the backend's currently reported default. */
   function selectedModel() {
@@ -143,13 +159,33 @@ export function WorkspacePage({
     );
   }
 
+  /** Report an unavailable preference only after its provider or catalog has answered. */
+  function savedModelIsMissing() {
+    if (!modelSelection || !catalog.providers) return false;
+    const provider = catalog.providers.providers.find((row) => row.id === modelSelection.provider);
+    if (!provider?.configured) return true;
+    const result = catalog.catalogs[modelSelection.provider]?.data;
+    return Boolean(
+      result?.state === 'ready' && !result.refreshing && !result.models.some((row) => row.id === modelSelection.model),
+    );
+  }
+
+  /** Keep starting and checking a scope separate from a confirmed unavailable choice. */
+  function unavailableSavedScope() {
+    return (
+      savedModelIsMissing() ||
+      targetAvailable === false ||
+      (!groupAvailable && !groupScope.loading && !groupScope.error)
+    );
+  }
+
   /** Keep archived group scope readable until the same current group is selected. */
   function groupIsAvailable() {
     return !scopeTarget || scopeTarget.kind === 'container' || Boolean(groupScope.group);
   }
 
   /** Block continuation while its exact saved scope or revision is unavailable. */
-  function continuationIsBlocked() {
+  function continuationIsBlocked(requireSaved = true) {
     return (
       !demo &&
       (!configured ||
@@ -157,7 +193,7 @@ export function WorkspacePage({
         !targetAvailable ||
         !groupAvailable ||
         saved.loading ||
-        !saved.detail ||
+        (requireSaved && !saved.detail) ||
         saved.saveState === 'conflict' ||
         saved.saveState === 'error')
     );
@@ -179,8 +215,9 @@ export function WorkspacePage({
       .then(() => {
         if (!controller.signal.aborted) setTargetAvailable(true);
       })
-      .catch(() => {
-        if (!controller.signal.aborted) setTargetAvailable(false);
+      .catch((failure: unknown) => {
+        if (!controller.signal.aborted && failure instanceof ApiError && failure.code === 'container_not_found')
+          setTargetAvailable(false);
       });
     return () => controller.abort();
   }, [client, host, demo, scopeTarget]);
@@ -254,38 +291,55 @@ export function WorkspacePage({
     requestAnimationFrame(() => document.getElementById(focusQuery ? 'query' : 'workspace-title')?.focus());
   }
 
-  /** Start an isolated model session for the exact container, preserving previous diagnostic snapshots. */
-  function diagnoseContainer(container: Container) {
-    if (investigation.running || availability.blockedReason) return;
+  /** Choose the simulated container fixture and open its Demo chat. */
+  function startDemoContainerDiagnosis(
+    container: Container,
+    query: string,
+    target: Extract<DiagnosticTarget, { kind: 'container' }>,
+    startsNew: boolean,
+  ) {
+    if (!demoChats) return;
+    if (startsNew) {
+      if (!demoChats.newChat({ draft, scenario })) return;
+      setDraft('');
+    }
     const matched = scenarios.find((row) => row.container === container.name);
     if (demoClient && matched) {
       demoClient.setScenario(matched.id);
       setScenario(matched.id);
     }
     openInvestigation();
-    void investigation.run(
-      t('Investigate {name} ({id}). What happened, and what evidence supports it?', {
-        name: container.name,
-        id: container.id,
-      }),
-      true,
-      demo ? undefined : { kind: 'container', id: container.id, name: container.name },
-    );
+    void demoChats.diagnoseContainer(query, target);
+  }
+
+  /** Restore a Demo chat's retained turns and draft without requesting a new answer. */
+  function openDemoChat(id: string) {
+    if (!demoClient || !demoChats) return;
+    const restored = demoChats.openChat(id, { draft, scenario });
+    if (!restored) return;
+    const fixture = scenarios.find((row) => row.id === restored.scenario);
+    if (fixture) {
+      demoClient.setScenario(fixture.id);
+      setScenario(fixture.id);
+    }
+    setDraft(restored.draft);
+    openInvestigation();
   }
 
   /** Start an explicitly scoped group investigation without changing historical observations. */
   function diagnoseGroup() {
     if (!groupScope.group || investigation.running || availability.blockedReason) return;
     const { kind, name: groupName } = groupScope.group;
+    const query = t('Investigate the {kind} group {name}. Check every member and explain the failures.', {
+      kind: kind === 'compose' ? 'Compose' : 'Swarm',
+      name: groupName,
+    });
+    if (!demo && !saved.detail) {
+      void saved.create(host, { query, target: { kind, name: groupName } }).then(() => history.refresh());
+      return;
+    }
     openInvestigation();
-    void investigation.run(
-      t('Investigate the {kind} group {name}. Check every member and explain the failures.', {
-        kind: kind === 'compose' ? 'Compose' : 'Swarm',
-        name: groupName,
-      }),
-      true,
-      { kind, name: groupName },
-    );
+    void investigation.run(query, true, { kind, name: groupName });
   }
 
   /** Assemble the same host and chat navigation for desktop and mobile. */
@@ -318,22 +372,33 @@ export function WorkspacePage({
         setMenu(false);
       },
       newInvestigation: () => {
-        if (demo) {
-          investigation.clear();
+        if (demoChats) {
+          if (!demoChats.newChat({ draft, scenario })) return;
           setDraft('');
+          openInvestigation(true);
         } else if (configured)
-          void saved.create(host).then(() => {
-            void history.refresh();
-            requestAnimationFrame(() => document.getElementById('query')?.focus());
+          void saved.beginDraft(host).then((opened) => {
+            if (opened) openInvestigation(true);
           });
-        openInvestigation(true);
       },
       openInvestigation: () => openInvestigation(),
       about: () => {
         setMenu(false);
         setHelp(true);
       },
-      savedChats: !demo ? (
+      savedChats: demoChats ? (
+        <DemoInvestigations
+          items={demoChats.archives.map((chat) => {
+            const first = chat.turns[0];
+            return {
+              id: chat.id,
+              title: first?.exampleQuery && isMessageKey(first.query) ? t(first.query) : first?.query,
+            };
+          })}
+          running={investigation.running}
+          open={openDemoChat}
+        />
+      ) : !demo ? (
         <SavedInvestigations
           {...history}
           selected={saved.detail?.id}
@@ -408,7 +473,8 @@ export function WorkspacePage({
               <ArrowRight size={13} />
             </button>
             {!demo && (
-              <button className={`text-button ${controlStyles['text-button']}`} onClick={logout}>
+              <button className={`secondary ${controlStyles['secondary']} ${styles['sign-out']}`} onClick={logout}>
+                <LogOut size={14} aria-hidden="true" />
                 {t('Sign out')}
               </button>
             )}
@@ -470,12 +536,12 @@ export function WorkspacePage({
             </button>
           </div>
         )}
-        {!demo && !saved.detail && configured && (
+        {!demo && !saved.detail && !saved.draftChat && configured && (
           <button className={`secondary ${controlStyles['secondary']}`} onClick={() => void saved.create(host)}>
             {t('New investigation')}
           </button>
         )}
-        {!demo && saved.loading && <p role="status">{t('Loading saved chat…')}</p>}
+        {!demo && saved.loading && !saved.draftChat && <p role="status">{t('Loading saved chat…')}</p>}
         {!demo && saved.error && (
           <p role="alert">
             {t(isMessageKey(saved.error) ? saved.error : 'Could not refresh saved chat. Retry the read.')}
@@ -489,13 +555,13 @@ export function WorkspacePage({
   function draftStatus() {
     return (
       <>
-        {!demo && saved.detail && (
+        {!demo && (saved.detail || (saved.draftChat && draft.trim())) && (
           <div className={`${styles['workspace-save']}`} role="status">
             <span>
               {t(
                 saved.saveState === 'saved'
                   ? 'Draft saved'
-                  : saved.saveState === 'saving'
+                  : saved.saveState === 'saving' || (saved.draftChat && saved.loading)
                     ? 'Saving draft…'
                     : saved.saveState === 'conflict'
                       ? 'This chat changed in another tab. Your draft is unsaved.'
@@ -514,6 +580,14 @@ export function WorkspacePage({
             )}
             {saved.saveState === 'error' && (
               <button className={`text-button ${controlStyles['text-button']}`} onClick={() => void saved.flush()}>
+                {t('Retry save')}
+              </button>
+            )}
+            {saved.draftChat && saved.error && !saved.loading && (
+              <button
+                className={`text-button ${controlStyles['text-button']}`}
+                onClick={() => void saved.saveNewDraft()}
+              >
                 {t('Retry save')}
               </button>
             )}
@@ -566,10 +640,10 @@ export function WorkspacePage({
                 },
               }}
               diagnose={diagnoseGroup}
-              blocked={continuingBlocked || investigation.running || Boolean(availability.blockedReason)}
+              blocked={continuationIsBlocked(false) || investigation.running || Boolean(availability.blockedReason)}
             />
           ))}
-        {!demo && (!modelAvailable || !targetAvailable || !groupAvailable) && (
+        {!demo && unavailableSavedScope() && (
           <p className={`inline-warning ${controlStyles['inline-warning']}`} role="status">
             {t('A saved model or target is unavailable. Choose a current model or scope to continue.')}
           </p>
@@ -644,11 +718,14 @@ export function WorkspacePage({
               client={client}
               container={selected}
               running={investigation.running}
-              blocked={Boolean(availability.blockedReason)}
+              blocked={saved.loading || Boolean(availability.blockedReason)}
               automatic={!demo}
               active={viewingContainer}
               back={() => openInvestigation()}
-              diagnose={diagnoseContainer}
+              diagnose={containerDiagnosis.diagnose}
+              continueDiagnosis={
+                containerDiagnosis.separate ? (container) => containerDiagnosis.diagnose(container, true) : undefined
+              }
             />
           </div>
         )}
@@ -718,13 +795,14 @@ export function WorkspacePage({
                 'Conclusions are interpretations. Cards and the evidence trail show the observed facts and their UTC timestamps.',
               )}
             </p>
-            <p>
-              {t(
-                demo
-                  ? 'Demo chats are simulated and live only in this tab.'
-                  : 'Saved chats and acknowledged drafts stay on your backend. Continuing a chat gathers fresh Docker evidence.',
-              )}
-            </p>
+            {demo ? (
+              <p>{t('Demo chats are simulated and live only in this tab.')}</p>
+            ) : (
+              <p>
+                {t('Saved chats stay on your backend.')} {t('Only acknowledged drafts are restored.')}{' '}
+                {t('Continuing a chat gathers fresh Docker evidence.')}
+              </p>
+            )}
             <p>
               {demo
                 ? t('All current observations are fixture-based examples. Connect an API for real Docker evidence.')

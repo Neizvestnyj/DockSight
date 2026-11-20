@@ -7,6 +7,22 @@ import { demoAnswer, demoContainer, demoSystemStatus } from '../src/infrastructu
 
 test.use({ locale: 'ru-RU' });
 
+test('offers language next to the brand before sign-in', async ({ page }, info) => {
+  await page.route('**/api/v1/auth/session', (route) =>
+    route.fulfill({ status: 401, json: { code: 'unauthorized', message: 'Sign in' } }),
+  );
+  await page.goto('/');
+  const chooser = page.getByRole('combobox', { name: 'Язык' });
+  await expect(page.getByRole('button', { name: 'Открыть демо' })).toBeVisible();
+  await page.screenshot({ path: `test-results/${info.project.name}-entry-language.png` });
+  await expect(page.locator('main header').getByRole('combobox', { name: 'Язык' })).toBeVisible();
+  await chooseOption(chooser, 'en');
+  await expect(page.getByRole('heading', { name: 'Sign in to DockSight' })).toBeVisible();
+  await expect(page.getByRole('combobox', { name: 'Language' })).toBeFocused();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+});
+
 test('explains demo controls, localizes every built-in scenario, and keeps empty logs empty', async ({
   page,
 }, info) => {

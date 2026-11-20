@@ -2,10 +2,36 @@
   width: min(640px, calc(100% - 40px));
   margin: 12vh auto;
 }
-.session-entry > :global(.brand-logo) {
+.session-entry > :global(.brand-logo),
+.entry-heading > :global(.brand-logo) {
   width: 168px;
   height: auto;
+}
+.session-entry > :global(.brand-logo) {
   margin-bottom: 32px;
+}
+.entry-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding-bottom: 16px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid var(--control);
+}
+.entry-heading > :global(.brand-logo) {
+  min-width: 0;
+  flex: 0 1 168px;
+}
+.entry-heading > label > svg {
+  display: block;
+}
+.entry-heading > label :global(.select-control) {
+  width: auto;
+}
+.entry-heading > label :global(.select-trigger) {
+  min-height: 44px;
+  font-size: 13px;
 }
 .session-entry h1 {
   font-size: 24px;

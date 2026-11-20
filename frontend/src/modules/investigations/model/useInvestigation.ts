@@ -7,6 +7,19 @@ import type { ModelSelection } from '../../../shared/contracts/model-contracts';
 import { useSavedTurns, type SavedContext } from './useSavedTurns';
 import type { Turn } from './turns';
 
+interface DemoWorkspace {
+  draft: string;
+  scenario: string;
+}
+
+interface DemoChat {
+  id: string;
+  turns: Turn[];
+  workspace: DemoWorkspace;
+  session?: string;
+  scope?: DiagnosticTarget;
+}
+
 /** Select durable API recovery or explicitly ephemeral simulated turns by transport capability. */
 export function useInvestigation(
   client: Transport,
@@ -18,7 +31,7 @@ export function useInvestigation(
   const durable = useSavedTurns(client, host, selection, saved);
   const transient = useTransientInvestigation(client, host, initial, selection);
   return client.history
-    ? durable
+    ? { ...durable, demoChats: undefined }
     : {
         ...transient,
         error: '',
@@ -47,9 +60,11 @@ function useTransientInvestigation(client: Transport, host: string, initial?: An
       : [],
   );
   const session = useRef<string | undefined>(undefined);
+  const [chatId, setChatId] = useState<string>(() => crypto.randomUUID());
+  const [archives, setArchives] = useState<DemoChat[]>([]);
   const active = useRef<AbortController | null>(null);
   const generation = useRef(0);
-  const scope = useRef('');
+  const scope = useRef<DiagnosticTarget | undefined>(undefined);
   const running = turns.some((turn) => turn.state === 'running');
 
   useEffect(
@@ -73,7 +88,37 @@ function useTransientInvestigation(client: Transport, host: string, initial?: An
     active.current?.abort();
     active.current = null;
     session.current = undefined;
+    scope.current = undefined;
     setTurns([]);
+  }
+
+  /** Retain the previous Demo workspace before opening another in this tab. */
+  function switchChat(workspace: DemoWorkspace, next?: DemoChat) {
+    const old = { id: chatId, turns, workspace, session: session.current, scope: scope.current };
+    setArchives((previous) => {
+      const retained = previous.filter((chat) => chat.id !== next?.id);
+      return old.turns.length || old.workspace.draft ? [old, ...retained] : retained;
+    });
+    setChatId(next?.id ?? crypto.randomUUID());
+    setTurns(next?.turns ?? []);
+    session.current = next?.session;
+    scope.current = next?.scope;
+  }
+
+  /** Open a previously retained Demo workspace without submitting a turn. */
+  function openChat(id: string, workspace: DemoWorkspace) {
+    if (active.current) return;
+    const next = archives.find((chat) => chat.id === id);
+    if (!next) return;
+    switchChat(workspace, next);
+    return next.workspace;
+  }
+
+  /** Start another Demo workspace only when the active stream has settled. */
+  function newChat(workspace: DemoWorkspace) {
+    if (active.current) return false;
+    switchChat(workspace);
+    return true;
   }
 
   /** Render a retained demo investigation without pretending it came from a live backend. */
@@ -139,7 +184,15 @@ function useTransientInvestigation(client: Transport, host: string, initial?: An
 
   /** Add a new operator question or explicit manual retry to this tab's history. */
   function run(query: string, freshSession = false, target?: DiagnosticTarget) {
-    return requestTurn({ id: crypto.randomUUID(), query, target }, freshSession);
+    const containerScope = !freshSession && scope.current?.kind === 'container' ? scope.current : undefined;
+    return requestTurn({ id: crypto.randomUUID(), query, target: target ?? containerScope }, freshSession);
+  }
+
+  /** Let an explicit continuation carry the current Demo session to another target. */
+  function diagnoseContainer(query: string, target: DiagnosticTarget) {
+    if (active.current) return;
+    scope.current = target;
+    return run(query, false, target);
   }
 
   /** Continue an unresolved question with a server-observed identity, preserving this host's conversation. */
@@ -155,9 +208,9 @@ function useTransientInvestigation(client: Transport, host: string, initial?: An
     const { id, target } = input;
     const query = input.query.trim();
     if (active.current || !query || !host) return;
-    const nextScope = transientScope(target);
-    if (freshSession || (!continuing && nextScope !== scope.current)) session.current = undefined;
-    if (!continuing) scope.current = nextScope;
+    if (freshSession || (!continuing && transientScope(target) !== transientScope(scope.current)))
+      session.current = undefined;
+    if (!continuing) scope.current = target;
     const controller = new AbortController();
     active.current = controller;
     const current = ++generation.current;
@@ -185,7 +238,17 @@ function useTransientInvestigation(client: Transport, host: string, initial?: An
     }
   }
 
-  return { turns, running, run, chooseTarget, stop, clear, example };
+  return {
+    turns,
+    lastTarget: turns.filter((turn) => turn.target).at(-1)?.target,
+    running,
+    run,
+    chooseTarget,
+    stop,
+    clear,
+    example,
+    demoChats: { archives, newChat, openChat, diagnoseContainer },
+  };
 }
 
 /** Identify the transient session scope without matching resources by display name. */

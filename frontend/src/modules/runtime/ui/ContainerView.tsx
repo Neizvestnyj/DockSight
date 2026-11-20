@@ -23,6 +23,7 @@ interface Props {
   active?: boolean;
   back: () => void;
   diagnose: (container: Container) => void;
+  continueDiagnosis?: (container: Container) => void;
 }
 
 /** Present current inspect data independently from manually read sources and diagnostic history. */
@@ -35,6 +36,7 @@ export function ContainerView({
   active = true,
   back,
   diagnose,
+  continueDiagnosis,
 }: Props) {
   const { t, locale } = useLocale();
   const { snapshot, logs, metrics, refresh, loading, fetching } = useContainerRead(
@@ -134,6 +136,7 @@ export function ContainerView({
 
   /** Show the exact current target and its available controls. */
   function containerHeading() {
+    const diagnosisDisabled = running || blocked || !state || snapshot.loading || Boolean(snapshot.error);
     return (
       <div className={`${styles['container-view-heading']}`}>
         <div>
@@ -156,14 +159,25 @@ export function ContainerView({
             <RefreshCw size={14} />
             {t('Refresh data')}
           </button>
-          <button
-            className={`primary ${controlStyles['primary']}`}
-            disabled={running || blocked || !state || snapshot.loading || Boolean(snapshot.error)}
-            onClick={() => state && diagnose(state)}
-          >
-            {t('Diagnose')}
-            <ArrowRight size={14} />
-          </button>
+          <div className={styles['diagnosis-actions']}>
+            <button
+              className={`primary ${controlStyles['primary']}`}
+              disabled={diagnosisDisabled}
+              onClick={() => state && diagnose(state)}
+            >
+              {t(continueDiagnosis ? 'Diagnose in a new chat' : 'Diagnose')}
+              <ArrowRight size={14} />
+            </button>
+            {continueDiagnosis && (
+              <button
+                className={`text-button ${controlStyles['text-button']} ${styles['continue-diagnosis']}`}
+                disabled={diagnosisDisabled}
+                onClick={() => state && continueDiagnosis(state)}
+              >
+                {t('Continue in current chat')}
+              </button>
+            )}
+          </div>
         </div>
       </div>
     );

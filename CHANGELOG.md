@@ -4,6 +4,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versions: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Dates record merges into `master` unless a release date is set separately. Version links show the corresponding changes.
 
+## [0.8.3] - 2026-11-20
+
+### Changed
+
+- Place the language selector beside the DockSight logo on the sign-in screen.
+- Move chat storage details into workspace help and make the sign-out button easier to identify.
+
+### Fixed
+
+- Start a separate chat when diagnosing another container. Offer explicit continuation and keep earlier chats and drafts.
+- Save a new chat after draft text or a diagnosis. Wait for model and scope checks before reporting unavailability.
+- Keep text-field focus within the field border, including the model search and question editor.
+- Report a Docker log timeout when the container metadata request exhausts the log read deadline.
+
 ## [0.8.2] - 2026-11-19
 
 ### Added
@@ -331,6 +345,7 @@ Dates record merges into `master` unless a release date is set separately. Versi
 - Prepared actions are bound to the caller and exact target. Unknown mutation outcomes block conflicting actions.
   Runtime mutations are never retried automatically.
 
+[0.8.3]: https://github.com/Neizvestnyj/DockSight/compare/b54acee...feature/diagnosis-chat-and-login-language-picker
 [0.8.2]: https://github.com/Neizvestnyj/DockSight/compare/master...feature/coverage-badges-and-browser-smoke
 [0.8.1]: https://github.com/Neizvestnyj/DockSight/compare/35d18d7...0fc86b6
 [0.8.0]: https://github.com/Neizvestnyj/DockSight/compare/ea1929b...35d18d7

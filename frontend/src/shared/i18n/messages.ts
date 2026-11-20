@@ -56,14 +56,11 @@ const russian = {
   'This cannot be undone. Existing action protection remains on the server.':
     'Это нельзя отменить. Защита существующих действий останется на сервере.',
   'Delete chat': 'Удалить чат',
-  'Demo chats live in this tab.': 'Демо-чаты хранятся в этой вкладке.',
   'Reconnect after refreshing this tab.': 'После обновления вкладки подключитесь снова.',
   'Saved chats stay on your backend.': 'Чаты хранятся на вашем сервере.',
-  'All operations are simulated.': 'Все операции симулируются.',
   'Only acknowledged drafts are restored.': 'Восстанавливаются только сохранённые черновики.',
   'Demo chats are simulated and live only in this tab.': 'Демо-чаты симулируются и хранятся только в этой вкладке.',
-  'Saved chats and acknowledged drafts stay on your backend. Continuing a chat gathers fresh Docker evidence.':
-    'Чаты и сохранённые черновики хранятся на сервере. При продолжении собираются новые наблюдения Docker.',
+  'Continuing a chat gathers fresh Docker evidence.': 'При продолжении чата собираются новые наблюдения Docker.',
   'Same-origin API login restores your session after refresh. A separate-origin API uses transient bearer access and requires reconnecting.':
     'Вход через API на том же сайте восстанавливается после обновления. Для API на другом сайте нужно подключиться снова.',
   'The token is cleared after login. Cookie and CSRF credentials are never stored in browser storage.':
@@ -347,6 +344,9 @@ const russian = {
   'Refresh data': 'Обновить данные',
   'Retry data': 'Повторить загрузку данных',
   Diagnose: 'Диагностировать',
+  'Diagnose in a new chat': 'Диагностика в новом чате',
+  'Continue in current chat': 'Продолжить в текущем чате',
+  'Demo chats': 'Демо-чаты',
   'Refreshing container data…': 'Обновляем данные контейнера…',
   'Snapshot only · refresh manually for current data.': 'Снимок данных · для актуальных значений обновите вручную.',
   'Current metrics': 'Текущие метрики',

@@ -38,9 +38,9 @@ export function ConnectedWorkspace({
   const [connecting, setConnecting] = useState(false);
   const [choosingHost, setChoosingHost] = useState(false);
   const [modelSelection, setModelSelection] = useState<ModelSelection>();
-  const saved = useWorkspace(connection.client.history);
   const history = useSavedInvestigations(connection.client.history);
-  const host = workspaceHost(connection.demo, selectedHost, saved.detail?.host);
+  const saved = useWorkspace(connection.client.history, history.refresh);
+  const host = workspaceHost(connection.demo, selectedHost, saved.chat?.host);
   const restored = useRef<number | undefined>(undefined);
   const choseInitialHost = useRef(false);
   const displayHosts = connection.demo
@@ -133,7 +133,7 @@ export function ConnectedWorkspace({
             <button className={`secondary ${controlStyles['secondary']}`} onClick={saved.retry}>
               {t('Retry')}
             </button>
-            <button className={`text-button ${controlStyles['text-button']}`} onClick={() => void logout()}>
+            <button className={`secondary ${controlStyles['secondary']}`} onClick={() => void logout()}>
               {t('Sign out')}
             </button>
           </>
@@ -144,7 +144,7 @@ export function ConnectedWorkspace({
   return (
     <>
       <WorkspacePage
-        key={`${connection.id}-${host}-${saved.detail?.id ?? 'new'}`}
+        key={`${connection.id}-${host}-${saved.chat?.id ?? 'new'}`}
         connection={connection}
         hosts={displayHosts}
         host={host}

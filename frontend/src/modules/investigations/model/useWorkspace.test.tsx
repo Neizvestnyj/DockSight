@@ -24,6 +24,107 @@ afterEach(() => {
 });
 
 describe('revisioned workspace', () => {
+  it('keeps a failed first draft local and retries creation with the same ID', async () => {
+    const api = new ApiClient();
+    vi.spyOn(api, 'actorWorkspace').mockResolvedValue({
+      revision: 0,
+      last_investigation_id: null,
+      host: 'local',
+      model: null,
+    });
+    vi.spyOn(api, 'saveActorWorkspace').mockImplementation(async (_, changes) => ({
+      revision: 1,
+      last_investigation_id: changes.last_investigation_id ?? null,
+      host: 'local',
+      model: null,
+    }));
+    let reject!: (reason: Error) => void;
+    const create = vi
+      .spyOn(api, 'createInvestigation')
+      .mockImplementationOnce(() => new Promise((_resolve, fail) => (reject = fail)))
+      .mockImplementation(async (draftId) => ({ ...detail, id: draftId }));
+    const writes = vi.spyOn(api, 'saveWorkspace').mockResolvedValue({ ...empty, revision: 1, draft: 'Latest draft' });
+    const refresh = vi.fn(async () => {});
+    const { result } = renderHook(() => useWorkspace(api, refresh));
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    await act(async () => {
+      expect(await result.current.beginDraft('local')).toBe(true);
+    });
+    const draftId = result.current.draftChat?.id;
+    await act(async () => {
+      expect(await result.current.beginDraft('local')).toBe(true);
+      result.current.setDraft(' ');
+    });
+    expect(result.current.draftChat?.id).toBe(draftId);
+    expect(create).not.toHaveBeenCalled();
+    await act(async () => {
+      result.current.setDraft('First text');
+      result.current.setDraft('Latest draft');
+    });
+    expect(create).toHaveBeenCalledExactlyOnceWith(draftId, 'local');
+    await act(async () => reject(new Error('offline')));
+    expect(result.current.error).toBe('Could not create saved chat. Retry manually.');
+    expect(result.current.draft).toBe('Latest draft');
+    await act(async () => {
+      expect(await result.current.beginDraft('local')).toBe(false);
+      await result.current.saveNewDraft();
+      await result.current.flush();
+    });
+    expect(create.mock.calls[1]).toEqual([draftId, 'local']);
+    expect(writes).toHaveBeenCalledExactlyOnceWith(draftId, 0, { draft: 'Latest draft' });
+    expect(refresh).toHaveBeenCalledOnce();
+    expect(result.current.draftChat).toBeUndefined();
+  });
+
+  it('keeps an exact diagnosis and text entered during the same local chat creation', async () => {
+    const api = new ApiClient();
+    vi.spyOn(api, 'actorWorkspace').mockResolvedValue({
+      revision: 0,
+      last_investigation_id: null,
+      host: 'local',
+      model: null,
+    });
+    vi.spyOn(api, 'saveActorWorkspace').mockResolvedValue({
+      revision: 1,
+      last_investigation_id: id,
+      host: 'local',
+      model: null,
+    });
+    let acknowledge!: (value: typeof detail) => void;
+    const create = vi.spyOn(api, 'createInvestigation').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          acknowledge = resolve;
+        }),
+    );
+    const target = { kind: 'compose', name: 'commerce' } as const;
+    const writes = vi
+      .spyOn(api, 'saveWorkspace')
+      .mockResolvedValue({ ...empty, revision: 1, target, draft: 'Another question' });
+    const { result } = renderHook(() => useWorkspace(api));
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    await act(async () => {
+      await result.current.beginDraft('local');
+      result.current.patch({ target });
+    });
+    const draftId = result.current.draftChat!.id;
+    expect(create).not.toHaveBeenCalled();
+    let starting!: Promise<void>;
+    await act(async () => {
+      starting = result.current.create('local', { query: 'Inspect commerce', target });
+    });
+    await act(async () => result.current.setDraft('Another question'));
+    await act(async () => {
+      acknowledge({ ...detail, id: draftId });
+      await starting;
+      expect(result.current.takeDiagnosis(draftId)).toMatchObject({ query: 'Inspect commerce', target });
+      expect(result.current.takeDiagnosis(draftId)).toBeUndefined();
+      await result.current.flush();
+    });
+    expect(create).toHaveBeenCalledExactlyOnceWith(draftId, 'local');
+    expect(writes).toHaveBeenCalledExactlyOnceWith(draftId, 0, { target, draft: 'Another question' });
+  });
+
   it('does not write a provisional draft or preferences after its owner unmounts during creation', async () => {
     const api = new ApiClient();
     vi.spyOn(api, 'actorWorkspace').mockResolvedValue({

@@ -44,7 +44,7 @@ export function QuestionComposer({
         <h2 id="composer-title">{t('Ask DockSight')}</h2>
         <p>{t(running ? 'Following the evidence' : hasTurn ? 'Continue the investigation' : 'Read-only diagnosis')}</p>
       </div>
-      <div className={styles['composer-entry']}>
+      <div className={`${styles['composer-entry']} ${controlStyles['editable-frame']}`}>
         <label htmlFor="query" className={`sr-only ${sharedStyles['sr-only']}`}>
           {t(hasTurn ? 'Continue the investigation' : 'Ask DockSight')}
         </label>

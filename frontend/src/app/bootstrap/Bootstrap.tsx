@@ -49,7 +49,10 @@ export function Bootstrap() {
     );
   return (
     <main className={`${styles['session-entry']}`}>
-      <Logo />
+      <header className={styles['entry-heading']}>
+        <Logo />
+        <LanguageSwitch />
+      </header>
       <section>
         <h1>
           {t(
@@ -85,7 +88,6 @@ export function Bootstrap() {
             </button>
           </div>
         )}
-        <LanguageSwitch />
       </section>
       {connecting && (
         <Connection

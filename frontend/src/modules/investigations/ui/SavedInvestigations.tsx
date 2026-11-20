@@ -21,6 +21,36 @@ interface Props {
   remove: (id: string) => void;
 }
 
+/** Offer retained tab-local Demo chats without presenting them as saved API history. */
+export function DemoInvestigations({
+  items,
+  running,
+  open,
+}: {
+  items: { id: string; title?: string }[];
+  running: boolean;
+  open: (id: string) => void;
+}) {
+  const { t } = useLocale();
+  if (!items.length) return null;
+  return (
+    <section className={styles['saved-investigations']} aria-label={t('Demo chats')}>
+      <header>
+        <h2>{t('Demo chats')}</h2>
+      </header>
+      <div className={styles['saved-chat-list']}>
+        {items.map(({ id, title }) => (
+          <div className={styles['saved-chat']} key={id}>
+            <button className={styles['saved-chat-open']} disabled={running} onClick={() => open(id)}>
+              <span>{title || t('Untitled chat')}</span>
+            </button>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 /** Keep saved-chat navigation compact beside the existing host and inventory controls. */
 export function SavedInvestigations({
   items,

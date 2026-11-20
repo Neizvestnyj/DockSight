@@ -179,17 +179,7 @@ export function Sidebar({
     return (
       <>
         <div className={`${styles['sidebar-bottom']}`}>
-          <p>
-            {t(
-              demo
-                ? 'Demo chats live in this tab.'
-                : transient
-                  ? 'Reconnect after refreshing this tab.'
-                  : 'Saved chats stay on your backend.',
-            )}
-            <br />
-            {t(demo ? 'All operations are simulated.' : 'Only acknowledged drafts are restored.')}
-          </p>
+          {transient && <p>{t('Reconnect after refreshing this tab.')}</p>}
           <button className={`text-button ${controlStyles['text-button']}`} onClick={about}>
             <CircleHelp size={15} />
             {t('About this workspace')}
