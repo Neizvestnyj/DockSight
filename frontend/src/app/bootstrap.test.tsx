@@ -84,6 +84,59 @@ it('clears the raw login input after exchanging it for cookie authority', async 
   expect(Object.keys(sessionStorage)).toEqual([]);
   expect(Object.keys(localStorage).every((key) => key === 'docksight.locale')).toBe(true);
 });
+
+it.each([
+  ['available', 'ok'],
+  ['unavailable', 'model_not_found'],
+] as const)('uses exact model status %s for a saved draft when the catalog read fails', async (state, code) => {
+  const id = crypto.randomUUID();
+  const model = { provider: 'ollama', model: 'qwen3.5:9b' } as const;
+  vi.spyOn(ApiClient.prototype, 'session').mockResolvedValue({
+    actor: 'operator',
+    expires_at: '2026-12-01T12:00:00Z',
+    csrf_token: 'c'.repeat(43),
+  });
+  vi.spyOn(ApiClient.prototype, 'actorWorkspace').mockResolvedValue({
+    revision: 1,
+    last_investigation_id: id,
+    host: 'local',
+    model,
+  });
+  vi.spyOn(ApiClient.prototype, 'investigation').mockResolvedValue({
+    id,
+    host: 'local',
+    title: '',
+    created_at: '2026-11-04T12:00:00Z',
+    updated_at: '2026-11-04T12:00:00Z',
+    active_turn_id: null,
+    turn_count: 0,
+    workspace: { revision: 0, draft: 'Как жизнь?', target: null, selected_container: null, view: 'diagnostics' },
+    turns: { items: [], next_cursor: null },
+  });
+  vi.spyOn(ApiClient.prototype, 'hosts').mockResolvedValue([{ id: 'local', name: 'Local Docker' }]);
+  vi.spyOn(ApiClient.prototype, 'investigations').mockResolvedValue({ items: [], next_cursor: null });
+  vi.spyOn(ApiClient.prototype, 'containers').mockResolvedValue([]);
+  const catalog = vi.spyOn(ApiClient.prototype, 'modelProviders').mockRejectedValue(new TypeError('offline'));
+  const healthy = demoSystemStatus('local');
+  const status = vi.spyOn(ApiClient.prototype, 'systemStatus').mockResolvedValue({
+    ...healthy,
+    ...model,
+    model_check: { ...healthy.model_check, state, code },
+  });
+  render(<App />);
+  expect(await screen.findByRole('textbox')).toHaveValue('Как жизнь?');
+  await waitFor(() => expect(catalog).toHaveBeenCalled());
+  await waitFor(() => expect(status).toHaveBeenCalledWith('local', expect.any(AbortSignal), model));
+  const investigate = screen.getByRole('button', { name: 'Investigate' });
+  if (state === 'available') await waitFor(() => expect(investigate).toBeEnabled());
+  else {
+    await screen.findByText('The configured model is unavailable. You can still inspect Docker directly.');
+    expect(investigate).toBeDisabled();
+    fireEvent.focus(screen.getByRole('button', { name: 'Why diagnosis is unavailable' }));
+    expect(screen.getByRole('tooltip', { hidden: true })).toHaveTextContent('The configured model is unavailable.');
+  }
+});
+
 it('offers signed-out controls after 401 and enters Demo only explicitly', async () => {
   vi.spyOn(ApiClient.prototype, 'session').mockRejectedValue(
     new ApiError('Sign in', 'unauthorized', undefined, 'server', 401),

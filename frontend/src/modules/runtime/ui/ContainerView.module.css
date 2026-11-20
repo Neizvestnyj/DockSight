@@ -41,7 +41,12 @@
 }
 .diagnosis-actions {
   display: grid;
+  flex: 1;
   gap: 4px;
+}
+.diagnosis-controls > span {
+  display: flex;
+  align-items: flex-end;
 }
 .diagnosis-actions .continue-diagnosis {
   min-height: 32px;
@@ -151,7 +156,7 @@
     width: 100%;
   }
   .container-view-actions > button,
-  .container-view-actions > .diagnosis-actions {
+  .container-view-actions > .diagnosis-controls {
     flex: 1 1 auto;
   }
   .container-view-actions > button,

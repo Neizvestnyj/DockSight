@@ -18,6 +18,8 @@ Dates record merges into `master` unless a release date is set separately. Versi
 ### Fixed
 
 - Show the last recorded healthcheck result for stopped containers and avoid false failures after normal stops.
+- Explain blocked diagnosis controls and show both destinations when the current chat has questions or a draft.
+- Allow saved questions when the API confirms the selected model and the browser cannot read its catalog.
 
 ## [0.8.3] - 2026-11-20
 

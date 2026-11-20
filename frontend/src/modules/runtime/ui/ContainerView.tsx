@@ -9,6 +9,7 @@ import { bytes, utc } from '../../../shared/lib/format';
 import { useLocale } from '../../../shared/i18n/locale';
 import { EnvironmentContent, LogContent } from './RuntimeContent';
 import { HealthFact, Status } from '../../../shared/ui/ui';
+import { Hint } from '../../../shared/ui/Hint';
 import { useContainerRead, type RuntimeRead } from '../model/useContainerRead';
 import widgetStyles from '../../../shared/ui/Widget.module.css';
 import factStyles from '../../../shared/ui/FactStrip.module.css';
@@ -18,7 +19,7 @@ interface Props {
   client: Transport;
   container: Container;
   running: boolean;
-  blocked?: boolean;
+  blockedReason?: MessageKey;
   automatic?: boolean;
   active?: boolean;
   back: () => void;
@@ -31,7 +32,7 @@ export function ContainerView({
   client,
   container,
   running,
-  blocked = false,
+  blockedReason,
   automatic = false,
   active = true,
   back,
@@ -134,9 +135,51 @@ export function ContainerView({
     );
   }
 
+  /** Explain why either chat destination is temporarily unavailable. */
+  function diagnosisReason(): MessageKey | undefined {
+    if (running) return 'A request is running in the current chat.';
+    if (blockedReason) return blockedReason;
+    if (snapshot.missing) return 'This container no longer exists on the selected host.';
+    if (snapshot.error) return 'Refresh container data before starting a diagnosis.';
+    if (!state || snapshot.loading) return 'Refreshing container data…';
+    return undefined;
+  }
+
+  /** Show explicit chat destinations and share one help trigger across unavailable actions. */
+  function diagnosisActions() {
+    const reason = diagnosisReason();
+    const actions = (
+      <span className={styles['diagnosis-actions']}>
+        <button
+          className={`primary ${controlStyles['primary']}`}
+          disabled={Boolean(reason)}
+          onClick={() => state && diagnose(state)}
+        >
+          {t(continueDiagnosis ? 'Diagnose in a new chat' : 'Diagnose')}
+          <ArrowRight size={14} />
+        </button>
+        {continueDiagnosis && (
+          <button
+            className={`text-button ${controlStyles['text-button']} ${styles['continue-diagnosis']}`}
+            disabled={Boolean(reason)}
+            onClick={() => state && continueDiagnosis(state)}
+          >
+            {t('Continue in current chat')}
+          </button>
+        )}
+      </span>
+    );
+    return (
+      <div className={styles['diagnosis-controls']}>
+        <Hint label={t('Why diagnosis is unavailable')} control={actions}>
+          {reason ? t(reason) : undefined}
+        </Hint>
+      </div>
+    );
+  }
+
   /** Show the exact current target and its available controls. */
   function containerHeading() {
-    const diagnosisDisabled = running || blocked || !state || snapshot.loading || Boolean(snapshot.error);
     return (
       <div className={`${styles['container-view-heading']}`}>
         <div>
@@ -159,25 +202,7 @@ export function ContainerView({
             <RefreshCw size={14} />
             {t('Refresh data')}
           </button>
-          <div className={styles['diagnosis-actions']}>
-            <button
-              className={`primary ${controlStyles['primary']}`}
-              disabled={diagnosisDisabled}
-              onClick={() => state && diagnose(state)}
-            >
-              {t(continueDiagnosis ? 'Diagnose in a new chat' : 'Diagnose')}
-              <ArrowRight size={14} />
-            </button>
-            {continueDiagnosis && (
-              <button
-                className={`text-button ${controlStyles['text-button']} ${styles['continue-diagnosis']}`}
-                disabled={diagnosisDisabled}
-                onClick={() => state && continueDiagnosis(state)}
-              >
-                {t('Continue in current chat')}
-              </button>
-            )}
-          </div>
+          {diagnosisActions()}
         </div>
       </div>
     );

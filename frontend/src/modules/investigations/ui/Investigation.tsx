@@ -7,6 +7,7 @@ import {
   isMessageKey,
   stateLabel,
   targetKindLabel,
+  type MessageKey,
 } from '../../../shared/i18n/messages';
 import { useLocale } from '../../../shared/i18n/locale';
 import { useState } from 'react';
@@ -37,7 +38,7 @@ interface Props {
   draft: string;
   setDraft: (value: string) => void;
   host: string;
-  blocked?: boolean;
+  blockedReason?: MessageKey;
   group?: GroupTarget;
   target?: DiagnosticTarget;
   searchTurn?: SavedTurn;
@@ -53,13 +54,14 @@ export function Investigation({
   draft,
   setDraft,
   host,
-  blocked = false,
+  blockedReason,
   group,
   target,
   searchTurn,
   active = true,
 }: Props) {
   const { t } = useLocale();
+  const blocked = Boolean(blockedReason);
   const { turns, running, run, chooseTarget, stop } = investigation;
   const { turn, question, chooseView, anchoring, readOnlyAnchor } = useQuestionView(turns, searchTurn, active);
   const [reference, setReference] = useState<string | null>(null);
@@ -453,7 +455,7 @@ export function Investigation({
         draft={draft}
         setDraft={setDraft}
         host={host}
-        blocked={blocked}
+        blockedReason={blockedReason}
         running={running}
         hasTurn={Boolean(turn)}
         group={group}

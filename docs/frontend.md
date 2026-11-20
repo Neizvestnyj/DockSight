@@ -103,9 +103,10 @@ Inspect includes allowlisted environment values. Failed sources retain their las
 
 Container diagnosis uses the exact selected ID. **Diagnose in a new chat** starts a separate investigation and
 preserves the previous chat and its draft. **Continue in current chat** adds the container to the open investigation.
-An empty chat without a draft and a chat whose latest explicit target is the same container offer **Diagnose** in
-place. Selecting a container does not start or stop a turn. Finished answers and historical observations stay in
-their original chats. Demo retains previous chats in memory for the current host.
+Both destinations are shown when the open chat has a request or a draft. An empty chat offers **Diagnose** in place.
+Hover over a blocked action or open its help button to see why it is unavailable. Selecting a container does not
+start or stop a turn. Finished answers and historical observations stay in their original chats.
+Demo retains previous chats in memory for the current host.
 
 ## System status
 
