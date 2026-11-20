@@ -9,11 +9,13 @@ Dates record merges into `master` unless a release date is set separately. Versi
 ### Changed
 
 - Place the language selector beside the DockSight logo on the sign-in screen.
+- Move chat storage details into workspace help and make the sign-out button easier to identify.
 
 ### Fixed
 
 - Start a separate chat when diagnosing another container. Offer explicit continuation and keep earlier chats and drafts.
 - Save a new chat after draft text or a diagnosis. Wait for model and scope checks before reporting unavailability.
+- Keep text-field focus within the field border, including the model search and question editor.
 
 ## [0.8.2] - 2026-11-19
 

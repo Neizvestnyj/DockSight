@@ -98,6 +98,13 @@
 .field + .section-note {
   margin-top: 8px;
 }
+.editable-frame:has(:is(input, textarea):focus) {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.editable-frame :is(input, textarea):focus {
+  outline: none;
+}
 @media (max-width: 560px) {
   .evidence-link {
     min-height: 44px;

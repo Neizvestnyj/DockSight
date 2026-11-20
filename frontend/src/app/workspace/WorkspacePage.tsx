@@ -3,7 +3,7 @@ import controlStyles from '../../shared/ui/Controls.module.css';
 import { LanguageSwitch } from '../providers/LocaleProvider';
 import { useLocale } from '../../shared/i18n/locale';
 import { useEffect, useState } from 'react';
-import { ArrowRight, ChevronDown, ChevronRight, FlaskConical, Menu, MessageSquarePlus } from 'lucide-react';
+import { ArrowRight, ChevronDown, ChevronRight, FlaskConical, LogOut, Menu, MessageSquarePlus } from 'lucide-react';
 import type { Container, DiagnosticTarget, Host } from '../../shared/contracts/contracts';
 import { ApiError } from '../../shared/contracts/errors';
 import { DemoClient, demoAnswer, scenarios, type ScenarioId } from '../../infrastructure/demo/demo';
@@ -473,7 +473,8 @@ export function WorkspacePage({
               <ArrowRight size={13} />
             </button>
             {!demo && (
-              <button className={`text-button ${controlStyles['text-button']}`} onClick={logout}>
+              <button className={`secondary ${controlStyles['secondary']} ${styles['sign-out']}`} onClick={logout}>
+                <LogOut size={14} aria-hidden="true" />
                 {t('Sign out')}
               </button>
             )}
@@ -794,13 +795,14 @@ export function WorkspacePage({
                 'Conclusions are interpretations. Cards and the evidence trail show the observed facts and their UTC timestamps.',
               )}
             </p>
-            <p>
-              {t(
-                demo
-                  ? 'Demo chats are simulated and live only in this tab.'
-                  : 'Saved chats and acknowledged drafts stay on your backend. Continuing a chat gathers fresh Docker evidence.',
-              )}
-            </p>
+            {demo ? (
+              <p>{t('Demo chats are simulated and live only in this tab.')}</p>
+            ) : (
+              <p>
+                {t('Saved chats stay on your backend.')} {t('Only acknowledged drafts are restored.')}{' '}
+                {t('Continuing a chat gathers fresh Docker evidence.')}
+              </p>
+            )}
             <p>
               {demo
                 ? t('All current observations are fixture-based examples. Connect an API for real Docker evidence.')

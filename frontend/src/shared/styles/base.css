@@ -87,8 +87,6 @@ button:disabled:active {
 /* stylelint-disable no-descending-specificity -- Preserve the established higher-specificity override. */
 button,
 a,
-input,
-textarea,
 select {
   transition:
     border-color 120ms,
@@ -151,4 +149,8 @@ input[type='checkbox'] {
 }
 textarea {
   resize: vertical;
+}
+:where(input:read-write, textarea:read-write):focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }

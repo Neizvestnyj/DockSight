@@ -133,7 +133,7 @@ export function ConnectedWorkspace({
             <button className={`secondary ${controlStyles['secondary']}`} onClick={saved.retry}>
               {t('Retry')}
             </button>
-            <button className={`text-button ${controlStyles['text-button']}`} onClick={() => void logout()}>
+            <button className={`secondary ${controlStyles['secondary']}`} onClick={() => void logout()}>
               {t('Sign out')}
             </button>
           </>

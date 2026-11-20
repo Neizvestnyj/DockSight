@@ -100,6 +100,10 @@
   margin-left: 14px;
   color: var(--text);
 }
+.connection-state .sign-out {
+  padding-inline: 8px;
+  color: var(--text);
+}
 .dependency-notice {
   display: flex;
   align-items: center;
@@ -271,10 +275,14 @@
   }
   .connection-state {
     justify-content: flex-end;
+    flex-wrap: wrap;
     width: 100%;
     margin-left: 0;
     min-width: 0;
     font-size: 11px;
+  }
+  .connection-state .sign-out {
+    min-height: 44px;
   }
   .dependency-notice {
     align-items: flex-start;

@@ -34,9 +34,6 @@
   border: 1px solid var(--control);
   border-radius: var(--radius-card);
 }
-.composer-entry:focus-within {
-  border-color: var(--accent);
-}
 .composer textarea {
   display: block;
   width: 100%;
@@ -50,9 +47,6 @@
 }
 .composer textarea::placeholder {
   color: var(--faint);
-}
-.composer textarea:focus-visible {
-  outline: none;
 }
 .composer-foot {
   display: flex;

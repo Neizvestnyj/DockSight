@@ -12,8 +12,14 @@ for (const locale of ['en', 'ru'] as const) {
     await composer.scrollIntoViewIfNeeded();
     await page.screenshot({ path: `test-results/${info.project.name}-${locale}-composer-empty.png` });
 
+    const frame = field.locator('..');
+    await field.click();
+    await expect(frame).toHaveCSS('outline-offset', '-2px');
+    await expect(field).toHaveCSS('outline-style', 'none');
     await field.fill('x'.repeat(4000));
     const submit = composer.getByRole('button', { name: locale === 'ru' ? 'Исследовать' : 'Investigate', exact: true });
+    await submit.focus();
+    await expect(frame).toHaveCSS('outline-style', 'none');
     if (info.project.name === 'desktop') await expect(hint).toBeVisible();
     if (await hint.isVisible()) {
       const text = (await hint.boundingBox())!;
