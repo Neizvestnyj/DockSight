@@ -232,10 +232,10 @@ export function useSavedTurns(client: Transport, host: string, selection?: Model
       }
       if (detached(controller, epoch)) return;
       receive(snapshot);
+      saved.changed();
       await saved.refresh();
       if (generation.current !== epoch) return;
       if (preservedDraft) await saved.restoreDraft?.(preservedDraft);
-      saved.changed();
       if (snapshot.state === 'running' && observedId.current !== snapshot.id) {
         observedId.current = snapshot.id;
         void observe(snapshot.id, controller, epoch);

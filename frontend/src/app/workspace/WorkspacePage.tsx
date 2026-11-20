@@ -209,7 +209,7 @@ export function WorkspacePage({
     if (containerBlockReason) return containerBlockReason;
     if (demo) return undefined;
     if (!configured) return 'Choose a configured host to continue. Saved evidence remains readable.';
-    if (requireSaved && !saved.detail) return 'Open or create a chat to start a diagnosis.';
+    if (requireSaved && !saved.chat) return 'Open or create a chat to start a diagnosis.';
     if (unavailableSavedScope())
       return 'A saved model or target is unavailable. Choose a current model or scope to continue.';
     if (!modelAvailable) return 'The selected model could not be verified yet. Open the model picker to check it.';
@@ -431,6 +431,7 @@ export function WorkspacePage({
         <SavedInvestigations
           {...history}
           selected={saved.detail?.id}
+          selectedRunning={investigation.running}
           searchHistory={client.history}
           open={(id, turnId) => {
             setMenu(false);

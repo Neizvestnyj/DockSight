@@ -28,6 +28,14 @@
 .saved-chat:global(.selected) {
   background: var(--active);
 }
+.saved-chat-running {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  color: var(--accent);
+}
 .saved-chat-open,
 .search-result {
   display: block;

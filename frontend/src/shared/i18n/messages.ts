@@ -42,6 +42,8 @@ const russian = {
   'Use this draft': 'Использовать этот черновик',
   'Retry save': 'Повторить сохранение',
   'Saved chats': 'Сохранённые чаты',
+  'Diagnosis running': 'Диагностика выполняется',
+  'Diagnosis running: {title}': 'Диагностика выполняется в чате «{title}»',
   'Search chats': 'Поиск по чатам',
   'Search containers': 'Поиск контейнеров',
   'Clear search': 'Очистить поиск',

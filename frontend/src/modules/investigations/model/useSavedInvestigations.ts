@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ApiError } from '../../../shared/contracts/errors';
 import type { HistoryTransport, InvestigationSummary } from '../../../shared/contracts/investigation-contracts';
+import { usePolling, type PollResult } from '../../../shared/lib/usePolling';
 
 /** Page owned server history independently of the active tab's navigation. */
 export function useSavedInvestigations(history?: HistoryTransport) {
@@ -11,6 +13,26 @@ export function useSavedInvestigations(history?: HistoryTransport) {
   const pages = useRef(0);
   const busy = useRef(false);
   const active = useRef<AbortController | null>(null);
+  const activeRows = useMemo(() => items.filter((row) => row.active_turn_id), [items]);
+
+  const readActivity = useCallback(
+    async (signal: AbortSignal): Promise<PollResult> => {
+      if (!history) return 'stop';
+      const reads = await Promise.allSettled(activeRows.map((row) => readSavedChatActivity(history, row, signal)));
+      if (signal.aborted) return 'stop';
+      const changes = new Map(
+        reads.flatMap((read) =>
+          read.status === 'fulfilled' && read.value.previous !== read.value.current
+            ? [[read.value.id, read.value]]
+            : [],
+        ),
+      );
+      if (changes.size) setItems((rows) => rows.map((row) => applyActivity(row, changes.get(row.id))));
+      return reads.some((read) => read.status === 'rejected') ? 'retry' : 'success';
+    },
+    [history, activeRows],
+  );
+  usePolling(readActivity, true, Boolean(activeRows.length), { interval: 5000 });
 
   /** Refresh the latest page while retaining already loaded older stable pages. */
   const refresh = useCallback(async () => {
@@ -108,4 +130,33 @@ export function useSavedInvestigations(history?: HistoryTransport) {
 function merge(first: InvestigationSummary[], second: InvestigationSummary[]) {
   const seen = new Set(first.map((row) => row.id));
   return [...first, ...second.filter((row) => !seen.has(row.id))];
+}
+
+interface ChatActivity {
+  id: string;
+  previous: string | null;
+  current: string | null;
+}
+
+/** Read only an already active chat so completion remains observable after navigation or on older pages. */
+async function readSavedChatActivity(
+  history: HistoryTransport,
+  row: InvestigationSummary,
+  signal: AbortSignal,
+): Promise<ChatActivity> {
+  let current: string | null;
+  try {
+    const detail = await history.investigation(row.id, signal);
+    if (detail.id !== row.id || detail.host !== row.host) throw new Error('Saved chat response is outside its scope.');
+    current = detail.active_turn_id;
+  } catch (error) {
+    if (!(error instanceof ApiError) || error.code !== 'history_not_found') throw error;
+    current = null;
+  }
+  return { id: row.id, previous: row.active_turn_id, current };
+}
+
+/** Keep a late activity read from replacing a newer turn already reported by the list. */
+function applyActivity(row: InvestigationSummary, activity: ChatActivity | undefined) {
+  return activity && row.active_turn_id === activity.previous ? { ...row, active_turn_id: activity.current } : row;
 }

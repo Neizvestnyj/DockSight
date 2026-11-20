@@ -1,7 +1,8 @@
 import sharedStyles from '../../../shared/ui/Shared.module.css';
 import controlStyles from '../../../shared/ui/Controls.module.css';
+import feedbackStyles from '../../../shared/ui/Feedback.module.css';
 import { useCallback, useRef, useState, type ReactNode, type RefObject } from 'react';
-import { RefreshCw, Search, Trash2 } from 'lucide-react';
+import { LoaderCircle, RefreshCw, Search, Trash2 } from 'lucide-react';
 import { useLocale } from '../../../shared/i18n/locale';
 import { Modal } from '../../../shared/ui/ui';
 import { utc } from '../../../shared/lib/format';
@@ -14,6 +15,7 @@ import modalStyles from '../../../shared/ui/Modal.module.css';
 interface Props {
   items: InvestigationSummary[];
   selected?: string;
+  selectedRunning?: boolean;
   loading: boolean;
   error: string;
   nextCursor: string | null;
@@ -58,6 +60,7 @@ export function DemoInvestigations({
 export function SavedInvestigations({
   items,
   selected,
+  selectedRunning = false,
   loading,
   error,
   nextCursor,
@@ -82,29 +85,44 @@ export function SavedInvestigations({
           <p className={`section-note ${controlStyles['section-note']}`}>{t('No saved chats yet.')}</p>
         )}
         <div className={`${styles['saved-chat-list']}`}>
-          {items.map((row) => (
-            <div className={`${styles['saved-chat']} saved-chat${selected === row.id ? ' selected' : ''}`} key={row.id}>
-              <button
-                className={`${styles['saved-chat-open']}`}
-                aria-current={selected === row.id ? 'page' : undefined}
-                onClick={() => open(row.id)}
-                title={`${row.title || t('Untitled chat')} · ${utc(row.updated_at, true)}`}
-              >
-                <span>{row.title || t('Untitled chat')}</span>
-                <small>
-                  {row.host} · <time dateTime={row.updated_at}>{utc(row.updated_at, true)}</time>
-                </small>
-              </button>
-              <button
-                className={`icon-button ${controlStyles['icon-button']}`}
-                aria-label={t('Delete saved chat: {title}', { title: row.title || t('Untitled chat') })}
-                onClick={() => setDeleting(row)}
-                disabled={Boolean(row.active_turn_id)}
-              >
-                <Trash2 size={14} />
-              </button>
-            </div>
-          ))}
+          {items.map((row) => {
+            const current = selected === row.id;
+            const running = Boolean(row.active_turn_id || (current && selectedRunning));
+            const title = row.title || t('Untitled chat');
+            return (
+              <div className={`${styles['saved-chat']} saved-chat${current ? ' selected' : ''}`} key={row.id}>
+                <button
+                  className={styles['saved-chat-open']}
+                  aria-current={current ? 'page' : undefined}
+                  onClick={() => open(row.id)}
+                  title={`${title} · ${utc(row.updated_at, true)}`}
+                >
+                  <span>{title}</span>
+                  <small>
+                    {row.host} · <time dateTime={row.updated_at}>{utc(row.updated_at, true)}</time>
+                  </small>
+                </button>
+                {running ? (
+                  <span
+                    className={styles['saved-chat-running']}
+                    role="status"
+                    aria-label={t('Diagnosis running: {title}', { title })}
+                    title={t('Diagnosis running')}
+                  >
+                    <LoaderCircle className={feedbackStyles.spin} size={14} aria-hidden="true" />
+                  </span>
+                ) : (
+                  <button
+                    className={`icon-button ${controlStyles['icon-button']}`}
+                    aria-label={t('Delete saved chat: {title}', { title })}
+                    onClick={() => setDeleting(row)}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                )}
+              </div>
+            );
+          })}
         </div>
         {error && (
           <div className={`sidebar-error ${sharedStyles['sidebar-error']}`}>

@@ -48,6 +48,8 @@ The language selector is beside the DockSight logo on the sign-in screen.
 
 API chats belong to the authenticated actor and each is scoped to one configured host. The latest ten form one page,
 not a retention limit. Older chats remain available through pagination. Last-active chat is restored only at bootstrap.
+An active diagnosis replaces its chat's delete control with a progress indicator. The list checks active chats for
+completion while the page is visible, including when another chat is open.
 Focus refreshes the open chat and list without following another tab's navigation. Deletion requires confirmation and
 cannot remove a running diagnosis. Server action protection survives history deletion.
 

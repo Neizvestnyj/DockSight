@@ -62,6 +62,7 @@ test('saves pending drafts before same-row, other-chat and new-chat navigation',
     await navigation(page);
     await plus.click();
     await expect(input).toHaveValue('');
+    await expect(page.getByRole('button', { name: 'Why diagnosis is unavailable' })).toHaveCount(0);
     expect(api.chats).toHaveLength(initialCount);
     expect(
       api.reads.filter((request) => request === 'POST /investigations'),
@@ -215,6 +216,38 @@ test('focus refresh adopts another tab running turn and Stop cancels it without 
   expect(api.cancellations).toEqual([running.id]);
   expect(api.submissions).toEqual([]);
   expect(api.mutations).toBe(0);
+});
+
+test('shows progress on a background saved chat and restores its delete action after completion', async ({
+  page,
+}, info) => {
+  const api = await savedApi(page);
+  const background = api.chats[1]!;
+  background.active_turn_id = randomUUID();
+  await page.clock.install();
+  await page.goto('/');
+  const draft = page.getByRole('textbox');
+  await expect(draft).toHaveValue('Acknowledged draft');
+  await navigation(page);
+  const history = page.getByRole('region', { name: 'Saved chats' });
+  const activity = history.getByRole('status', { name: 'Diagnosis running: Archived question 2' });
+  const remove = history.getByRole('button', { name: 'Delete saved chat: Archived question 2', exact: true });
+  await expect(activity).toBeVisible();
+  await expect(remove).toHaveCount(0);
+  await expect(
+    history.getByRole('button', { name: 'Delete saved chat: Archived question 1', exact: true }),
+  ).toBeEnabled();
+  await history.screenshot({ path: info.outputPath('saved-chat-activity.png') });
+  await expect.poll(() => api.reads).toContain(`GET /investigations/${background.id}`);
+
+  background.active_turn_id = null;
+  await page.clock.runFor(6000);
+  await expect(remove).toBeEnabled();
+  await expect(activity).toHaveCount(0);
+  if ((page.viewportSize()?.width ?? 1440) <= 1100) await page.keyboard.press('Escape');
+  await expect(draft).toHaveValue('Acknowledged draft');
+  expect(api.submissions).toEqual([]);
+  expect(api.cancellations).toEqual([]);
 });
 
 test('bootstraps cookie history before Demo, pages older chats and restores only acknowledged drafts', async ({
