@@ -13,7 +13,7 @@ Dates record merges into `master` unless a release date is set separately. Versi
 
 ### Changed
 
-- Close chat and container search when the operator clicks outside the search panel.
+- Close empty chat and container searches on outside clicks and retain entered queries.
 
 ## [0.8.3] - 2026-11-20
 

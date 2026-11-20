@@ -86,6 +86,7 @@ export function ListSearch<Row>({
 
   useEffect(() => field.current?.focus(), []);
   const dismiss = useEffectEvent((event: MouseEvent) => {
+    if (query) return;
     const path = event.composedPath();
     const toggle = trigger?.current;
     if (!panel.current || path.includes(panel.current) || (toggle && path.includes(toggle))) return;

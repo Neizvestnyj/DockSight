@@ -68,6 +68,9 @@ test('searches the active Demo inventory and opens the selected container', asyn
   await field.fill('reports:1.6');
   const result = page.getByRole('button', { name: /report-worker.*exited/ });
   await expect(result).toBeVisible();
+  await page.getByText('Configured host', { exact: true }).filter({ visible: true }).click();
+  await expect(field).toHaveValue('reports:1.6');
+  await expect(result).toBeVisible();
   await page.screenshot({ path: `test-results/${info.project.name}-container-search.png` });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await result.click();

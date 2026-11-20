@@ -80,6 +80,14 @@ it('keeps chat search separate from recent history and opens the matched questio
   expect(match.querySelector('mark')).toHaveTextContent('timeout');
   expect(match).toHaveAttribute('aria-current', 'page');
   expect(screen.queryByText('No saved chats yet.')).toBeNull();
+  const refresh = screen.getByRole('button', { name: 'Refresh saved chats' });
+  refresh.focus();
+  fireEvent.click(refresh);
+  expect(field).toBeVisible();
+  expect(field).toHaveValue('timeout');
+  expect(match).toBeVisible();
+  expect(refresh).toHaveFocus();
+
   fireEvent.click(match);
   expect(open).toHaveBeenCalledExactlyOnceWith(id, turnId);
 
@@ -89,7 +97,6 @@ it('keeps chat search separate from recent history and opens the matched questio
   expect(screen.getByText('No saved chats yet.')).toBeVisible();
 
   fireEvent.click(trigger);
-  const refresh = screen.getByRole('button', { name: 'Refresh saved chats' });
   refresh.focus();
   fireEvent.click(refresh);
   expect(screen.queryByRole('searchbox')).toBeNull();
