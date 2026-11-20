@@ -35,6 +35,11 @@ class RecoveryReport:
 type Recovery = Callable[[Session], RecoveryReport]
 
 
+def _casefold(value: object) -> str | None:
+    """Fold text with Unicode semantics consistently across both archive adapters."""
+    return value.casefold() if isinstance(value, str) else None
+
+
 def _connect(path: Path) -> sqlite3.Connection:
     """Enable modern transaction control after setting connection-level durability pragmas."""
     connection = sqlite3.connect(path, timeout=2, autocommit=False)
@@ -43,6 +48,7 @@ def _connect(path: Path) -> sqlite3.Connection:
         connection.execute("PRAGMA foreign_keys=ON")
         connection.execute("PRAGMA journal_mode=DELETE")
         connection.execute("PRAGMA synchronous=FULL")
+        connection.create_function("docksight_casefold", 1, _casefold, deterministic=True)
         connection.autocommit = False
     except BaseException:
         connection.close()

@@ -11,6 +11,7 @@ from docksight.application.investigations.contracts import (
     TurnPage,
     WorkspacePatch,
 )
+from docksight.application.investigations.search import MAX_SEARCH_QUERY
 from docksight.application.model_catalog import ModelSelection
 from docksight.application.views.schemas import Contract, GroupTarget
 from docksight.domain.actions import Operation
@@ -72,6 +73,14 @@ class InvestigationCreate(Contract):
 
     id: UUID
     host: HostId
+
+
+class InvestigationSearchInput(Contract):
+    """Submit literal question text in the body to keep it out of request URLs."""
+
+    q: str = Field(min_length=1, max_length=MAX_SEARCH_QUERY)
+    limit: int = Field(default=10, strict=True, ge=1, le=50)
+    before: str | None = Field(default=None, min_length=1, max_length=1024)
 
 
 class InvestigationDetail(InvestigationView):

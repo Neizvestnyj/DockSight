@@ -14,6 +14,9 @@ from docksight.application.investigations.contracts import (
     ActorWorkspace,
     ActorWorkspacePatch,
     InvestigationPage,
+    InvestigationQuestionMatch,
+    InvestigationSearchHit,
+    InvestigationSearchPage,
     InvestigationSummary,
     InvestigationView,
     InvestigationWorkspace,
@@ -25,6 +28,7 @@ from docksight.application.investigations.contracts import (
     WorkspacePatch,
 )
 from docksight.application.investigations.errors import HistoryError, capacity, not_found
+from docksight.application.investigations.search import question_match
 from docksight.application.ports.models import ModelMessage
 from docksight.domain.errors import ErrorKind
 
@@ -118,6 +122,52 @@ class MemoryInvestigations:
             next_cursor = encode_cursor(actor, "investigations", utc_text(last.updated_at), last.id)
         items = tuple(InvestigationSummary.model_validate(row.model_dump(exclude={"workspace"})) for row in selected)
         return InvestigationPage(items=items, next_cursor=next_cursor)
+
+    async def search(
+        self, actor: str, query: str, limit: int = 10, cursor: str | None = None
+    ) -> InvestigationSearchPage:
+        """Page distinct owned metadata or question matches in archive activity order."""
+        page_limit(limit)
+        scope = f"investigations:search:{query}"
+        before = decode_cursor(actor, scope, cursor)
+        rows = sorted(
+            (row for row in self._investigations.values() if self._owners[row.id] == actor),
+            key=lambda row: (utc_text(row.updated_at), row.id),
+            reverse=True,
+        )
+        eligible = [row for row in rows if before is None or (utc_text(row.updated_at), row.id) < before]
+        matches = self._search_questions(actor, {row.id for row in eligible}, query)
+        selected = [
+            row
+            for row in eligible
+            if row.id in matches or query in row.title.casefold() or query in row.host.casefold()
+        ][: limit + 1]
+        last = selected[limit - 1] if len(selected) > limit else None
+        next_cursor = encode_cursor(actor, scope, utc_text(last.updated_at), last.id) if last is not None else None
+        return InvestigationSearchPage(
+            items=tuple(
+                InvestigationSearchHit(
+                    id=row.id, host=row.host, title=row.title, updated_at=row.updated_at, match=matches.get(row.id)
+                )
+                for row in selected[:limit]
+            ),
+            next_cursor=next_cursor,
+        )
+
+    def _search_questions(self, actor: str, eligible: set[str], query: str) -> dict[str, InvestigationQuestionMatch]:
+        """Read at most the first matching submitted question per eligible chat, newest first."""
+        matches: dict[str, InvestigationQuestionMatch] = {}
+        rows = sorted(self._turns.items(), key=lambda item: (item[1].created_at, item[0]), reverse=True)
+        for identity, row in rows:
+            if row.investigation_id not in eligible or row.investigation_id in matches:
+                continue
+            turn = self._turn_item(identity, row)
+            if not isinstance(turn, SavedTurn) or turn.actor != actor or turn.clarification_of is not None:
+                continue
+            match = question_match(identity, turn.query, query)
+            if match is not None:
+                matches[row.investigation_id] = match
+        return matches
 
     async def turns(self, actor: str, investigation_id: str, limit: int = 20, cursor: str | None = None) -> TurnPage:
         """Read chronological pages and preserve unsupported items as typed errors."""

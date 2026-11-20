@@ -2,6 +2,7 @@ from collections.abc import Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
 
+from docksight.application.container_search import ContainerSummary
 from docksight.application.ports.models import ModelMessage, ModelReply, ToolSpec
 from docksight.domain.diagnostics import JsonObject
 from docksight.domain.runtime import (
@@ -50,6 +51,15 @@ class FakeRuntime:
     async def containers(self, host: str) -> tuple[ContainerSnapshot, ...]:
         """Read bounded sanitized container snapshots for one host."""
         return (self.item,)
+
+    async def container_summaries(self, host: str) -> tuple[ContainerSummary, ...]:
+        """Project this fake runtime's observed rows into list metadata."""
+        return tuple(
+            ContainerSummary(
+                id=row.id, observed_name=row.name, image=row.image, state=row.state, compose_project=row.compose_project
+            )
+            for row in await self.containers(host)
+        )
 
     async def inspect(self, host: str, container_id: str) -> ContainerSnapshot:
         """Read one sanitized container snapshot on the selected host."""

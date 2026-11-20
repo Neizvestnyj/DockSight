@@ -3,6 +3,7 @@ from pathlib import Path
 
 from docksight.adapters.outbound.docker.hosts import load_hosts
 from docksight.adapters.outbound.docker.runtime import DockerRuntime
+from docksight.application.container_search import ContainerSummary
 from docksight.application.ports.models import ModelMessage, ModelPort, ModelReply, ToolSpec
 from docksight.application.redaction import Redactor
 from docksight.domain.diagnostics import JsonObject
@@ -36,6 +37,11 @@ class ScopedDocker:
     async def containers(self, host: str) -> tuple[ContainerSnapshot, ...]:
         """Construct inventory by inspecting only this fixture's full resource ID."""
         return (await self.inspect(host, self.container_id),)
+
+    async def container_summaries(self, host: str) -> tuple[ContainerSummary, ...]:
+        """Expose metadata only for the owned Docker fixture."""
+        row = await self.inspect(host, self.container_id)
+        return (ContainerSummary(id=row.id, observed_name=row.name, image=row.image, state=row.state),)
 
     async def inspect(self, host: str, container_id: str) -> ContainerSnapshot:
         """Collect sanitized fresh state only from the exact owned container."""

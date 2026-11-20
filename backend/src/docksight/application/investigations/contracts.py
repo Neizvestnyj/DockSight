@@ -93,6 +93,32 @@ class InvestigationPage(FrozenContract):
     next_cursor: str | None = Field(default=None, max_length=1024)
 
 
+class InvestigationQuestionMatch(FrozenContract):
+    """Show a bounded saved question excerpt with a half-open UTF-16 match range."""
+
+    turn_id: Identifier
+    excerpt: str = Field(min_length=1, max_length=512)
+    start: int = Field(ge=0, lt=1024)
+    end: int = Field(gt=0, le=1024)
+
+
+class InvestigationSearchHit(FrozenContract):
+    """Identify one owned investigation and its latest matching submitted question, if any."""
+
+    id: Identifier
+    host: Label
+    title: str = Field(max_length=120)
+    updated_at: AwareDatetime
+    match: InvestigationQuestionMatch | None
+
+
+class InvestigationSearchPage(FrozenContract):
+    """Page distinct archived investigations matched by one literal query."""
+
+    items: tuple[InvestigationSearchHit, ...] = Field(max_length=50)
+    next_cursor: str | None = Field(default=None, max_length=1024)
+
+
 class TurnError(FrozenContract):
     """Persist only safe public error codes and messages."""
 

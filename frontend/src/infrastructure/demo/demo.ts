@@ -13,6 +13,7 @@ import {
   type Action,
   type Answer,
   type Container,
+  type GroupTarget,
   type Host,
   type LogBatch,
   type SystemStatus,
@@ -347,6 +348,29 @@ export class DemoClient implements Transport {
     if (this.fault === 'empty' || host === 'demo-empty') return [];
     const now = new Date().toISOString();
     return scenarios.map((_, i) => demoContainer(i, host, now));
+  }
+
+  /** Search simulated rows within the same scope as the inventory. */
+  async searchContainers(host: string, query: string, signal: AbortSignal, group?: GroupTarget) {
+    signal.throwIfAborted();
+    const rows = await this.containers(host);
+    const needle = query.toLowerCase();
+    const scoped = group ? rows.filter((row) => group.kind === 'compose' && row.compose_project === group.name) : rows;
+    const items = scoped
+      .filter(
+        ({ id, name, image, compose_project }) =>
+          id.startsWith(needle) ||
+          [name, image, compose_project].some((field) => field?.toLowerCase().includes(needle)),
+      )
+      .map(({ id, name, image, state, compose_project }) => ({
+        id,
+        name,
+        image,
+        state,
+        compose_project,
+        swarm_stack: null,
+      }));
+    return { items, next_cursor: null };
   }
 
   /** Derive the fictional Compose project entirely from fixture inventory. */

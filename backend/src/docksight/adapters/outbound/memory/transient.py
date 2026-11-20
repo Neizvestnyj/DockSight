@@ -1,7 +1,13 @@
 from datetime import UTC, datetime, timedelta
 
 from docksight.adapters.outbound.memory.investigations import MemoryInvestigations
-from docksight.application.investigations.contracts import InvestigationPage, InvestigationView, SavedTurn, TurnPage
+from docksight.application.investigations.contracts import (
+    InvestigationPage,
+    InvestigationSearchPage,
+    InvestigationView,
+    SavedTurn,
+    TurnPage,
+)
 from docksight.domain.errors import DockSightError, ErrorKind
 
 
@@ -47,6 +53,13 @@ class TransientInvestigations(MemoryInvestigations):
         """List remaining transient history after applying its configured idle policy."""
         await self._expire()
         return await super().list_owned(actor, limit, cursor)
+
+    async def search(
+        self, actor: str, query: str, limit: int = 10, cursor: str | None = None
+    ) -> InvestigationSearchPage:
+        """Search retained transient history after applying its configured idle policy."""
+        await self._expire()
+        return await super().search(actor, query, limit, cursor)
 
     async def read_turn(self, actor: str, turn_id: str) -> SavedTurn:
         """Read a detached snapshot only while its memory-only investigation remains retained."""

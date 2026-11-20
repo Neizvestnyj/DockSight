@@ -8,6 +8,7 @@ from docksight.adapters.inbound.http.schemas import (
     ActorWorkspaceInput,
     InvestigationCreate,
     InvestigationDetail,
+    InvestigationSearchInput,
     InvestigationWorkspaceInput,
     TurnInput,
 )
@@ -16,6 +17,7 @@ from docksight.application.investigations.contracts import (
     AcceptedTurn,
     ActorWorkspace,
     InvestigationPage,
+    InvestigationSearchPage,
     InvestigationView,
     InvestigationWorkspace,
     SavedTurn,
@@ -58,6 +60,11 @@ def build_investigations_router(history: Investigations, runner: TurnRunner, aut
     async def listing(actor: Actor, limit: PageLimit = 10, before: Cursor = None) -> InvestigationPage:
         """Return owned activity keysets without interpreting initial page size as retention."""
         return await history.list_owned(actor, limit, before)
+
+    @router.post("/investigations/search")
+    async def search(value: InvestigationSearchInput, actor: Actor) -> InvestigationSearchPage:
+        """Read matching owned archives without exposing question text in request URLs."""
+        return await history.search(actor, value.q, value.limit, value.before)
 
     @router.get("/investigations/{investigation_id}")
     async def detail(investigation_id: UUID, actor: Actor) -> InvestigationDetail:

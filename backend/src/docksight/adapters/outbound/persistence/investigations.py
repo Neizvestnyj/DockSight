@@ -13,6 +13,7 @@ from docksight.adapters.outbound.persistence.codec import (
     utc_text,
 )
 from docksight.adapters.outbound.persistence.database import PersistentDatabase
+from docksight.adapters.outbound.persistence.investigation_search import search_investigations
 from docksight.adapters.outbound.persistence.rows import (
     ActorWorkspaceRow,
     InvestigationRow,
@@ -23,6 +24,7 @@ from docksight.application.investigations.contracts import (
     ActorWorkspace,
     ActorWorkspacePatch,
     InvestigationPage,
+    InvestigationSearchPage,
     InvestigationSummary,
     InvestigationView,
     InvestigationWorkspace,
@@ -213,6 +215,14 @@ class SQLiteInvestigations:
             return InvestigationPage(items=items, next_cursor=cursor)
 
         return await self.database.transaction(listing)
+
+    async def search(
+        self, actor: str, query: str, limit: int = 10, cursor: str | None = None
+    ) -> InvestigationSearchPage:
+        """Read a bounded query-scoped page in the archive transaction."""
+        return await self.database.transaction(
+            lambda session: search_investigations(session, actor, query, limit, cursor)
+        )
 
     async def turns(self, actor: str, investigation_id: str, limit: int = 20, cursor: str | None = None) -> TurnPage:
         """Read older immutable turn pages in chronological display order."""

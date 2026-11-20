@@ -3,6 +3,27 @@ import { ApiClient } from './api';
 import { consumeEvents } from './stream';
 import { demoContainer } from '../demo/demo';
 
+it('keeps a chat query in the request body and scopes container search to the chosen host and group', async () => {
+  const client = new ApiClient('/api/v1', 'token', async (url, init) => {
+    if (url === '/api/v1/investigations/search') {
+      expect(init?.method).toBe('POST');
+      expect(init?.body).toBe(JSON.stringify({ q: 'connection refused', before: 'older' }));
+    } else {
+      expect(url).toBe('/api/v1/hosts/host%20id/container-search?q=web+api&group_kind=compose&group_name=shop');
+    }
+    return Response.json({ items: [], next_cursor: null });
+  });
+  const signal = new AbortController().signal;
+  expect(await client.searchInvestigations('connection refused', signal, 'older')).toEqual({
+    items: [],
+    next_cursor: null,
+  });
+  expect(await client.searchContainers('host id', 'web api', signal, { kind: 'compose', name: 'shop' })).toEqual({
+    items: [],
+    next_cursor: null,
+  });
+});
+
 describe('direct container reads', () => {
   it('exchanges a first-party bearer once and keeps subsequent credentials in the cookie contract', async () => {
     const calls: RequestInit[] = [];

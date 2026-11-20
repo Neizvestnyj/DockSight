@@ -3,6 +3,9 @@ from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any, cast
 
+from pydantic import ValidationError
+
+from docksight.application.container_search import ContainerSummary
 from docksight.application.redaction import Redactor, secret_name
 from docksight.domain.errors import DockSightError, ErrorKind
 from docksight.domain.runtime import (
@@ -62,6 +65,45 @@ def map_container(
         compose_project=clean.text(labels.get("com.docker.compose.project", "")) or None,
         health=_health(state.get("Health")),
     )
+
+
+def map_container_summary(raw: Mapping[str, Any], redactor: Redactor) -> ContainerSummary:
+    """Allowlist and redact Docker list metadata without reading container configuration."""
+    labels: object = raw.get("Labels") or {}
+    if not isinstance(labels, dict):
+        raise DockSightError("invalid_runtime_data", "Invalid container list metadata", ErrorKind.DEPENDENCY)
+    metadata = cast(dict[str, object], labels)
+    try:
+        return ContainerSummary.model_validate(
+            {
+                "id": raw.get("Id"),
+                "observed_name": _summary_name(raw.get("Names"), redactor),
+                "image": _clean_summary_text(raw.get("Image"), redactor),
+                "state": raw.get("State"),
+                "compose_project": _clean_summary_text(metadata.get("com.docker.compose.project"), redactor) or None,
+                "swarm_stack": _clean_summary_text(metadata.get("com.docker.stack.namespace"), redactor) or None,
+            }
+        )
+    except ValidationError as exc:
+        raise DockSightError("invalid_runtime_data", "Invalid container list metadata", ErrorKind.DEPENDENCY) from exc
+
+
+def _summary_name(raw_names: object, redactor: Redactor) -> str | None:
+    """Prefer Docker's canonical name and keep the absence of a reported name explicit."""
+    if not isinstance(raw_names, list) or not all(isinstance(name, str) for name in cast(list[object], raw_names)):
+        raise DockSightError("invalid_runtime_data", "Invalid container list metadata", ErrorKind.DEPENDENCY)
+    names = [name.removeprefix("/") for name in cast(list[str], raw_names)]
+    if not names:
+        return None
+    primary = next((name for name in names if name and "/" not in name), names[0])
+    return redactor.text(primary)
+
+
+def _clean_summary_text(value: object, redactor: Redactor) -> object:
+    """Redact text while preserving invalid values for boundary validation."""
+    if not isinstance(value, str):
+        return value
+    return redactor.text(value)
 
 
 def _health(raw: object) -> ContainerHealth | None:

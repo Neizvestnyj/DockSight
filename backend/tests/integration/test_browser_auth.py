@@ -255,6 +255,19 @@ def test_cookie_authorized_action_uses_session_actor_and_bearer_login_is_require
         assert api.get("/api/v1/actions/" + prepared.json()["id"]).status_code == 200
 
 
+def test_cookie_search_uses_session_owner_and_requires_csrf() -> None:
+    with browser_client() as api:
+        login = api.post("/api/v1/auth/login", headers=LOGIN, json={})
+        csrf = login.json()["csrf_token"]
+        archive = {"id": "a4f5ccac-e24a-419c-98d5-d0838acd7a65", "host": "local"}
+        assert api.post("/api/v1/investigations", headers=LOGIN, json=archive).status_code == 201
+        path = "/api/v1/investigations/search"
+        assert api.post(path, headers={"Origin": ORIGIN}, json={"q": "local"}).status_code == 403
+        response = api.post(path, headers={"Origin": ORIGIN, "X-CSRF-Token": csrf}, json={"q": "local"})
+        assert response.status_code == 200
+        assert [item["id"] for item in response.json()["items"]] == [archive["id"]]
+
+
 def test_allowed_bearer_origin_receives_cors_headers_on_auth_errors() -> None:
     with browser_client(cors_origins=("https://remote.example",)) as api:
         response = api.get("/api/v1/hosts", headers={"Origin": "https://remote.example", "Authorization": "Bearer bad"})

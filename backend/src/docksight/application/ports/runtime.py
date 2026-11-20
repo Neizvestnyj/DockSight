@@ -1,5 +1,6 @@
 from typing import Literal, Protocol
 
+from docksight.application.container_search import ContainerSummary
 from docksight.domain.runtime import (
     ContainerSnapshot,
     Host,
@@ -22,6 +23,10 @@ class RuntimeReadPort(Protocol):
 
     async def containers(self, host: str) -> tuple[ContainerSnapshot, ...]:
         """Read bounded sanitized container snapshots for one host."""
+        ...
+
+    async def container_summaries(self, host: str) -> tuple[ContainerSummary, ...]:
+        """Read sanitized container list metadata for all states on one host."""
         ...
 
     async def inspect(self, host: str, container_id: str) -> ContainerSnapshot:

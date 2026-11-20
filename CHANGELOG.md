@@ -4,6 +4,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versions: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Dates record merges into `master` unless a release date is set separately. Version links show the corresponding changes.
 
+## [0.9.0]
+
+### Added
+
+- Search saved chats by question text, title, or host and open the matching question directly.
+- Find containers on the selected host or group by name, ID prefix, image, or Compose project.
+
 ## [0.8.3] - 2026-11-20
 
 ### Changed
@@ -345,6 +352,7 @@ Dates record merges into `master` unless a release date is set separately. Versi
 - Prepared actions are bound to the caller and exact target. Unknown mutation outcomes block conflicting actions.
   Runtime mutations are never retried automatically.
 
+[0.9.0]: https://github.com/Neizvestnyj/DockSight/compare/9b3c9ad...feature/chat-and-container-search
 [0.8.3]: https://github.com/Neizvestnyj/DockSight/compare/b54acee...feature/diagnosis-chat-and-login-language-picker
 [0.8.2]: https://github.com/Neizvestnyj/DockSight/compare/master...feature/coverage-badges-and-browser-smoke
 [0.8.1]: https://github.com/Neizvestnyj/DockSight/compare/35d18d7...0fc86b6

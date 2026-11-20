@@ -10,6 +10,7 @@
   gap: 8px;
 }
 .saved-investigations h2 {
+  flex: 1;
   font-size: 13px;
   font-weight: 500;
   color: var(--muted);
@@ -27,7 +28,8 @@
 .saved-chat:global(.selected) {
   background: var(--active);
 }
-.saved-chat-open {
+.saved-chat-open,
+.search-result {
   display: block;
   min-width: 0;
   flex: 1;
@@ -37,23 +39,47 @@
   background: transparent;
   border-radius: var(--radius-control);
 }
-.saved-chat-open:hover {
+.search-result {
+  width: 100%;
+}
+
+.saved-chat-open:hover,
+.search-result:hover {
   border-color: var(--control);
 }
-.saved-chat-open > span {
+.saved-chat-open > span,
+.search-result > span {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 13px;
 }
-.saved-chat-open small {
+.saved-chat-open small,
+.search-result small {
   display: block;
   color: var(--muted);
   font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.search-result[aria-current='page'] {
+  background: var(--active);
+}
+
+.search-result .excerpt {
+  overflow: visible;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  color: var(--text);
+}
+
+.excerpt mark {
+  color: inherit;
+  background: var(--active);
+  font-weight: 600;
 }
 @media (max-width: 640px) {
   .saved-chat-open {

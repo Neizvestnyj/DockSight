@@ -106,6 +106,7 @@ export function WorkspacePage({
   );
   const [selected, setSelected] = useState<Container>();
   const [viewingContainer, setViewingContainer] = useState(false);
+  const [containerFocus, setContainerFocus] = useState(0);
   const [demoDraft, setDemoDraft] = useState('');
   const draft = demo ? demoDraft : saved.draft;
   const setDraft = demo ? setDemoDraft : saved.setDraft;
@@ -223,7 +224,8 @@ export function WorkspacePage({
   }, [client, host, demo, scopeTarget]);
 
   useEffect(() => {
-    if (demo || !saved.detail || saved.detail.workspace.view !== 'containers' || hostLoading) return;
+    if (demo || !saved.detail || saved.searchOpened || saved.detail.workspace.view !== 'containers' || hostLoading)
+      return;
     const target = saved.detail.workspace.selected_container;
     if (!target || !configured) return;
     const controller = new AbortController();
@@ -241,7 +243,7 @@ export function WorkspacePage({
     return () => controller.abort();
     // Restore exact selection only when this chat opens, never match by name.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [client, host, saved.detail?.id, hostLoading]);
+  }, [client, host, saved.detail?.id, hostLoading, saved.searchOpened]);
 
   useEffect(() => {
     const input = document.getElementById('query');
@@ -250,6 +252,14 @@ export function WorkspacePage({
     observer.observe(input);
     return () => observer.disconnect();
   }, []);
+
+  useEffect(() => {
+    if (!containerFocus) return;
+    const frame = requestAnimationFrame(() =>
+      document.getElementById('container-title')?.focus({ preventScroll: true }),
+    );
+    return () => cancelAnimationFrame(frame);
+  }, [containerFocus]);
 
   /** Recheck stale availability before opening its retained observations. */
   function openStatus() {
@@ -280,7 +290,7 @@ export function WorkspacePage({
         selected_container: { kind: 'container', id: container.id, name: container.name },
         view: 'containers',
       });
-    requestAnimationFrame(() => document.getElementById('container-title')?.focus({ preventScroll: true }));
+    setContainerFocus((previous) => previous + 1);
   }
 
   /** Return to retained diagnostic results and place keyboard focus in the visible workspace. */
@@ -350,6 +360,8 @@ export function WorkspacePage({
       hostLoading,
       hostError,
       retryHosts,
+      searchClient: configured ? client : undefined,
+      searchGroup: groupScope.group ? { kind: groupScope.group.kind, name: groupScope.group.name } : undefined,
       inventory: groupScope.group
         ? inventory.filter((row) => groupScope.group!.container_ids.includes(row.id))
         : inventory,
@@ -402,9 +414,16 @@ export function WorkspacePage({
         <SavedInvestigations
           {...history}
           selected={saved.detail?.id}
-          open={(id) => {
+          searchHistory={client.history}
+          open={(id, turnId) => {
             setMenu(false);
-            void saved.open(id);
+            if (turnId === undefined) {
+              void saved.open(id);
+              return;
+            }
+            void saved.openResult(id, turnId).then((opened) => {
+              if (opened && id === saved.detail?.id) setViewingContainer(false);
+            });
           }}
           remove={(id) => {
             void history.remove(id).then((removed) => {
@@ -741,6 +760,8 @@ export function WorkspacePage({
             blocked={continuingBlocked || Boolean(availability.blockedReason)}
             group={groupScope.group ? { kind: groupScope.group.kind, name: groupScope.group.name } : undefined}
             target={!demo ? (scopeTarget ?? undefined) : undefined}
+            searchTurn={saved.searchTurn}
+            active={!viewingContainer}
           />
         </div>
       </>
