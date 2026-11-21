@@ -6,6 +6,10 @@ Dates record merges into `master` unless a release date is set separately. Versi
 
 ## [0.9.1]
 
+### Added
+
+- Document the database schema by feature area, with foreign keys, cascade deletion, and retained records.
+
 ### Changed
 
 - Require 95% combined backend coverage and 90% frontend line coverage. Add regression coverage for saved chat

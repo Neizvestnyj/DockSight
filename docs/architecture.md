@@ -117,6 +117,10 @@ SQLite has no age-based investigation eviction. The latest-ten list is paginatio
 history/context/workspace but preserves action protection, audit, and content-free submission tombstones. Explicit
 `memory` mode loses all state on restart. Only that mode applies `MAX_SESSIONS` and `STATE_TTL` to inactive history.
 
+The database schema shows key columns and relationships from the current SQLite migrations.
+
+![Database tables, foreign key cardinalities, and retention notes](diagrams/database-schema.png)
+
 ## Layout
 
 ```text
