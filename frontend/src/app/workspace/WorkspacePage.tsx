@@ -9,7 +9,7 @@ import { ApiError } from '../../shared/contracts/errors';
 import { DemoClient, demoAnswer, scenarios, type ScenarioId } from '../../infrastructure/demo/demo';
 import { DemoControls } from './DemoControls';
 import { Select } from '../../shared/ui/Select';
-import { isMessageKey } from '../../shared/i18n/messages';
+import { isMessageKey, type MessageKey } from '../../shared/i18n/messages';
 import { Investigation } from '../../modules/investigations';
 import { Logo, Modal } from '../../shared/ui/ui';
 import { Sidebar } from '../../modules/runtime';
@@ -106,6 +106,7 @@ export function WorkspacePage({
   );
   const [selected, setSelected] = useState<Container>();
   const [viewingContainer, setViewingContainer] = useState(false);
+  const [containerFocus, setContainerFocus] = useState(0);
   const [demoDraft, setDemoDraft] = useState('');
   const draft = demo ? demoDraft : saved.draft;
   const setDraft = demo ? setDemoDraft : saved.setDraft;
@@ -121,15 +122,15 @@ export function WorkspacePage({
   const [selectionError, setSelectionError] = useState(false);
   const modelAvailable = modelIsAvailable();
   const groupAvailable = groupIsAvailable();
-  const continuingBlocked = continuationIsBlocked();
+  const containerBlockReason = diagnosisBlockReason();
+  const continuationReason = continuationBlockReason();
   const demoChats = investigation.demoChats;
   const containerDiagnosis = useContainerDiagnosis({
     host,
-    selected,
     draft,
     saved,
     investigation,
-    blocked: Boolean(availability.blockedReason),
+    blocked: Boolean(containerBlockReason),
     openInvestigation,
     refreshHistory: history.refresh,
     startDemo: startDemoContainerDiagnosis,
@@ -148,15 +149,22 @@ export function WorkspacePage({
     return hosts.find((row) => row.id === host)?.name ?? host;
   }
 
-  /** Require the exact saved model to remain in its configured catalog. */
+  /** Require confirmation of the exact saved model from the catalog or the selected model status. */
   function modelIsAvailable() {
-    return (
-      !modelSelection ||
-      Boolean(
-        catalog.providers?.providers.some((row) => row.id === modelSelection.provider && row.configured) &&
-        catalog.catalogs[modelSelection.provider]?.data?.models.some((row) => row.id === modelSelection.model),
-      )
-    );
+    if (!modelSelection) return true;
+    if (savedModelIsMissing()) return false;
+    const status = availability.data;
+    if (
+      status?.host === host &&
+      status.provider === modelSelection.provider &&
+      status.model === modelSelection.model &&
+      status.model_check.state === 'available'
+    ) {
+      return true;
+    }
+    const provider = catalog.providers?.providers.find((row) => row.id === modelSelection.provider);
+    const models = catalog.catalogs[modelSelection.provider]?.data?.models;
+    return Boolean(provider?.configured && models?.some((row) => row.id === modelSelection.model));
   }
 
   /** Report an unavailable preference only after its provider or catalog has answered. */
@@ -184,19 +192,31 @@ export function WorkspacePage({
     return !scopeTarget || scopeTarget.kind === 'container' || Boolean(groupScope.group);
   }
 
-  /** Block continuation while its exact saved scope or revision is unavailable. */
-  function continuationIsBlocked(requireSaved = true) {
-    return (
-      !demo &&
-      (!configured ||
-        !modelAvailable ||
-        !targetAvailable ||
-        !groupAvailable ||
-        saved.loading ||
-        (requireSaved && !saved.detail) ||
-        saved.saveState === 'conflict' ||
-        saved.saveState === 'error')
-    );
+  /** Check dependencies and protect the active draft before starting a diagnosis. */
+  function diagnosisBlockReason(): MessageKey | undefined {
+    if (availability.blockedReason) return availability.blockedReason;
+    if (demo) return undefined;
+    if (history.items.some((row) => row.host === host && row.id !== saved.detail?.id && row.active_turn_id))
+      return 'A diagnosis is running in another chat on this host.';
+    if (saved.loading) return 'Opening the chat…';
+    if (saved.saveState === 'conflict') return 'This chat changed in another tab. Your draft is unsaved.';
+    if (saved.saveState === 'error') return 'Could not save the chat. Retry saving to continue.';
+    if (saved.draftChat && draft.trim())
+      return saved.error ? 'Could not save the chat. Retry saving to continue.' : 'Saving draft…';
+    return undefined;
+  }
+
+  /** Explain the current saved-chat gate without changing its scope or write requirements. */
+  function continuationBlockReason(requireSaved = true): MessageKey | undefined {
+    if (containerBlockReason) return containerBlockReason;
+    if (demo) return undefined;
+    if (!configured) return 'Choose a configured host to continue. Saved evidence remains readable.';
+    if (requireSaved && !saved.chat) return 'Open or create a chat to start a diagnosis.';
+    if (unavailableSavedScope())
+      return 'A saved model or target is unavailable. Choose a current model or scope to continue.';
+    if (!modelAvailable) return 'The selected model could not be verified yet. Open the model picker to check it.';
+    if (!targetAvailable || !groupAvailable) return 'The selected scope could not be verified yet.';
+    return undefined;
   }
 
   const { loadProviders, loadCatalog, providers } = catalog;
@@ -223,7 +243,8 @@ export function WorkspacePage({
   }, [client, host, demo, scopeTarget]);
 
   useEffect(() => {
-    if (demo || !saved.detail || saved.detail.workspace.view !== 'containers' || hostLoading) return;
+    if (demo || !saved.detail || saved.openedFromHistory || saved.detail.workspace.view !== 'containers' || hostLoading)
+      return;
     const target = saved.detail.workspace.selected_container;
     if (!target || !configured) return;
     const controller = new AbortController();
@@ -239,9 +260,9 @@ export function WorkspacePage({
         if (!controller.signal.aborted) setSelectionError(true);
       });
     return () => controller.abort();
-    // Restore exact selection only when this chat opens, never match by name.
+    // Restore the exact selection when hydrating a workspace. Chat navigation opens diagnostics.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [client, host, saved.detail?.id, hostLoading]);
+  }, [client, host, saved.detail?.id, hostLoading, saved.openedFromHistory]);
 
   useEffect(() => {
     const input = document.getElementById('query');
@@ -250,6 +271,14 @@ export function WorkspacePage({
     observer.observe(input);
     return () => observer.disconnect();
   }, []);
+
+  useEffect(() => {
+    if (!containerFocus) return;
+    const frame = requestAnimationFrame(() =>
+      document.getElementById('container-title')?.focus({ preventScroll: true }),
+    );
+    return () => cancelAnimationFrame(frame);
+  }, [containerFocus]);
 
   /** Recheck stale availability before opening its retained observations. */
   function openStatus() {
@@ -280,7 +309,7 @@ export function WorkspacePage({
         selected_container: { kind: 'container', id: container.id, name: container.name },
         view: 'containers',
       });
-    requestAnimationFrame(() => document.getElementById('container-title')?.focus({ preventScroll: true }));
+    setContainerFocus((previous) => previous + 1);
   }
 
   /** Return to retained diagnostic results and place keyboard focus in the visible workspace. */
@@ -328,7 +357,7 @@ export function WorkspacePage({
 
   /** Start an explicitly scoped group investigation without changing historical observations. */
   function diagnoseGroup() {
-    if (!groupScope.group || investigation.running || availability.blockedReason) return;
+    if (!groupScope.group || investigation.running || continuationBlockReason(false)) return;
     const { kind, name: groupName } = groupScope.group;
     const query = t('Investigate the {kind} group {name}. Check every member and explain the failures.', {
       kind: kind === 'compose' ? 'Compose' : 'Swarm',
@@ -350,6 +379,8 @@ export function WorkspacePage({
       hostLoading,
       hostError,
       retryHosts,
+      searchClient: configured ? client : undefined,
+      searchGroup: groupScope.group ? { kind: groupScope.group.kind, name: groupScope.group.name } : undefined,
       inventory: groupScope.group
         ? inventory.filter((row) => groupScope.group!.container_ids.includes(row.id))
         : inventory,
@@ -402,9 +433,14 @@ export function WorkspacePage({
         <SavedInvestigations
           {...history}
           selected={saved.detail?.id}
-          open={(id) => {
+          selectedRunning={investigation.running}
+          searchHistory={client.history}
+          open={(id, turnId) => {
             setMenu(false);
-            void saved.open(id);
+            const opening = turnId === undefined ? saved.open(id) : saved.openResult(id, turnId);
+            void opening.then((opened) => {
+              if (opened && id === saved.detail?.id) setViewingContainer(false);
+            });
           }}
           remove={(id) => {
             void history.remove(id).then((removed) => {
@@ -640,7 +676,7 @@ export function WorkspacePage({
                 },
               }}
               diagnose={diagnoseGroup}
-              blocked={continuationIsBlocked(false) || investigation.running || Boolean(availability.blockedReason)}
+              blocked={Boolean(continuationBlockReason(false) || investigation.running)}
             />
           ))}
         {!demo && unavailableSavedScope() && (
@@ -718,7 +754,7 @@ export function WorkspacePage({
               client={client}
               container={selected}
               running={investigation.running}
-              blocked={saved.loading || Boolean(availability.blockedReason)}
+              blockedReason={containerBlockReason}
               automatic={!demo}
               active={viewingContainer}
               back={() => openInvestigation()}
@@ -738,9 +774,11 @@ export function WorkspacePage({
             draft={draft}
             setDraft={setDraft}
             host={host}
-            blocked={continuingBlocked || Boolean(availability.blockedReason)}
+            blockedReason={continuationReason}
             group={groupScope.group ? { kind: groupScope.group.kind, name: groupScope.group.name } : undefined}
             target={!demo ? (scopeTarget ?? undefined) : undefined}
+            searchTurn={saved.searchTurn}
+            active={!viewingContainer}
           />
         </div>
       </>

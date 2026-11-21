@@ -3,6 +3,8 @@ import controlStyles from '../../../shared/ui/Controls.module.css';
 import { ArrowRight, MessageSquare, Square } from 'lucide-react';
 import type { DiagnosticTarget, GroupTarget } from '../../../shared/contracts/contracts';
 import { useLocale } from '../../../shared/i18n/locale';
+import type { MessageKey } from '../../../shared/i18n/messages';
+import { Hint } from '../../../shared/ui/Hint';
 import styles from './QuestionComposer.module.css';
 
 /** Render the existing question controls while the investigation owns its draft and lifecycle. */
@@ -10,7 +12,7 @@ export function QuestionComposer({
   draft,
   setDraft,
   host,
-  blocked,
+  blockedReason,
   running,
   hasTurn,
   group,
@@ -21,7 +23,7 @@ export function QuestionComposer({
   draft: string;
   setDraft: (value: string) => void;
   host: string;
-  blocked: boolean;
+  blockedReason?: MessageKey;
   running: boolean;
   hasTurn: boolean;
   group?: GroupTarget;
@@ -30,13 +32,21 @@ export function QuestionComposer({
   stop: () => void;
 }) {
   const { t, locale } = useLocale();
+  const reason = blockedReason ?? (!host ? 'Select a host' : undefined);
+  const canSubmit = !running && !reason && Boolean(draft.trim());
+  const submitButton = (
+    <button className={`primary ${controlStyles['primary']}`} type="submit" disabled={!canSubmit}>
+      {t('Investigate')}
+      <ArrowRight size={15} />
+    </button>
+  );
   return (
     <form
       className={styles['composer']}
       aria-labelledby="composer-title"
       onSubmit={(event) => {
         event.preventDefault();
-        submit(draft, group ?? target);
+        if (canSubmit) submit(draft, group ?? target);
       }}
     >
       <div className={styles['composer-heading']}>
@@ -57,14 +67,7 @@ export function QuestionComposer({
           aria-describedby="composer-scope"
           placeholder={t(hasTurn ? 'What else should we check?' : 'Why did this container exit?')}
           onKeyDown={(event) => {
-            if (
-              (event.metaKey || event.ctrlKey) &&
-              event.key === 'Enter' &&
-              !running &&
-              !blocked &&
-              draft.trim() &&
-              host
-            ) {
+            if ((event.metaKey || event.ctrlKey) && event.key === 'Enter' && canSubmit) {
               event.preventDefault();
               submit(draft, group ?? target);
             }
@@ -94,14 +97,9 @@ export function QuestionComposer({
                 {t('Stop diagnosis')}
               </button>
             ) : (
-              <button
-                className={`primary ${controlStyles['primary']}`}
-                type="submit"
-                disabled={blocked || !draft.trim() || !host}
-              >
-                {t('Investigate')}
-                <ArrowRight size={15} />
-              </button>
+              <Hint label={t('Why diagnosis is unavailable')} control={submitButton}>
+                {reason ? t(reason) : undefined}
+              </Hint>
             )}
           </div>
         </div>

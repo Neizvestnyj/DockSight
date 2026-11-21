@@ -12,6 +12,13 @@ from docksight.adapters.inbound.http.schemas import (
     HostId,
 )
 from docksight.application.actions import Actions
+from docksight.application.container_search import (
+    SEARCH_CURSOR_LENGTH,
+    SEARCH_PAGE_SIZE,
+    SEARCH_QUERY_LENGTH,
+    ContainerSearch,
+    ContainerSearchPage,
+)
 from docksight.application.investigations.runner import TurnRunner
 from docksight.application.investigations.service import Investigations
 from docksight.application.model_catalog import CatalogView, ModelSelection, ProvidersView
@@ -20,7 +27,7 @@ from docksight.application.ports.state import ActionOrigin
 from docksight.application.queries import RuntimeQueries
 from docksight.application.system_status import SystemStatus, SystemStatusView
 from docksight.application.views.registry import widget_schema
-from docksight.application.views.schemas import ActionView
+from docksight.application.views.schemas import ActionView, GroupTarget
 from docksight.domain.diagnostics import JsonObject
 from docksight.domain.errors import DockSightError, ErrorKind
 from docksight.domain.runtime import (
@@ -97,6 +104,19 @@ def build_router(
         """Read bounded container snapshots from one configured host."""
         return await queries.containers(host)
 
+    @router.get("/hosts/{host}/container-search", tags=["Runtime"])
+    async def search_containers(
+        host: HostId,
+        q: Annotated[str, Query(min_length=1, max_length=SEARCH_QUERY_LENGTH)],
+        limit: Annotated[int, Query(ge=1, le=SEARCH_PAGE_SIZE)] = 20,
+        before: Annotated[str | None, Query(min_length=1, max_length=SEARCH_CURSOR_LENGTH)] = None,
+        group_kind: Literal["compose", "swarm"] | None = None,
+        group_name: Annotated[str | None, Query(max_length=128, pattern=r"^[a-zA-Z0-9][a-zA-Z0-9_.-]*$")] = None,
+    ) -> ContainerSearchPage:
+        """Search all local Docker list entries by literal metadata or ID prefix."""
+        group = _search_group(group_kind, group_name)
+        return await queries.search_containers(host, ContainerSearch(q, limit, before, group))
+
     @router.get("/hosts/{host}/containers/{container_id}", tags=["Runtime"])
     async def inspect(host: HostId, container_id: ContainerId) -> ContainerSnapshot:
         """Read a sanitized snapshot for the requested container."""
@@ -151,6 +171,17 @@ def build_router(
     router.include_router(build_legacy_router(history, runner, auth))
 
     return router
+
+
+def _search_group(kind: Literal["compose", "swarm"] | None, name: str | None) -> GroupTarget | None:
+    """Resolve the optional exact search group from its paired transport fields."""
+    if kind is None and name is None:
+        return None
+    if kind is None or name is None:
+        raise DockSightError(
+            "invalid_container_search", "Group kind and name must be supplied together", ErrorKind.VALIDATION
+        )
+    return GroupTarget(kind=kind, name=name)
 
 
 async def _selected_status(

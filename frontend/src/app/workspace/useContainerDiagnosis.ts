@@ -7,7 +7,6 @@ type ContainerTarget = Extract<DiagnosticTarget, { kind: 'container' }>;
 
 interface ContainerDiagnosisContext {
   host: string;
-  selected?: Container;
   draft: string;
   saved: ReturnType<typeof useWorkspace>;
   investigation: ReturnType<typeof useInvestigation>;
@@ -20,7 +19,6 @@ interface ContainerDiagnosisContext {
 /** Route an explicit container diagnosis to its exact saved or Demo chat. */
 export function useContainerDiagnosis({
   host,
-  selected,
   draft,
   saved,
   investigation,
@@ -31,9 +29,9 @@ export function useContainerDiagnosis({
 }: ContainerDiagnosisContext) {
   const { t } = useLocale();
   const creating = useRef(false);
-  const { lastTarget } = investigation;
-  const occupied = Boolean(investigation.turns.length || saved.detail?.turn_count || draft);
-  const separate = occupied && (lastTarget?.kind !== 'container' || lastTarget.id !== selected?.id);
+  const separate = Boolean(
+    investigation.running || investigation.turns.length || saved.detail?.turn_count || draft.trim(),
+  );
 
   const submitInitial = useEffectEvent((id: string) => {
     const diagnosis = saved.takeDiagnosis(id);

@@ -190,6 +190,12 @@ export function useSavedTurns(client: Transport, host: string, selection?: Model
 
   /** Preserve conflict ownership and expose only the existing submission error. */
   function failSubmission(failure: unknown, saved: SavedContext) {
+    if (failure instanceof ApiError && failure.code === 'turn_busy') {
+      setErrorSource('client');
+      setError('A diagnosis is already running on this host.');
+      saved.changed();
+      return;
+    }
     setErrorSource(failure instanceof ApiError ? 'server' : 'client');
     if (failure instanceof ApiError && failure.code === 'workspace_conflict') saved.conflict?.(failure.current);
     setError(
@@ -232,10 +238,10 @@ export function useSavedTurns(client: Transport, host: string, selection?: Model
       }
       if (detached(controller, epoch)) return;
       receive(snapshot);
+      saved.changed();
       await saved.refresh();
       if (generation.current !== epoch) return;
       if (preservedDraft) await saved.restoreDraft?.(preservedDraft);
-      saved.changed();
       if (snapshot.state === 'running' && observedId.current !== snapshot.id) {
         observedId.current = snapshot.id;
         void observe(snapshot.id, controller, epoch);

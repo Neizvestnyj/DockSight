@@ -5,6 +5,7 @@ from docksight.application.investigations.contracts import (
     ActorWorkspace,
     ActorWorkspacePatch,
     InvestigationPage,
+    InvestigationSearchPage,
     InvestigationView,
     InvestigationWorkspace,
     TurnPage,
@@ -12,6 +13,7 @@ from docksight.application.investigations.contracts import (
 )
 from docksight.application.investigations.ports import InvestigationArchive
 from docksight.application.investigations.sanitization import sanitized_workspace
+from docksight.application.investigations.search import search_query
 from docksight.application.model_choices import ModelChoices
 from docksight.application.redaction import Redactor
 from docksight.domain.errors import DockSightError, ErrorKind
@@ -44,6 +46,12 @@ class Investigations:
     async def list_owned(self, actor: str, limit: int = 10, cursor: str | None = None) -> InvestigationPage:
         """Read bounded owned activity without refreshing models or runtime data."""
         return await self.archive.list_owned(actor, limit, cursor)
+
+    async def search(
+        self, actor: str, query: str, limit: int = 10, cursor: str | None = None
+    ) -> InvestigationSearchPage:
+        """Search the saved archive independently of current host and model configuration."""
+        return await self.archive.search(actor, search_query(query), limit, cursor)
 
     async def read(self, actor: str, investigation_id: str) -> InvestigationView:
         """Read saved content even when its former host configuration was removed."""

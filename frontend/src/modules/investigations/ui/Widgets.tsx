@@ -137,7 +137,11 @@ export function WidgetCard({
             <p className={`${localStyles['image-name']}`}>
               <code>{widget.snapshot.image}</code>
             </p>
-            <HealthFact state={widget.snapshot.state} health={widget.snapshot.health} />
+            <HealthFact
+              state={widget.snapshot.state}
+              health={widget.snapshot.health}
+              last_healthcheck={widget.snapshot.last_healthcheck}
+            />
             <dl className={factStyles['fact-strip']}>
               <div>
                 <dt>{t('Exit code')}</dt>

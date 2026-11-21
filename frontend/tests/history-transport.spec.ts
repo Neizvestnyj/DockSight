@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { savedApi } from './helpers/saved-api';
+import { chooseOption } from './helpers/select';
 import { writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import type { SavedTurn } from '../src/shared/contracts/investigation-contracts';
@@ -62,6 +63,7 @@ test('saves pending drafts before same-row, other-chat and new-chat navigation',
     await navigation(page);
     await plus.click();
     await expect(input).toHaveValue('');
+    await expect(page.getByRole('button', { name: 'Why diagnosis is unavailable' })).toHaveCount(0);
     expect(api.chats).toHaveLength(initialCount);
     expect(
       api.reads.filter((request) => request === 'POST /investigations'),
@@ -79,6 +81,130 @@ test('saves pending drafts before same-row, other-chat and new-chat navigation',
   await page.getByRole('button', { name: /^Untitled chat local/ }).click();
   await expect(input).toHaveValue('An unsent question about Redis');
   expect(api.submissions).toEqual([]);
+});
+
+test('opens the current and another saved chat directly from container facts', async ({ page }) => {
+  const api = await savedApi(page);
+  const current = api.chats[0]!;
+  const other = api.chats[1]!;
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'Archived question 1' })).toBeVisible();
+  const pageLoads: string[] = [];
+  page.on('request', (request) => {
+    if (request.isNavigationRequest()) pageLoads.push(request.url());
+  });
+  const facts = page.getByRole('region', { name: 'Container facts', exact: true });
+
+  await navigation(page);
+  await page.getByTitle('payments-api', { exact: true }).filter({ visible: true }).click();
+  await expect(facts).toBeVisible();
+  await expect.poll(() => current.workspace.view).toBe('containers');
+  await navigation(page);
+  await page.getByRole('button', { name: /^Archived question 1 local/ }).click();
+  await expect(page.getByRole('heading', { name: 'Archived question 1' })).toBeVisible();
+  await expect(page.getByRole('textbox')).toHaveValue('Acknowledged draft');
+  await expect(facts).toBeHidden();
+  await expect.poll(() => current.workspace.view).toBe('diagnostics');
+
+  await navigation(page);
+  await page.getByTitle('payments-api', { exact: true }).filter({ visible: true }).click();
+  await expect(facts).toBeVisible();
+  other.workspace = {
+    ...other.workspace,
+    view: 'containers',
+    selected_container: current.workspace.selected_container,
+  };
+  await navigation(page);
+  await page.getByRole('button', { name: /^Archived question 2 local/ }).click();
+  await expect(page.getByRole('heading', { name: 'Archived question 2' })).toBeVisible();
+  await expect(facts).toBeHidden();
+  await expect.poll(() => other.workspace.view).toBe('diagnostics');
+  expect(pageLoads).toEqual([]);
+  expect(api.submissions).toEqual([]);
+  expect(api.cancellations).toEqual([]);
+});
+
+test('submits the first question while a chat on another host is working', async ({ page }) => {
+  const api = await savedApi(page);
+  const background = api.chats[1]!;
+  background.host = 'other-host';
+  background.active_turn_id = background.turns.items[0]!.id;
+  await page.goto('/');
+  await expect(page.getByRole('textbox')).toHaveValue('Acknowledged draft');
+  await navigation(page);
+  await page.locator('.workspace-nav:visible').getByRole('button', { name: 'New investigation', exact: true }).click();
+  const input = page.getByRole('textbox');
+  const submit = page.getByRole('button', { name: 'Investigate', exact: true });
+  await expect(input).toHaveValue('');
+  await expect(submit).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Why diagnosis is unavailable' })).toHaveCount(0);
+  const query = 'What happened to the gateway?';
+  await input.fill(query);
+  await expect(submit).toBeEnabled();
+  await submit.click();
+  await expect(page.getByRole('heading', { name: query, exact: true })).toBeVisible();
+  expect(api.submissions).toMatchObject([{ kind: 'question', query }]);
+  expect(background.active_turn_id).not.toBeNull();
+  expect(api.cancellations).toEqual([]);
+});
+
+test('blocks diagnosis from container facts while another chat on the same host is running', async ({ page }, info) => {
+  const api = await savedApi(page);
+  const background = api.chats[1]!;
+  background.active_turn_id = randomUUID();
+  await page.clock.install();
+  await page.goto('/');
+  await expect(page.getByRole('textbox')).toHaveValue('Acknowledged draft');
+  await navigation(page);
+  await expect(page.getByRole('status', { name: 'Diagnosis running: Archived question 2' })).toBeVisible();
+  await page.locator('.workspace-nav:visible').getByRole('button', { name: 'New investigation', exact: true }).click();
+  await navigation(page);
+  await page.getByTitle('payments-api', { exact: true }).filter({ visible: true }).click();
+  await expect(page.getByRole('region', { name: 'Container facts', exact: true })).toBeVisible();
+  await chooseOption(page.getByRole('combobox', { name: 'Language' }), 'ru');
+
+  const facts = page.getByRole('region', { name: 'Факты о контейнере', exact: true });
+  const diagnose = facts.getByRole('button', { name: 'Диагностировать', exact: true });
+  const tooltip = facts.getByRole('tooltip');
+  const reason = 'На этом хосте выполняется диагностика в другом чате.';
+  await expect(diagnose).toBeDisabled();
+  await expect(diagnose).toHaveAccessibleDescription(reason);
+  if (info.project.name === 'mobile') await diagnose.tap({ force: true });
+  else await diagnose.focus();
+  await expect(tooltip).toBeVisible();
+  await expect(tooltip).toHaveText(reason);
+  expect(api.submissions).toEqual([]);
+  expect(api.chats).toHaveLength(12);
+
+  background.active_turn_id = null;
+  await page.clock.runFor(6000);
+  await expect(diagnose).toBeEnabled();
+  await expect(tooltip).toBeHidden();
+  await expect(facts).toBeVisible();
+});
+
+test('localizes host-busy conflicts and refreshes activity without resubmitting', async ({ page }) => {
+  const api = await savedApi(page);
+  let admissions = 0;
+  await page.route('**/api/v1/investigations/*/turns', (route) => {
+    admissions++;
+    api.chats[1]!.active_turn_id = randomUUID();
+    return route.fulfill({
+      status: 409,
+      json: { code: 'turn_busy', message: 'A diagnostic turn is already running on this host' },
+    });
+  });
+  await page.goto('/');
+  const input = page.getByRole('textbox');
+  await expect(input).toHaveValue('Acknowledged draft');
+  await chooseOption(page.getByRole('combobox', { name: 'Language' }), 'ru');
+  const submit = page.getByRole('button', { name: 'Исследовать', exact: true });
+  await submit.click();
+  await expect(page.getByText('На этом хосте уже выполняется диагностика.', { exact: true })).toBeVisible();
+  await expect(submit).toBeDisabled();
+  await expect(input).toHaveValue('Acknowledged draft');
+  expect(admissions).toBe(1);
+  expect(api.cancellations).toEqual([]);
 });
 
 test('waits for model verification before warning about a saved model', async ({ page }) => {
@@ -215,6 +341,38 @@ test('focus refresh adopts another tab running turn and Stop cancels it without 
   expect(api.cancellations).toEqual([running.id]);
   expect(api.submissions).toEqual([]);
   expect(api.mutations).toBe(0);
+});
+
+test('shows progress on a background saved chat and restores its delete action after completion', async ({
+  page,
+}, info) => {
+  const api = await savedApi(page);
+  const background = api.chats[1]!;
+  background.active_turn_id = randomUUID();
+  await page.clock.install();
+  await page.goto('/');
+  const draft = page.getByRole('textbox');
+  await expect(draft).toHaveValue('Acknowledged draft');
+  await navigation(page);
+  const history = page.getByRole('region', { name: 'Saved chats' });
+  const activity = history.getByRole('status', { name: 'Diagnosis running: Archived question 2' });
+  const remove = history.getByRole('button', { name: 'Delete saved chat: Archived question 2', exact: true });
+  await expect(activity).toBeVisible();
+  await expect(remove).toHaveCount(0);
+  await expect(
+    history.getByRole('button', { name: 'Delete saved chat: Archived question 1', exact: true }),
+  ).toBeEnabled();
+  await history.screenshot({ path: info.outputPath('saved-chat-activity.png') });
+  await expect.poll(() => api.reads).toContain(`GET /investigations/${background.id}`);
+
+  background.active_turn_id = null;
+  await page.clock.runFor(6000);
+  await expect(remove).toBeEnabled();
+  await expect(activity).toHaveCount(0);
+  if ((page.viewportSize()?.width ?? 1440) <= 1100) await page.keyboard.press('Escape');
+  await expect(draft).toHaveValue('Acknowledged draft');
+  expect(api.submissions).toEqual([]);
+  expect(api.cancellations).toEqual([]);
 });
 
 test('bootstraps cookie history before Demo, pages older chats and restores only acknowledged drafts', async ({

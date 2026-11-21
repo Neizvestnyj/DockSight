@@ -44,6 +44,7 @@ def compose_stacks(containers: tuple[ContainerSnapshot, ...]) -> tuple[StackSumm
                     int(row.state == "running"),
                     row.exit_code,
                     health=row.health,
+                    last_healthcheck=row.last_healthcheck,
                 )
                 for row in rows
             ),

@@ -39,11 +39,20 @@
   flex-wrap: wrap;
   align-items: flex-start;
 }
-.diagnosis-actions {
+.diagnosis-controls > span {
   display: grid;
   gap: 4px;
+  align-items: stretch;
 }
-.diagnosis-actions .continue-diagnosis {
+.diagnosis-controls button[aria-disabled='true'] {
+  cursor: not-allowed;
+  color: var(--faint);
+  background: var(--raised);
+  border-color: var(--border);
+  text-decoration: none;
+  transform: none;
+}
+.continue-diagnosis {
   min-height: 32px;
   justify-content: center;
   text-align: center;
@@ -151,12 +160,11 @@
     width: 100%;
   }
   .container-view-actions > button,
-  .container-view-actions > .diagnosis-actions {
+  .container-view-actions > .diagnosis-controls {
     flex: 1 1 auto;
   }
   .container-view-actions > button,
-  .diagnosis-actions > button,
-  .diagnosis-actions > .continue-diagnosis {
+  .diagnosis-controls button {
     min-height: 44px;
   }
   :global(.fact-strip).runtime-lifecycle {

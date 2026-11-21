@@ -3,21 +3,25 @@ from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any, cast
 
+from pydantic import ValidationError
+
+from docksight.application.container_search import ContainerSummary
 from docksight.application.redaction import Redactor, secret_name
 from docksight.domain.errors import DockSightError, ErrorKind
 from docksight.domain.runtime import (
     ContainerHealth,
     ContainerSnapshot,
     ContainerState,
+    HealthcheckResult,
     LogBatch,
     LogEntry,
     ResourceMetrics,
 )
 
 
-def parse_time(value: str) -> datetime | None:
+def parse_time(value: object) -> datetime | None:
     """Parse Docker timestamps as UTC and discard missing or invalid values."""
-    if not value or value.startswith("0001-"):
+    if not isinstance(value, str) or not value or value.startswith("0001-"):
         return None
     try:
         return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(UTC)
@@ -46,6 +50,10 @@ def map_container(
         for key, _, value in [entry.partition("=")]
         if key in env_allowlist and not secret_name(key)
     )
+    started_at = parse_time(state.get("StartedAt", ""))
+    stopped = status in {"exited", "dead", "restarting"}
+    finished_at = parse_time(state.get("FinishedAt")) if stopped else None
+    raw_health: object = state.get("Health")
 
     return ContainerSnapshot(
         host=host,
@@ -56,12 +64,54 @@ def map_container(
         exit_code=int(state.get("ExitCode", 0)),
         oom_killed=bool(state.get("OOMKilled", False)),
         restart_count=int(raw.get("RestartCount", 0)),
-        started_at=parse_time(state.get("StartedAt", "")),
+        started_at=started_at,
         observed_at=datetime.now(UTC),
         environment=environment,
         compose_project=clean.text(labels.get("com.docker.compose.project", "")) or None,
-        health=_health(state.get("Health")),
+        health=_health(raw_health),
+        last_healthcheck=(
+            _last_healthcheck(raw_health, started_at, finished_at) if not stopped or finished_at is not None else None
+        ),
     )
+
+
+def map_container_summary(raw: Mapping[str, Any], redactor: Redactor) -> ContainerSummary:
+    """Allowlist and redact Docker list metadata without reading container configuration."""
+    labels: object = raw.get("Labels") or {}
+    if not isinstance(labels, dict):
+        raise DockSightError("invalid_runtime_data", "Invalid container list metadata", ErrorKind.DEPENDENCY)
+    metadata = cast(dict[str, object], labels)
+    try:
+        return ContainerSummary.model_validate(
+            {
+                "id": raw.get("Id"),
+                "observed_name": _summary_name(raw.get("Names"), redactor),
+                "image": _clean_summary_text(raw.get("Image"), redactor),
+                "state": raw.get("State"),
+                "compose_project": _clean_summary_text(metadata.get("com.docker.compose.project"), redactor) or None,
+                "swarm_stack": _clean_summary_text(metadata.get("com.docker.stack.namespace"), redactor) or None,
+            }
+        )
+    except ValidationError as exc:
+        raise DockSightError("invalid_runtime_data", "Invalid container list metadata", ErrorKind.DEPENDENCY) from exc
+
+
+def _summary_name(raw_names: object, redactor: Redactor) -> str | None:
+    """Prefer Docker's canonical name and keep the absence of a reported name explicit."""
+    if not isinstance(raw_names, list) or not all(isinstance(name, str) for name in cast(list[object], raw_names)):
+        raise DockSightError("invalid_runtime_data", "Invalid container list metadata", ErrorKind.DEPENDENCY)
+    names = [name.removeprefix("/") for name in cast(list[str], raw_names)]
+    if not names:
+        return None
+    primary = next((name for name in names if name and "/" not in name), names[0])
+    return redactor.text(primary)
+
+
+def _clean_summary_text(value: object, redactor: Redactor) -> object:
+    """Redact text while preserving invalid values for boundary validation."""
+    if not isinstance(value, str):
+        return value
+    return redactor.text(value)
 
 
 def _health(raw: object) -> ContainerHealth | None:
@@ -76,6 +126,50 @@ def _health(raw: object) -> ContainerHealth | None:
     if status not in ("starting", "healthy", "unhealthy"):
         raise DockSightError("invalid_runtime_data", "Unknown container health status", ErrorKind.DEPENDENCY)
     return status
+
+
+def _last_healthcheck(
+    raw: object, started_at: datetime | None, finished_at: datetime | None
+) -> HealthcheckResult | None:
+    """Read the newest probe from the latest run without retaining its output."""
+    if started_at is None or not isinstance(raw, dict):
+        return None
+    history = cast(dict[str, object], raw).get("Log")
+    if not isinstance(history, list):
+        return None
+    for item in reversed(cast(list[object], history)):
+        if not isinstance(item, dict):
+            continue
+        probe = cast(dict[str, object], item)
+        if _probe_in_run(probe, started_at, finished_at):
+            return _probe_result(probe.get("ExitCode"))
+    return None
+
+
+def _probe_in_run(probe: dict[str, object], started_at: datetime, finished_at: datetime | None) -> bool:
+    """Require a completed probe whose start and end fit the container run."""
+    start, end = probe.get("Start"), probe.get("End")
+    if not isinstance(start, str) or not isinstance(end, str):
+        return False
+    probe_start, probe_end = parse_time(start), parse_time(end)
+    return (
+        probe_start is not None
+        and probe_end is not None
+        and started_at <= probe_start <= probe_end
+        and (finished_at is None or probe_end <= finished_at)
+    )
+
+
+def _probe_result(exit_code: object) -> HealthcheckResult | None:
+    """Recognize Docker and command failures while leaving likely signal exits unknown."""
+    if type(exit_code) is not int or not -1 <= exit_code <= 255:
+        return None
+    if exit_code == 0:
+        return "passed"
+    # Docker reserves 2. Shell-style exit codes of 128 + signal leave the probe's outcome inconclusive.
+    if exit_code == 2 or 129 <= exit_code <= 192:
+        return None
+    return "failed"
 
 
 def _cpu_percent(raw: Mapping[str, Any]) -> float | None:

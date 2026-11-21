@@ -75,7 +75,7 @@ export function GroupReport({
                     }
                   >{`${row.running} / ${row.total} ${t('task replicas')}`}</span>
                 ) : (
-                  <ContainerStatus state={row.state} health={row.health} />
+                  <ContainerStatus state={row.state} health={row.health} last_healthcheck={row.last_healthcheck} />
                 )}
                 {row.exit_code !== null && row.state === 'exited' && (
                   <small>

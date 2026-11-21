@@ -10,7 +10,8 @@ from requests import RequestException
 from docksight.adapters.outbound.docker.groups import SwarmAPI, compose_stacks, swarm_stacks
 from docksight.adapters.outbound.docker.hosts import HostConfig, connect
 from docksight.adapters.outbound.docker.logs import LogAPI, read_logs
-from docksight.adapters.outbound.docker.mapping import map_container, map_metrics, parse_logs
+from docksight.adapters.outbound.docker.mapping import map_container, map_container_summary, map_metrics, parse_logs
+from docksight.application.container_search import ContainerSummary
 from docksight.application.redaction import Redactor
 from docksight.domain.errors import DockSightError, ErrorKind
 from docksight.domain.runtime import (
@@ -42,8 +43,8 @@ class DockerAPI(SwarmAPI, LogAPI, Protocol):
         """Read the raw inspect document for one container."""
         ...
 
-    def containers(self, *, all: bool, limit: int) -> list[dict[str, Any]]:
-        """List containers within the requested inventory limit."""
+    def containers(self, *, all: bool, limit: int = -1) -> list[dict[str, Any]]:
+        """List container metadata with an optional Docker inventory limit."""
         ...
 
     def stats(self, container: str, *, stream: bool) -> dict[str, Any]:
@@ -144,6 +145,13 @@ class DockerRuntime:
             )
 
         return await self._call(host, read)
+
+    async def container_summaries(self, host: str) -> tuple[ContainerSummary, ...]:
+        """List metadata for all containers on the exact host in one Docker request."""
+        return await self._call(
+            host,
+            lambda client: tuple(map_container_summary(row, self._redactor) for row in client.containers(all=True)),
+        )
 
     async def inspect(self, host: str, container_id: str) -> ContainerSnapshot:
         """Read one allowlisted and sanitized inspect snapshot."""

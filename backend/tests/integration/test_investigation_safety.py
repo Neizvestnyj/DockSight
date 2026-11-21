@@ -146,6 +146,8 @@ def test_public_archive_reads_withhold_valid_but_inconsistent_turn_snapshots(tmp
             connection.commit()
         read = api.get(f"/api/v1/turns/{turn_id}", headers=HEADERS)
         assert read.status_code == 409 and read.json()["code"] == "history_unsupported"
+        search = api.post("/api/v1/investigations/search", headers=HEADERS, json={"q": "foreign-snapshot-bytes"})
+        assert search.status_code == 200 and search.json()["items"] == []
         for suffix in ("", "/turns"):
             page = api.get(f"/api/v1/investigations/{identity}" + suffix, headers=HEADERS)
             assert page.status_code == 200

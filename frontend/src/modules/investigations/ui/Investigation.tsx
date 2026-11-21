@@ -7,6 +7,7 @@ import {
   isMessageKey,
   stateLabel,
   targetKindLabel,
+  type MessageKey,
 } from '../../../shared/i18n/messages';
 import { useLocale } from '../../../shared/i18n/locale';
 import { useState } from 'react';
@@ -14,6 +15,9 @@ import { ArrowDown, ArrowRight, ArrowUpRight, Check, LoaderCircle, Terminal, Tri
 import { targetKey } from '../../../shared/contracts/contracts';
 import type { Action, Container, DiagnosticTarget, GroupTarget } from '../../../shared/contracts/contracts';
 import type { Transport } from '../../../shared/contracts/transport';
+import type { SavedTurn } from '../../../shared/contracts/investigation-contracts';
+import { useQuestionView } from '../model/useQuestionView';
+import type { Turn } from '../model/turns';
 import { ActionReview } from '../../actions';
 import type { useInvestigation } from '../model/useInvestigation';
 import { DiagnosticTrace } from './DiagnosticTrace';
@@ -34,9 +38,11 @@ interface Props {
   draft: string;
   setDraft: (value: string) => void;
   host: string;
-  blocked?: boolean;
+  blockedReason?: MessageKey;
   group?: GroupTarget;
   target?: DiagnosticTarget;
+  searchTurn?: SavedTurn;
+  active?: boolean;
 }
 
 /** Compose conclusions, typed observations, and an always-available follow-up query. */
@@ -48,15 +54,16 @@ export function Investigation({
   draft,
   setDraft,
   host,
-  blocked = false,
+  blockedReason,
   group,
   target,
+  searchTurn,
+  active = true,
 }: Props) {
   const { t } = useLocale();
+  const blocked = Boolean(blockedReason);
   const { turns, running, run, chooseTarget, stop } = investigation;
-  const [view, setView] = useState<{ id: string; latest: string } | null>(null);
-  const latest = turns.at(-1);
-  const turn = selectedTurn();
+  const { turn, question, chooseView, anchoring, readOnlyAnchor } = useQuestionView(turns, searchTurn, active);
   const [reference, setReference] = useState<string | null>(null);
   const [review, setReview] = useState<Action | null>(null);
   const [outcomes, setOutcomes] = useState<Record<string, Action>>({});
@@ -67,11 +74,6 @@ export function Investigation({
   const errorMessage = localizedError();
   const selected = selectedEvidence();
   const narrative = (text: string) => (demo && isMessageKey(text) ? t(text) : text);
-
-  /** Keep historical navigation tied to the latest turn that was present when it was selected. */
-  function selectedTurn() {
-    return (view?.latest === latest?.id && turns.find((row) => row.id === view?.id)) || latest;
-  }
 
   /** Translate only a known Demo query, leaving operator text verbatim. */
   function queryText() {
@@ -111,7 +113,7 @@ export function Investigation({
   /** Submit one host-bound query and keep its text available for a manual retry. */
   function submit(query: string, target?: DiagnosticTarget) {
     if (blocked) return;
-    setView(null);
+    chooseView();
     void run(query, false, target);
     if (demo) setDraft('');
   }
@@ -126,21 +128,23 @@ export function Investigation({
             kind: target.kind === 'compose' ? 'Compose' : 'Swarm',
             name: target.name,
           });
-    setView(null);
+    chooseView();
     const boundedTarget =
       client.history && target.kind === 'container' ? { ...target, name: target.name.slice(0, 256) } : target;
     void run(query, true, boundedTarget);
   }
 
   /** Show the selected question, scope, attempts, and progress. */
-  function questionHistory(turn: NonNullable<typeof latest>) {
+  function questionHistory(turn: Turn) {
     return (
       <>
         <div className={`${styles['query-line']} query-line`}>
           <span className={`${styles['query-glyph']}`} aria-hidden="true">
             ↳
           </span>
-          <h2>{displayedQuery}</h2>
+          <h2 ref={question} tabIndex={-1}>
+            {displayedQuery}
+          </h2>
           <span className={`muted ${controlStyles['muted']} ${styles['query-author']}`}>{t('Operator')}</span>
         </div>
         {turn.createdAt && (
@@ -191,7 +195,7 @@ export function Investigation({
   }
 
   /** Show the current evidence collection state. */
-  function pendingObservation(turn: NonNullable<typeof latest>) {
+  function pendingObservation(turn: Turn) {
     return (
       <>
         {turn.state === 'running' && !answer && (
@@ -299,7 +303,7 @@ export function Investigation({
   }
 
   /** Explain interrupted or failed turns and preserve explicit retry. */
-  function turnFailure(turn: NonNullable<typeof latest>) {
+  function turnFailure(turn: Turn) {
     return (
       <>
         {(turn.state === 'failed' || turn.state === 'stopped' || turn.state === 'interrupted') && (
@@ -338,16 +342,16 @@ export function Investigation({
   }
 
   /** Keep clarification, trace, and historical evidence attached to the selected turn. */
-  function turnEvidence(turn: NonNullable<typeof latest>) {
+  function turnEvidence(turn: Turn) {
     return (
       <>
         {turn.state === 'awaiting_selection' && turn.selection && (
           <GroupClarification
             selection={turn.selection}
             host={host}
-            disabled={running || blocked}
+            disabled={clarificationBlocked()}
             choose={(target) => {
-              setView({ id: turn.id, latest: latest!.id });
+              chooseView(turn.id);
               void chooseTarget(turn.id, target);
             }}
           />
@@ -383,6 +387,20 @@ export function Investigation({
     );
   }
 
+  /** Clarification needs a question in the currently loaded turn owner. */
+  function clarificationBlocked() {
+    return running || blocked || readOnlyAnchor;
+  }
+
+  /** Return from the matched snapshot to the live end of the investigation. */
+  function searchNavigation() {
+    return anchoring ? (
+      <button type="button" className={controlStyles['text-button']} onClick={() => chooseView()}>
+        {t('Back to latest answer')}
+      </button>
+    ) : null;
+  }
+
   return (
     <>
       <div className="investigation-content">
@@ -402,11 +420,8 @@ export function Investigation({
             {t('Older answers')}
           </button>
         )}
-        <TurnNavigation
-          turns={turns}
-          saved={Boolean(client.history)}
-          choose={(id) => setView({ id, latest: latest!.id })}
-        />
+        <TurnNavigation turns={turns} saved={Boolean(client.history)} choose={chooseView} />
+        {searchNavigation()}
         {turn ? (
           <>
             {questionHistory(turn)}
@@ -440,7 +455,7 @@ export function Investigation({
         draft={draft}
         setDraft={setDraft}
         host={host}
-        blocked={blocked}
+        blockedReason={blockedReason}
         running={running}
         hasTurn={Boolean(turn)}
         group={group}

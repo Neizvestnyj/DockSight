@@ -562,7 +562,7 @@ describe('revisioned workspace', () => {
     });
     const { result } = renderHook(() => useWorkspace(api));
     await waitFor(() => expect(result.current.ready).toBe(true));
-    let navigating: Promise<void>;
+    let navigating: Promise<void | boolean>;
     act(() => {
       result.current.setDraft('First edit');
       navigating =
@@ -889,7 +889,7 @@ describe('revisioned workspace', () => {
       .mockResolvedValueOnce({ ...detail, id: '22222222-2222-4222-8222-222222222222' });
     const { result } = renderHook(() => useWorkspace(api));
     await waitFor(() => expect(result.current.ready).toBe(true));
-    let older: Promise<void>;
+    let older: Promise<boolean>;
     act(() => {
       older = result.current.open(id);
     });

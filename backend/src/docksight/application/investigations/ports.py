@@ -10,6 +10,7 @@ from docksight.application.investigations.contracts import (
     ActorWorkspacePatch,
     DiagnosticCommand,
     InvestigationPage,
+    InvestigationSearchPage,
     InvestigationView,
     InvestigationWorkspace,
     SavedTurn,
@@ -32,6 +33,12 @@ class InvestigationArchive(Protocol):
 
     async def list_owned(self, actor: str, limit: int = 10, cursor: str | None = None) -> InvestigationPage:
         """List recent owned activity without expiring older archives."""
+        ...
+
+    async def search(
+        self, actor: str, query: str, limit: int = 10, cursor: str | None = None
+    ) -> InvestigationSearchPage:
+        """Find owned investigations by case-folded question text, title, or host."""
         ...
 
     async def read(self, actor: str, investigation_id: str) -> InvestigationView:

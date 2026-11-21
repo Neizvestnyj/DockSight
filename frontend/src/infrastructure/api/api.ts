@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { chatSearchPageSchema, containerSearchPageSchema } from '../../shared/contracts/search-contracts';
+import type { GroupTarget } from '../../shared/contracts/contracts';
 import {
   actionSchema,
   containerSchema,
@@ -152,6 +154,16 @@ export class ApiClient implements Transport, HistoryTransport {
     return investigationPageSchema.parse(await (await this.send(`/investigations?${params}`, { signal })).json());
   }
 
+  /** Search the owned archive without putting question fragments in the URL. */
+  async searchInvestigations(query: string, signal: AbortSignal, before?: string) {
+    const response = await this.send('/investigations/search', {
+      method: 'POST',
+      signal,
+      body: JSON.stringify({ q: query, before }),
+    });
+    return chatSearchPageSchema.parse(await response.json());
+  }
+
   /** Create one server-owned archive with a stable submission-independent identity. */
   async createInvestigation(id: string, host: string) {
     return investigationViewSchema
@@ -298,6 +310,24 @@ export class ApiClient implements Transport, HistoryTransport {
     return z
       .array(containerSchema)
       .parse(await (await this.send(`/hosts/${encodeURIComponent(host)}/containers`, { signal })).json());
+  }
+
+  /** Find current summaries on one configured host and optional exact group. */
+  async searchContainers(host: string, query: string, signal: AbortSignal, group?: GroupTarget, before?: string) {
+    const params = new URLSearchParams({ q: query });
+    if (group) {
+      params.set('group_kind', group.kind);
+      params.set('group_name', group.name);
+    }
+    if (before) params.set('before', before);
+    const response = await this.send(`/hosts/${encodeURIComponent(host)}/container-search?${params}`, { signal });
+    return containerSearchPageSchema
+      .refine(
+        (page) =>
+          !group ||
+          page.items.every((row) => row[group.kind === 'compose' ? 'compose_project' : 'swarm_stack'] === group.name),
+      )
+      .parse(await response.json());
   }
 
   /** Read and verify the exact selected resource, including its allowlisted environment. */

@@ -9,6 +9,7 @@ import {
   type InvestigationDetail,
   type InvestigationView,
   type InvestigationWorkspace,
+  type SavedTurn,
   type WorkspaceChanges,
 } from '../../../shared/contracts/investigation-contracts';
 
@@ -36,6 +37,7 @@ export function useWorkspace(history?: HistoryTransport, onDraftCreated?: () => 
   const [error, setError] = useState('');
   const [actor, setActor] = useState<ActorWorkspace>();
   const [detail, setDetail] = useState<InvestigationDetail>();
+  const [historySelection, setHistorySelection] = useState<{ turn?: SavedTurn }>();
   const [draftChat, setDraftChat] = useState<DraftChat>();
   const [diagnosisChatId, setDiagnosisChatId] = useState<string>();
   const [draft, showDraft] = useState('');
@@ -52,6 +54,7 @@ export function useWorkspace(history?: HistoryTransport, onDraftCreated?: () => 
   const pendingDiagnosis = useRef<(InitialDiagnosis & { id: string; epoch: number }) | undefined>(undefined);
   const accountGeneration = useRef(0);
   const active = useRef<AbortController | null>(null);
+  const activeQuestion = useRef<AbortController | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const initialDraft = useRef<InitialDraft | null>(null);
   const initialCreation = useRef<InitialCreation | null>(null);
@@ -59,15 +62,20 @@ export function useWorkspace(history?: HistoryTransport, onDraftCreated?: () => 
   const draftCreation = useRef<{ intent: CreationIntent; operation: Promise<void> } | undefined>(undefined);
   const historyOwner = useRef(history);
   const clearPendingSave = useCallback(() => clearTimeout(timer.current), []);
+  const detachReads = useCallback(() => {
+    active.current?.abort();
+    activeQuestion.current?.abort();
+  }, []);
 
   /** Install an acknowledged workspace or clear it before opening a local editor. */
-  const install = useCallback((value?: InvestigationDetail) => {
+  const install = useCallback((value?: InvestigationDetail, selection?: { turn?: SavedTurn }) => {
     current.current = value;
     provisionalChat.current = undefined;
     setDraftChat(undefined);
     pending.current = {};
     conflict.current = null;
     setDetail(value);
+    setHistorySelection(selection);
     showDraft(value?.workspace.draft ?? '');
     setSaveState('saved');
   }, []);
@@ -141,7 +149,7 @@ export function useWorkspace(history?: HistoryTransport, onDraftCreated?: () => 
     const chat = current.current;
     if (provisionalChat.current?.host === host || (chat?.host === host && !chat.turn_count && !chat.workspace.draft))
       return true;
-    active.current?.abort();
+    detachReads();
     generation.current++;
     initialDraft.current = null;
     initialCreation.current = null;
@@ -230,31 +238,65 @@ export function useWorkspace(history?: HistoryTransport, onDraftCreated?: () => 
     return true;
   }
 
-  /** Detach old reads before opening another owned archive. */
+  /** Read a question in the current chat without detaching its active diagnosis. */
+  async function openCurrentQuestion(history: HistoryTransport, chat: InvestigationDetail, turnId: string) {
+    const controller = new AbortController();
+    const epoch = generation.current;
+    activeQuestion.current = controller;
+    setError('');
+    try {
+      const result = await history.turn(turnId, controller.signal);
+      if (detached(epoch, controller.signal)) return false;
+      verifyQuestion(chat, result);
+      setHistorySelection({ turn: result });
+      return true;
+    } catch {
+      if (!detached(epoch, controller.signal)) setError('Could not open saved chat. Retry the read.');
+      return false;
+    }
+  }
+
+  /** Open an archive from the recent chat list. */
   async function open(id: string) {
-    if (!history) return;
-    if (!(await flushNavigation())) return;
+    return history ? openArchive(history, id) : false;
+  }
+
+  /** Keep same-chat search navigation independent of workspace and turn ownership. */
+  async function openResult(id: string, turnId: string | null) {
+    if (!history) return false;
+    activeQuestion.current?.abort();
+    const chat = current.current;
+    if (chat?.id === id && !loading) {
+      if (turnId) return openCurrentQuestion(history, chat, turnId);
+      setHistorySelection({});
+      return true;
+    }
+    return openArchive(history, id, turnId);
+  }
+
+  /** Detach old reads before opening an owned archive in the diagnostic view. */
+  async function openArchive(history: HistoryTransport, id: string, turnId?: string | null) {
+    if (!(await flushNavigation())) return false;
     const openingInitial = !current.current;
-    active.current?.abort();
+    detachReads();
     const controller = new AbortController();
     active.current = controller;
     const epoch = ++generation.current;
     setLoading(true);
     setError('');
     try {
-      const result = await history.investigation(id, controller.signal);
-      if (detached(epoch, controller.signal)) return;
-      if (!(await flush()) || detached(epoch, controller.signal)) return;
+      const { result, matchedTurn } = await readArchive(history, id, controller.signal, turnId);
+      if (detached(epoch, controller.signal)) return false;
+      if (!(await flush()) || detached(epoch, controller.signal)) return false;
       const workspace = currentWorkspace(id, result);
       if (openingInitial) {
         initialDraft.current = null;
         initialCreation.current = null;
       }
-      install({
-        ...result,
-        workspace,
-      });
+      install({ ...result, workspace }, { turn: matchedTurn });
+      if (turnId === undefined && workspace.view === 'containers') patch({ view: 'diagnostics' });
       await savePreferences({ last_investigation_id: id });
+      return !detached(epoch, controller.signal);
     } catch {
       if (!detached(epoch, controller.signal)) {
         if (openingInitial && !current.current) {
@@ -263,6 +305,7 @@ export function useWorkspace(history?: HistoryTransport, onDraftCreated?: () => 
         }
         setError('Could not open saved chat. Retry the read.');
       }
+      return false;
     } finally {
       if (generation.current === epoch) setLoading(false);
     }
@@ -270,7 +313,7 @@ export function useWorkspace(history?: HistoryTransport, onDraftCreated?: () => 
 
   /** Take ownership of the read and any text entered while creation is in flight. */
   function beginCreation(host: string) {
-    active.current?.abort();
+    detachReads();
     const initial = !current.current;
     prepareInitialDraft(initial, host);
     const epoch = ++generation.current;
@@ -439,7 +482,7 @@ export function useWorkspace(history?: HistoryTransport, onDraftCreated?: () => 
       });
     return () => {
       controller.abort();
-      active.current?.abort();
+      detachReads();
       clearPendingSave();
       // Invalidate the latest operation, including creates started after bootstrap.
       // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -447,7 +490,7 @@ export function useWorkspace(history?: HistoryTransport, onDraftCreated?: () => 
       // eslint-disable-next-line react-hooks/exhaustive-deps -- Invalidate the latest preference operation as well.
       accountGeneration.current++;
     };
-  }, [history, attempt, install, clearPendingSave]);
+  }, [history, attempt, install, clearPendingSave, detachReads]);
 
   return {
     ready,
@@ -455,11 +498,14 @@ export function useWorkspace(history?: HistoryTransport, onDraftCreated?: () => 
     error,
     actor,
     detail,
+    openedFromHistory: Boolean(historySelection),
+    searchTurn: historySelection?.turn,
     chat: detail ?? draftChat,
     draftChat,
     draft,
     saveState,
     open,
+    openResult,
     create,
     beginDraft,
     saveNewDraft,
@@ -477,4 +523,20 @@ export function useWorkspace(history?: HistoryTransport, onDraftCreated?: () => 
     retry: () => setAttempt((value) => value + 1),
     revision: () => current.current?.workspace.revision ?? 0,
   };
+}
+
+/** Read a matched question independently of the latest page and verify its exact chat. */
+async function readArchive(history: HistoryTransport, id: string, signal: AbortSignal, turnId?: string | null) {
+  const [result, matchedTurn] = await Promise.all([
+    history.investigation(id, signal),
+    turnId ? history.turn(turnId, signal) : undefined,
+  ]);
+  if (matchedTurn) verifyQuestion(result, matchedTurn);
+  return { result, matchedTurn };
+}
+
+/** Reject a mismatched saved search result before showing it under a chat. */
+function verifyQuestion(chat: InvestigationDetail, question: SavedTurn) {
+  if (question.investigation_id !== chat.id || question.host !== chat.host)
+    throw new Error('Search result is outside the selected investigation.');
 }

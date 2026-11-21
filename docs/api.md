@@ -14,6 +14,7 @@ See [API tokens](configuration.md#api-tokens) and [browser authentication](#brow
 | GET          | `/model-providers`                             | Configured providers and the default model             |
 | GET          | `/model-providers/{provider}/models`           | Lazy, bounded model catalog and freshness              |
 | GET          | `/hosts/{host}/containers`                     | Up to 200 inspected containers                         |
+| GET          | `/hosts/{host}/container-search`               | Search local container summaries                      |
 | GET          | `/hosts/{host}/containers/{id}`                | Sanitized snapshot                                     |
 | GET          | `/hosts/{host}/containers/{id}/logs?lines=200` | Bounded timestamped logs                               |
 | GET          | `/hosts/{host}/containers/{id}/stats`          | CPU/memory observations, null when unavailable         |
@@ -28,6 +29,7 @@ See [API tokens](configuration.md#api-tokens) and [browser authentication](#brow
 | POST         | `/auth/logout`                                 | Revoke cookie authority                                |
 | GET / PATCH  | `/me/workspace`                                | Actor preferences with optimistic revision             |
 | POST / GET   | `/investigations`                              | Create or page owned investigations                    |
+| POST         | `/investigations/search`                       | Search owned chat titles, hosts, and questions          |
 | GET / DELETE | `/investigations/{id}`                         | Detail or explicit inactive-history deletion           |
 | PATCH        | `/investigations/{id}/workspace`               | Save supplied workspace fields                         |
 | GET / POST   | `/investigations/{id}/turns`                   | Page saved turns or accept new work                    |
@@ -51,6 +53,19 @@ Snapshot observation uses its own typed `error` event after headers.
 `GET /hosts` returns configured metadata without contacting Docker. Container and stack responses use allowlisted,
 redacted Docker data.
 
+### Container search
+
+`GET /hosts/{host}/container-search` requires a nonblank `q` of at most 128 characters. It matches container names,
+images, and Compose projects by case-insensitive literal substring. Container IDs match by prefix.
+Search covers local Docker containers in every state before applying the page limit.
+
+Supply both `group_kind` (`compose` or `swarm`) and `group_name` to scope the search to an exact group on that host.
+For Swarm this covers containers local to the selected host. Results contain `id`, `name`, `image`, `state`,
+`compose_project`, and `swarm_stack`. Fetch details using the returned ID.
+
+The response is `{items, next_cursor}` in ascending ID order, with `limit` from 1 to 50 (default 20).
+Pass the cursor as `before` with the same host, query, and group.
+
 ### Logs
 
 - At the byte limit, retain the newest complete lines after redaction and discard incomplete leading fragments.
@@ -62,10 +77,14 @@ redacted Docker data.
 
 ### Container health
 
-Container snapshots and Compose container members include `health`: `starting`, `healthy`, `unhealthy`, or `null`.
-Health is independent of process `state`. A running process can be unhealthy. Missing observations and Docker's `none`
-map to `null`. Probe commands, output, and healthcheck history are excluded.
-Swarm service summaries do not infer container health from running replica counts and retain `health=null`.
+Container snapshots, host overview members, and Compose container members expose `health` and `last_healthcheck`.
+`health` is Docker's aggregate status: `starting`, `healthy`, `unhealthy`, or `null`. It is independent of process
+`state` and can report `unhealthy` after Docker stops monitoring a container.
+`last_healthcheck` is `passed` or `failed` for the latest recorded probe completed within the latest container run.
+Exit code `0` records a pass. Docker probe errors and ordinary nonzero command exits record failures. Missing or
+inconclusive results are `null`, including reserved exit code `2` and exit codes consistent with signals.
+Older observations may omit this field. Probe commands, output, and the probe history are excluded.
+Swarm service summaries retain `null` for both fields.
 See Docker's [healthcheck semantics](https://docs.docker.com/reference/dockerfile/#healthcheck).
 
 ## Browser client
@@ -116,6 +135,15 @@ Metadata, active turn identity, workspace, and the initial turn page come from o
 Both accept `limit` in 1..50 and optional `before`, and return `{items, next_cursor}`. Turn items are in chronological
 display order, including the newest page. Fetch older pages with `before=next_cursor`. Opaque cursors are at most
 1024 characters and are bound to the actor and exact query/investigation. The latest-ten page is not retention.
+
+`POST /investigations/search` reads the owned archive with JSON `{q, limit?, before?}`. Supply a nonblank `q` of at
+most 120 characters. Searches use case-insensitive literal substrings of saved questions, chat titles, and host IDs.
+Removed-host chats are searchable. The response is `{items, next_cursor}` in newest-active order, with `limit` from
+1 to 50 (default 10). Pass the cursor as `before` with the same query.
+
+Each result includes `id`, `host`, `title`, `updated_at`, and `match`. When a question matches, `match` contains
+the newest matching `turn_id`, an `excerpt`, and half-open UTF-16 offsets `start` and `end`. Title-only and host-only
+matches return `match: null`. Read the matched question with `GET /turns/{id}`.
 
 `GET /me/workspace` returns `revision`, `last_investigation_id`, `host`, and `model`.
 `PATCH /me/workspace` and `PATCH /investigations/{id}/workspace` require `expected_revision` and apply only supplied

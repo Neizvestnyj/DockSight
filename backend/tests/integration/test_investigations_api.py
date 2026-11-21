@@ -86,6 +86,84 @@ def test_owned_latest_ten_and_older_pages_do_not_remove_archives(tmp_path: Path)
         assert api.get(f"/api/v1/investigations/{identities[0]}", headers=HEADERS).status_code == 200
 
 
+def test_search_finds_newest_matching_question_outside_initial_archive_page(tmp_path: Path) -> None:
+    model = ScriptedModel(
+        [
+            reply
+            for _ in range(3)
+            for reply in (
+                ModelReply("Ready"),
+                ModelReply('{"summary":"Saved answer","uncertain":true,"evidence_ids":[],"widgets":[]}'),
+            )
+        ]
+    )
+    path = tmp_path / "state.sqlite3"
+    identity = str(uuid4())
+    with history_client(path, model) as api:
+        api.post("/api/v1/investigations", headers=HEADERS, json={"id": identity, "host": "local"})
+        for revision, question in enumerate(("Inspect the API", "Почему медленно?", "🐳 Почему API падает?")):
+            accepted = api.post(
+                f"/api/v1/investigations/{identity}/turns",
+                headers=HEADERS,
+                json={
+                    "kind": "question",
+                    "submission_id": str(uuid4()),
+                    "expected_revision": revision,
+                    "query": question,
+                },
+            )
+            assert accepted.status_code == 202
+            turn_id = accepted.json()["snapshot"]["id"]
+            assert api.get(f"/api/v1/turns/{turn_id}/events", headers=HEADERS).status_code == 200
+        for _ in range(10):
+            body = {"id": str(uuid4()), "host": "local"}
+            assert api.post("/api/v1/investigations", headers=HEADERS, json=body).status_code == 201
+    with history_client(path) as api:
+        search = "/api/v1/investigations/search"
+        response = api.post(search, headers=HEADERS, json={"q": "  ПОЧЕМУ  "})
+        assert response.status_code == 200
+        page = response.json()
+        assert page["next_cursor"] is None
+        assert len(page["items"]) == 1
+        item = page["items"][0]
+        assert item["id"] == identity and item["title"] == "Inspect the API" and item["host"] == "local"
+        assert item["match"] == {"turn_id": turn_id, "excerpt": "🐳 Почему API падает?", "start": 3, "end": 9}
+        assert api.get(f"/api/v1/turns/{turn_id}", headers=HEADERS).json()["investigation_id"] == identity
+        assert api.post(search, headers=HEADERS, json={"q": "Saved answer"}).json()["items"] == []
+        assert api.post(search, headers=HEADERS, json={"q": "%"}).json()["items"] == []
+        bob = {"Authorization": "Bearer bob-token-at-least-24-characters"}
+        assert api.post(search, headers=bob, json={"q": "почему"}).json()["items"] == []
+
+
+def test_search_pages_owned_matches_and_binds_cursors_to_queries(tmp_path: Path) -> None:
+    search = "/api/v1/investigations/search"
+    runtime = FakeRuntime()
+    with history_client(tmp_path / "state.sqlite3", runtime=runtime) as api:
+        identities = [str(uuid4()), str(uuid4())]
+        for identity in identities:
+            body = {"id": identity, "host": "local"}
+            assert api.post("/api/v1/investigations", headers=HEADERS, json=body).status_code == 201
+        with patch.object(runtime, "hosts", return_value=()):
+            first = api.post(search, headers=HEADERS, json={"q": "LOC", "limit": 1})
+            assert first.status_code == 200
+            page = first.json()
+            assert [item["id"] for item in page["items"]] == identities[1:]
+            assert page["items"][0]["match"] is None
+            query = {"q": "loc", "limit": 1, "before": page["next_cursor"]}
+            second = api.post(search, headers=HEADERS, json=query).json()
+            assert [item["id"] for item in second["items"]] == identities[:1]
+            assert second["next_cursor"] is None
+            assert api.post(search, headers=HEADERS, json=query | {"q": "local"}).status_code == 400
+            bob = {"Authorization": "Bearer bob-token-at-least-24-characters"}
+            assert api.post(search, headers=bob, json=query).status_code == 400
+
+
+@pytest.mark.parametrize("body", [{"q": " "}, {"q": "x" * 121}, {"q": "api", "limit": True}, {"q": "api", "extra": 1}])
+def test_search_validates_query_and_page_bounds(tmp_path: Path, body: dict[str, object]) -> None:
+    with history_client(tmp_path / "state.sqlite3") as api:
+        assert api.post("/api/v1/investigations/search", headers=HEADERS, json=body).status_code in {400, 422}
+
+
 def test_workspace_conflicts_return_current_safe_snapshot_and_validate_preferences(tmp_path: Path) -> None:
     with history_client(tmp_path / "state.sqlite3") as api:
         identity = str(uuid4())

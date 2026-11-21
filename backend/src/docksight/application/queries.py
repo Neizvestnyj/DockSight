@@ -1,5 +1,6 @@
 from typing import Literal
 
+from docksight.application.container_search import ContainerSearch, ContainerSearchPage
 from docksight.application.ports.runtime import RuntimeReadPort
 from docksight.domain.errors import DockSightError, ErrorKind
 from docksight.domain.runtime import (
@@ -34,6 +35,12 @@ class RuntimeQueries:
         self.check_host(host)
 
         return await self.runtime.containers(host)
+
+    async def search_containers(self, host: str, search: ContainerSearch) -> ContainerSearchPage:
+        """Page literal matches over runtime summary metadata from one configured host."""
+        self.check_host(host)
+        prepared = search.prepare(host)
+        return prepared.page(await self.runtime.container_summaries(host))
 
     async def inspect(self, host: str, container_id: str) -> ContainerSnapshot:
         """Read one sanitized container snapshot on the selected host."""

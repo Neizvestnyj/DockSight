@@ -33,6 +33,7 @@ test('keeps reported health separate from lifecycle state across inventory and r
   let health: 'healthy' | 'unhealthy' | 'starting' | null = 'unhealthy';
   let state: 'running' | 'exited' = 'running';
   let exit_code = 0;
+  let last_healthcheck: 'failed' | null = null;
   await routeSavedApi(page, (route) => {
     const request = route.request();
     expect(request.method()).toBe('GET');
@@ -44,7 +45,9 @@ test('keeps reported health separate from lifecycle state across inventory and r
       return route.fulfill({ json: [{ ...snapshot, health, state, exit_code }] });
     if (url.pathname.endsWith('/stats')) return route.fulfill({ json: snapshot.metrics });
     if (url.pathname.endsWith('/logs')) return route.fulfill({ json: { entries: [], truncated: false } });
-    return route.fulfill({ json: { ...snapshot, health, state, exit_code } });
+    return route.fulfill({
+      json: { ...snapshot, health, state, exit_code, last_healthcheck },
+    });
   });
   await openDemo(page);
   await connectApi(page);
@@ -73,17 +76,21 @@ test('keeps reported health separate from lifecycle state across inventory and r
   }
   state = 'exited';
   health = 'unhealthy';
+  await facts.getByRole('button', { name: 'Refresh data' }).click();
+  await expect(facts.locator('.runtime-state').getByText('exited', { exact: true })).toHaveClass(/neutral/);
+  await expect(facts.locator('.health-fact').getByText('Not reported')).toHaveClass(/neutral/);
   exit_code = 1;
+  last_healthcheck = 'failed';
   await facts.getByRole('button', { name: 'Refresh data' }).click();
   await expect(facts.locator('.runtime-state').getByText('exited', { exact: true })).toHaveClass(/neutral/);
   await expect(facts.locator('.health-fact')).toContainText('Last healthcheck');
-  await expect(facts.locator('.health-fact').getByText('Unhealthy')).toHaveClass(/negative/);
+  await expect(facts.locator('.health-fact').getByText('Failed')).toHaveClass(/negative/);
   await chooseOption(page.getByRole('combobox', { name: 'Language' }), 'ru');
   const russianFacts = page.getByRole('region', { name: 'Факты о контейнере', exact: true });
   await expect(russianFacts.locator('.runtime-state')).toContainText('завершён');
   await expect(russianFacts.locator('.runtime-state')).not.toContainText('Сбой');
   await expect(russianFacts.locator('.health-fact')).toContainText('Последняя проверка');
-  await expect(russianFacts.locator('.health-fact').getByText('Сбой', { exact: true })).toBeVisible();
+  await expect(russianFacts.locator('.health-fact').getByText('Не пройдена', { exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   await page.screenshot({ path: `test-results/${info.project.name}-container-health-ru.png`, fullPage: true });
@@ -138,9 +145,31 @@ test('opens a new chat for another container and continues a chat only by explic
   await chooseContainer(page, other.name);
   await page.getByRole('button', { name: 'Diagnose', exact: true }).click();
   await expect.poll(() => requests.length).toBe(1);
-  await chooseContainer(page, snapshot.name);
+  await chooseContainer(page, other.name);
   const facts = page.getByRole('region', { name: 'Container facts', exact: true });
-  await expect(facts.getByRole('button', { name: 'Diagnose in a new chat' })).toBeDisabled();
+  const newChat = facts.getByRole('button', { name: 'Diagnose in a new chat', exact: true });
+  const continueChat = facts.getByRole('button', { name: 'Continue in current chat', exact: true });
+  await expect(newChat).toBeDisabled();
+  await expect(continueChat).toBeDisabled();
+  const tooltip = facts.getByRole('tooltip');
+  const busyReason = 'A request is running in the current chat.';
+  if (info.project.name === 'mobile') await continueChat.tap({ force: true });
+  else await continueChat.hover();
+  await expect(tooltip).toBeVisible();
+  await expect(tooltip).toHaveText(busyReason);
+  await expect(continueChat).toHaveAccessibleDescription(busyReason);
+  await expect(facts.getByRole('button', { name: 'Why diagnosis is unavailable' })).toHaveCount(0);
+  await page.screenshot({ path: `test-results/${info.project.name}-diagnosis-blocked-hint.png` });
+  await page.keyboard.press('Escape');
+  await expect(tooltip).toBeHidden();
+  const refresh = facts.getByRole('button', { name: 'Refresh data' });
+  await expect(refresh).toBeEnabled();
+  await refresh.focus();
+  await page.keyboard.press('Tab');
+  await expect(continueChat).toBeFocused();
+  await expect(tooltip).toHaveText(busyReason);
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Escape');
   expect(requests).toHaveLength(1);
   await facts.getByRole('button', { name: 'Back to investigation' }).click();
   await expect(page.getByRole('button', { name: 'Stop diagnosis' })).toBeVisible();
@@ -167,8 +196,6 @@ test('opens a new chat for another container and continues a chat only by explic
   await facts.screenshot({ path: `test-results/${info.project.name}-container-diagnosis.png` });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
-  const newChat = facts.getByRole('button', { name: 'Diagnose in a new chat', exact: true });
-  const continueChat = facts.getByRole('button', { name: 'Continue in current chat', exact: true });
   await newChat.click();
   await expect.poll(() => requests.length).toBe(2);
   expect(requests[1]?.chatId).not.toBe(requests[0]?.chatId);
@@ -191,13 +218,34 @@ test('opens a new chat for another container and continues a chat only by explic
     .getByRole('region', { name: 'Saved chats' })
     .getByRole('button', { name: /^Investigate checkout-api/ })
     .click();
-  await facts.getByRole('button', { name: 'Back to investigation' }).click();
+  await expect(page.getByRole('heading', { name: originalTitle, exact: true })).toBeVisible();
   await expect(page.getByRole('textbox')).toHaveValue('Keep this draft in its original chat.');
   await expect(historical.locator('footer time')).toHaveAttribute('datetime', snapshot.observed_at);
   await chooseContainer(page, other.name);
-  await facts.getByRole('button', { name: 'Diagnose', exact: true }).click();
+  await continueChat.click();
   await expect.poll(() => requests.length).toBe(4);
   expect(requests[3]).toMatchObject({ chatId: requests[0]?.chatId, question: { target: { id: other.id } } });
+
+  await expect(page.getByRole('button', { name: 'Stop diagnosis' })).toHaveCount(0);
+  await page.route('**/api/v1/investigations', (route) =>
+    route.request().method() === 'POST'
+      ? route.fulfill({ status: 503, json: { code: 'storage_unavailable', message: 'Save failed' } })
+      : route.fallback(),
+  );
+  if ((page.viewportSize()?.width ?? 1440) <= 1100)
+    await page.getByRole('button', { name: 'Open host and containers' }).click();
+  await page
+    .locator('.workspace-nav:visible')
+    .getByRole('button', { name: 'New investigation', exact: true })
+    .press('Enter');
+  await page.getByRole('textbox').fill('Keep the draft when the first save fails.');
+  await expect(page.getByRole('button', { name: 'Retry save', exact: true })).toBeVisible();
+  await chooseContainer(page, other.name);
+  await expect(newChat).toBeDisabled();
+  await expect(continueChat).toBeDisabled();
+  await continueChat.focus();
+  await expect(tooltip).toHaveText('Could not save the chat. Retry saving to continue.');
+  expect(requests).toHaveLength(4);
 });
 
 test('keeps large untrusted observations bounded and retains successful data after a failed refresh', async ({

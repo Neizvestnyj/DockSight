@@ -4,6 +4,27 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versions: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Dates record merges into `master` unless a release date is set separately. Version links show the corresponding changes.
 
+## [0.9.0] - 2026-11-21
+
+### Added
+
+- Search saved chats by question text, title, or host and open the matching question directly.
+- Find containers on the selected host or group by name, ID prefix, image, or Compose project.
+
+### Changed
+
+- Close empty chat and container searches on outside clicks and retain entered queries.
+
+### Fixed
+
+- Show the last recorded healthcheck result for stopped containers and avoid false failures after normal stops.
+- Show both diagnosis destinations for chats with questions or a draft and explain blocked actions on the button.
+- Allow saved questions when the API confirms the selected model and the browser cannot read its catalog.
+- Show active diagnoses in saved chats and remove the open-chat prompt from a new empty editor.
+- Open saved chats directly from container details, including chats previously left on a container.
+- Explain why sign-in is required when a connection retry finds an invalid session.
+- Block diagnosis while another chat is working on the same host and show the localized reason on the action.
+
 ## [0.8.3] - 2026-11-20
 
 ### Changed
@@ -345,6 +366,7 @@ Dates record merges into `master` unless a release date is set separately. Versi
 - Prepared actions are bound to the caller and exact target. Unknown mutation outcomes block conflicting actions.
   Runtime mutations are never retried automatically.
 
+[0.9.0]: https://github.com/Neizvestnyj/DockSight/compare/9b3c9ad...feature/chat-and-container-search
 [0.8.3]: https://github.com/Neizvestnyj/DockSight/compare/b54acee...feature/diagnosis-chat-and-login-language-picker
 [0.8.2]: https://github.com/Neizvestnyj/DockSight/compare/master...feature/coverage-badges-and-browser-smoke
 [0.8.1]: https://github.com/Neizvestnyj/DockSight/compare/35d18d7...0fc86b6

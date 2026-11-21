@@ -3,7 +3,7 @@ import sharedStyles from '../../../shared/ui/Shared.module.css';
 import controlStyles from '../../../shared/ui/Controls.module.css';
 import { useLocale } from '../../../shared/i18n/locale';
 import { Select } from '../../../shared/ui/Select';
-import { useId } from 'react';
+import { useId, useRef, useState } from 'react';
 import {
   Activity,
   ArrowRight,
@@ -13,10 +13,13 @@ import {
   Check,
   CircleHelp,
   Plus,
+  Search,
   RefreshCw,
   Server,
 } from 'lucide-react';
-import type { Container, Host } from '../../../shared/contracts/contracts';
+import { targetKey, type Container, type GroupTarget, type Host } from '../../../shared/contracts/contracts';
+import type { Transport } from '../../../shared/contracts/transport';
+import { ContainerSearch } from './ContainerSearch';
 import { Logo, ContainerStatus } from '../../../shared/ui/ui';
 import { utc } from '../../../shared/lib/format';
 import type { ReactNode } from 'react';
@@ -24,6 +27,8 @@ import styles from './Sidebar.module.css';
 
 interface Props {
   savedChats?: ReactNode;
+  searchClient?: Transport;
+  searchGroup?: GroupTarget;
   transient?: boolean;
   hosts: Host[];
   host: string;
@@ -73,9 +78,13 @@ export function Sidebar({
   returnDemo,
   savedChats,
   transient,
+  searchClient,
+  searchGroup,
 }: Props) {
   const { t } = useLocale();
   const hostSelectId = useId();
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchTrigger = useRef<HTMLButtonElement>(null);
   /** Report inventory refresh progress and retained observations. */
   function inventoryFeedback() {
     return (
@@ -128,7 +137,11 @@ export function Sidebar({
                   <Box size={14} />
                   <span>{container.name}</span>
                 </span>
-                <ContainerStatus state={container.state} health={container.health} />
+                <ContainerStatus
+                  state={container.state}
+                  health={container.health}
+                  last_healthcheck={container.last_healthcheck}
+                />
                 {container.state === 'exited' && container.exit_code !== 0 && (
                   <span className={`${styles['container-exit']} negative ${feedbackStyles['negative']}`}>
                     {t('Exit code')} {container.exit_code}
@@ -237,7 +250,19 @@ export function Sidebar({
       <section className={`${styles['inventory']}`}>
         <header>
           <h2>{t('Containers')}</h2>
-          <span>{inventory.length}</span>
+          {!searchOpen && <span>{inventory.length}</span>}
+          {searchClient && (
+            <button
+              ref={searchTrigger}
+              type="button"
+              className={controlStyles['icon-button']}
+              aria-label={t('Search containers')}
+              aria-expanded={searchOpen}
+              onClick={() => setSearchOpen((open) => !open)}
+            >
+              <Search size={14} aria-hidden="true" />
+            </button>
+          )}
           <button
             className={`icon-button ${controlStyles['icon-button']}${fetching ? ` refreshing ${feedbackStyles['refreshing']}` : ''}`}
             aria-busy={fetching}
@@ -259,7 +284,21 @@ export function Sidebar({
             </button>
           </div>
         )}
-        {containerList()}
+        {searchOpen && searchClient ? (
+          <ContainerSearch
+            key={searchGroup ? targetKey(searchGroup) : host}
+            client={searchClient}
+            host={host}
+            group={searchGroup}
+            selected={selected}
+            choose={chooseContainer}
+            close={() => setSearchOpen(false)}
+            trigger={searchTrigger}
+            browsing={containerList()}
+          />
+        ) : (
+          containerList()
+        )}
       </section>
       {connectionDetails()}
     </>

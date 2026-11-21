@@ -27,7 +27,8 @@ component styles. `src/shared/styles/` supplies global fonts, foundation, respon
 ## Connection and recovery
 
 At startup the client probes the first-party cookie session. A valid session opens API mode. An unauthorized response
-offers sign-in or explicit **Explore Demo**. A network failure offers retry. Demo is labeled and uses fictional data,
+offers sign-in or explicit **Explore Demo**. A network failure offers retry. If the retry returns an unauthorized
+response, the sign-in screen explains that the session is no longer valid. Demo is labeled and uses fictional data,
 separate transport, and no Docker or model calls. Its history lives in the tab.
 
 Same-origin sign-in exchanges a bearer token for an opaque HttpOnly cookie. JavaScript keeps the session identity and
@@ -48,6 +49,10 @@ The language selector is beside the DockSight logo on the sign-in screen.
 
 API chats belong to the authenticated actor and each is scoped to one configured host. The latest ten form one page,
 not a retention limit. Older chats remain available through pagination. Last-active chat is restored only at bootstrap.
+An active diagnosis replaces its chat's delete control with a progress indicator. The list checks active chats for
+completion while the page is visible, including when another chat is open.
+Known activity in another chat blocks a new diagnosis on the same host. If activity changes before the server admits a
+question, the client explains the conflict and refreshes the saved chat list.
 Focus refreshes the open chat and list without following another tab's navigation. Deletion requires confirmation and
 cannot remove a running diagnosis. Server action protection survives history deletion.
 
@@ -60,7 +65,8 @@ restores acknowledged data only. Navigation waits for pending saves. A failure o
 workspace. The operator explicitly retries, reloads the saved draft, or chooses to use the local draft. Focus reads do
 not silently rebase a dirty workspace revision.
 
-Saved host, model, scope, container selection, and view come from the server workspace. A removed host or model leaves
+Saved host, model, scope, container selection, and view come from the server workspace. Selecting a saved chat from the
+sidebar opens its diagnostics directly, even if its last view was a container. A removed host or model leaves
 the archive readable but requires an explicit valid choice before continuation. Changing host starts another chat.
 An unavailable container retains its full historical ID. A replacement with the same name is never substituted.
 See [saved investigations and workspaces](api.md#saved-investigations-and-workspaces) and
@@ -103,9 +109,12 @@ Inspect includes allowlisted environment values. Failed sources retain their las
 
 Container diagnosis uses the exact selected ID. **Diagnose in a new chat** starts a separate investigation and
 preserves the previous chat and its draft. **Continue in current chat** adds the container to the open investigation.
-An empty chat without a draft and a chat whose latest explicit target is the same container offer **Diagnose** in
-place. Selecting a container does not start or stop a turn. Finished answers and historical observations stay in
-their original chats. Demo retains previous chats in memory for the current host.
+Both destinations are shown when the open chat has a request or a draft. An empty chat offers **Diagnose** in place.
+Hover over a blocked action to see why diagnosis is unavailable. With a keyboard or touch, use **Continue in current
+chat**, or **Diagnose** in an empty chat, to open the same hint.
+Selecting a container does not start or stop a turn. Finished answers and historical observations stay in their
+original chats.
+Demo retains previous chats in memory for the current host.
 
 ## System status
 

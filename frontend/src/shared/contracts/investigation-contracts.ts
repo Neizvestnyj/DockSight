@@ -7,6 +7,7 @@ import {
   traceStepSchema,
 } from './contracts';
 import { modelSelectionSchema } from './model-contracts';
+import type { ChatSearchResult, SearchPage } from './search-contracts';
 
 const identifier = z.string().uuid();
 const label = z.string().min(1).max(128);
@@ -115,6 +116,7 @@ export interface HistoryTransport {
   actorWorkspace(signal?: AbortSignal): Promise<ActorWorkspace>;
   saveActorWorkspace(expected_revision: number, changes: ActorChanges): Promise<ActorWorkspace>;
   investigations(signal: AbortSignal, before?: string): Promise<InvestigationPage>;
+  searchInvestigations(query: string, signal: AbortSignal, before?: string): Promise<SearchPage<ChatSearchResult>>;
   createInvestigation(id: string, host: string): Promise<InvestigationView>;
   investigation(id: string, signal: AbortSignal): Promise<InvestigationDetail>;
   olderTurns(id: string, before: string, signal: AbortSignal): Promise<TurnPage>;

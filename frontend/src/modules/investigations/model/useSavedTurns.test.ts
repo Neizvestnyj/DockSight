@@ -4,6 +4,7 @@ import { ApiClient } from '../../../infrastructure/api/api';
 import { ApiError } from '../../../shared/contracts/errors';
 import { useSavedTurns, type SavedContext } from './useSavedTurns';
 import { useWorkspace } from './useWorkspace';
+import { useQuestionView } from './useQuestionView';
 import type { SavedTurn } from '../../../shared/contracts/investigation-contracts';
 
 /** Supply a complete safe snapshot while varying only behavior relevant to the case. */
@@ -102,6 +103,64 @@ it('adopts a refreshed running turn once and stops that exact turn without submi
   });
   expect(result.current.running).toBe(false);
   expect(post).not.toHaveBeenCalled();
+});
+
+it('opens an older question in the current chat without detaching its running turn', async () => {
+  const api = new ApiClient();
+  const older = snapshot({ query: 'Can the worker connect to the database?', state: 'awaiting_selection' });
+  const running = snapshot({ query: 'Current diagnosis', state: 'running', revision: 0, finished_at: null });
+  const archive = context([running]).detail!;
+  vi.spyOn(api, 'actorWorkspace').mockResolvedValue({
+    revision: 0,
+    last_investigation_id: archive.id,
+    host: 'local',
+    model: null,
+  });
+  const reads = vi.spyOn(api, 'investigation').mockResolvedValue(archive);
+  vi.spyOn(api, 'saveActorWorkspace').mockResolvedValue({
+    revision: 1,
+    last_investigation_id: archive.id,
+    host: 'local',
+    model: null,
+  });
+  let publish!: (row: SavedTurn) => void;
+  const match = new Promise<SavedTurn>((resolve) => {
+    publish = resolve;
+  });
+  const turns = vi.spyOn(api, 'turn').mockImplementation((id) => (id === older.id ? match : Promise.resolve(running)));
+  const observe = vi.spyOn(api, 'observeTurn').mockImplementation(async (_id, _receive, signal) => {
+    await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
+  });
+  const { result } = renderHook(() => {
+    const workspace = useWorkspace(api);
+    const saved = useSavedTurns(api, 'local', undefined, {
+      ...workspace,
+      enabled: !workspace.loading,
+      conflict: workspace.conflictWith,
+      changed: () => {},
+    });
+    return { workspace, saved, display: useQuestionView(saved.turns, workspace.searchTurn) };
+  });
+  await waitFor(() => expect(observe).toHaveBeenCalledOnce());
+
+  let opening!: Promise<boolean>;
+  act(() => {
+    opening = result.current.workspace.openResult(archive.id, older.id);
+  });
+  await waitFor(() => expect(turns.mock.calls.some(([id]) => id === older.id)).toBe(true));
+  expect(result.current.workspace.loading).toBe(false);
+  expect(observe.mock.calls[0]?.[2].aborted).toBe(false);
+  await act(async () => {
+    publish(older);
+    await opening;
+  });
+  expect(reads).toHaveBeenCalledOnce();
+  expect(result.current.workspace.draft).toBe('My draft');
+  expect(result.current.display.turn?.query).toBe(older.query);
+  expect(result.current.display.readOnlyAnchor).toBe(true);
+  expect(result.current.saved.running).toBe(true);
+  act(() => result.current.display.chooseView());
+  expect(result.current.display.turn?.query).toBe(running.query);
 });
 
 it('keeps one observer when local acceptance refreshes the active turn identity', async () => {

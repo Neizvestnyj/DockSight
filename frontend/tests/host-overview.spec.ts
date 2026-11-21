@@ -86,6 +86,17 @@ for (const locale of ['en', 'ru'] as const) {
     await chooseOption(page.getByRole('combobox', { name: 'Language' }), locale);
     overview = page.getByRole('region', { name: locale === 'ru' ? 'Обзор хоста' : 'Host overview', exact: true });
     await expect(overview.getByText(locale === 'ru' ? 'Сбой' : 'Unhealthy')).toBeVisible();
+    const queue = overview.getByRole('article', { name: 'queue-worker', exact: true });
+    await expect(queue.getByText(locale === 'ru' ? 'Последняя проверка' : 'Last healthcheck')).toBeVisible();
+    await expect(queue.getByText(locale === 'ru' ? 'Пройдена' : 'Passed', { exact: true })).toHaveClass(/\bpositive\b/);
+    const migration = overview.getByRole('article', { name: 'migration-runner', exact: true });
+    await expect(migration.getByText(locale === 'ru' ? 'Не пройдена' : 'Failed', { exact: true })).toHaveClass(
+      /\bnegative\b/,
+    );
+    const worker = overview.getByRole('article', { name: 'report-worker', exact: true });
+    await expect(worker.getByText(locale === 'ru' ? 'Нет данных' : 'Not reported', { exact: true })).toHaveClass(
+      /\bneutral\b/,
+    );
     await expect(page.locator('.conclusion')).toContainText(answer.summary);
     await overview.scrollIntoViewIfNeeded();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
