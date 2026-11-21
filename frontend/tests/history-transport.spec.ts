@@ -148,7 +148,7 @@ test('submits the first question while a chat on another host is working', async
   expect(api.cancellations).toEqual([]);
 });
 
-test('blocks diagnosis from container facts while another chat on the same host is running', async ({ page }) => {
+test('blocks diagnosis from container facts while another chat on the same host is running', async ({ page }, info) => {
   const api = await savedApi(page);
   const background = api.chats[1]!;
   background.active_turn_id = randomUUID();
@@ -165,15 +165,21 @@ test('blocks diagnosis from container facts while another chat on the same host 
 
   const facts = page.getByRole('region', { name: 'Факты о контейнере', exact: true });
   const diagnose = facts.getByRole('button', { name: 'Диагностировать', exact: true });
+  const tooltip = facts.getByRole('tooltip');
+  const reason = 'На этом хосте выполняется диагностика в другом чате.';
   await expect(diagnose).toBeDisabled();
-  await facts.getByRole('button', { name: 'Почему диагностика недоступна' }).click();
-  await expect(facts.getByRole('tooltip')).toHaveText('На этом хосте выполняется диагностика в другом чате.');
+  await expect(diagnose).toHaveAccessibleDescription(reason);
+  if (info.project.name === 'mobile') await diagnose.tap({ force: true });
+  else await diagnose.focus();
+  await expect(tooltip).toBeVisible();
+  await expect(tooltip).toHaveText(reason);
   expect(api.submissions).toEqual([]);
   expect(api.chats).toHaveLength(12);
 
   background.active_turn_id = null;
   await page.clock.runFor(6000);
   await expect(diagnose).toBeEnabled();
+  await expect(tooltip).toBeHidden();
   await expect(facts).toBeVisible();
 });
 
