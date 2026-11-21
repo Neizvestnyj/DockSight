@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ApiClient } from './api';
 import { consumeEvents } from './stream';
-import { demoContainer } from '../demo/demo';
+import { demoContainer, demoSystemStatus } from '../demo/demo';
 
 it('keeps a chat query in the request body and scopes container search to the chosen host and group', async () => {
   const client = new ApiClient('/api/v1', 'token', async (url, init) => {
@@ -91,6 +91,35 @@ describe('direct container reads', () => {
     await expect(client.logs('local', snapshot.id, signal)).rejects.toThrow();
     await expect(client.stats('local', snapshot.id, signal)).rejects.toThrow();
   });
+});
+
+it('rejects valid system status data for a different host or selected model', async () => {
+  const local = demoSystemStatus('local');
+  const selected = { provider: local.provider, model: local.model };
+  const fetcher = vi
+    .fn<typeof fetch>()
+    .mockResolvedValueOnce(Response.json({ ...local, host: 'other' }))
+    .mockResolvedValueOnce(Response.json({ ...local, model: 'different-model' }))
+    .mockResolvedValueOnce(Response.json(local));
+  const client = new ApiClient('/api/v1', 'token', fetcher);
+  const signal = new AbortController().signal;
+  await expect(client.systemStatus('local', signal, selected)).rejects.toMatchObject({ code: 'status_unsupported' });
+  await expect(client.systemStatus('local', signal, selected)).rejects.toMatchObject({ code: 'status_unsupported' });
+  await expect(client.systemStatus('local', signal, selected)).resolves.toEqual(local);
+  expect(fetcher.mock.calls.map(([url]) => url)).toEqual(
+    Array<string>(3).fill(`/api/v1/system/status?${new URLSearchParams({ host: 'local', ...selected })}`),
+  );
+});
+
+it('rejects another grouping kind before presenting an exact diagnosis scope', async () => {
+  const fetcher = vi.fn<typeof fetch>(async () =>
+    Response.json([{ name: 'shop', kind: 'swarm', total: 0, running: 0, container_ids: [], members: [] }]),
+  );
+  const client = new ApiClient('/api/v1', 'token', fetcher);
+  await expect(client.stacks('local', 'compose', new AbortController().signal)).rejects.toThrow(
+    'Group response is outside the selected scope.',
+  );
+  expect(fetcher).toHaveBeenCalledExactlyOnceWith('/api/v1/hosts/local/stacks?kind=compose', expect.any(Object));
 });
 
 /** Encode arbitrary byte splits as a streamed HTTP response. */
@@ -193,4 +222,32 @@ describe('action recovery', () => {
     expect(new Headers(init?.headers).get('Idempotency-Key')).toBe('original-key');
     expect(JSON.parse(String(init?.body as string))).toEqual({ confirmed: true });
   });
+});
+
+it('preserves the server conflict revision and request identity for draft recovery', async () => {
+  const current = {
+    revision: 9,
+    draft: 'Acknowledged draft',
+    target: null,
+    selected_container: null,
+    view: 'diagnostics',
+  };
+  const fetcher = vi.fn<typeof fetch>(async () =>
+    Response.json(
+      { code: 'workspace_conflict', message: 'Revision changed', request_id: 'conflict-request', current },
+      { status: 409 },
+    ),
+  );
+  const client = new ApiClient('/api/v1', 'token', fetcher);
+  const id = crypto.randomUUID();
+  await expect(client.saveWorkspace(id, 8, { draft: 'Local draft' })).rejects.toMatchObject({
+    code: 'workspace_conflict',
+    requestId: 'conflict-request',
+    httpStatus: 409,
+    current,
+  });
+  expect(fetcher).toHaveBeenCalledExactlyOnceWith(
+    `/api/v1/investigations/${id}/workspace`,
+    expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ expected_revision: 8, draft: 'Local draft' }) }),
+  );
 });

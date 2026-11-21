@@ -76,6 +76,47 @@ async def test_maintenance_commands_fail_before_construction_when_backend_owns_l
         await database.close()
 
 
+async def test_offline_migrate_uses_the_configured_path_and_leaves_the_database_openable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "state.sqlite3"
+    path.touch()
+    monkeypatch.setenv("DOCKSIGHT_STATE_PATH", str(path))
+    monkeypatch.setenv("DOCKSIGHT_PROVIDER", "not-a-provider")
+    assert json.loads(await state_cli.run_command(["migrate"])) == {"migrated": True}
+    status = json.loads(await state_cli.run_command(["status"]))
+    assert status["schema_revision"] == "0001_state"
+    assert not status["recovery_required"]
+
+
+def test_cli_reports_missing_state_as_an_error_without_creating_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = tmp_path / "missing.sqlite3"
+    monkeypatch.setattr(sys, "argv", ["state", "--state-path", str(path), "migrate"])
+    assert state_cli.main() == 1
+    captures = capsys.readouterr()
+    assert captures.out == ""
+    assert captures.err == "storage_missing: Persistent state file does not exist\n"
+    assert not path.exists()
+
+
+def test_cli_reports_invalid_reconciliation_configuration_without_exposing_input(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = tmp_path / "state.sqlite3"
+    path.touch()
+    assert json.loads(asyncio.run(state_cli.run_command(["--state-path", str(path), "migrate"]))) == {"migrated": True}
+    before = path.read_bytes()
+    monkeypatch.setenv("DOCKSIGHT_PROVIDER", "private-sentinel")
+    monkeypatch.setattr(sys, "argv", ["state", "--state-path", str(path), "reconcile", "--action-id", str(uuid4())])
+    assert state_cli.main() == 1
+    captures = capsys.readouterr()
+    assert captures.out == ""
+    assert captures.err == "configuration_invalid: Maintenance configuration or confirmation is invalid\n"
+    assert path.read_bytes() == before
+
+
 async def test_cli_confirmation_audits_os_account_despite_poisoned_environment(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

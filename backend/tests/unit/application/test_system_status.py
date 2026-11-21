@@ -5,7 +5,7 @@ import pytest
 
 from docksight.application.ports.status import ProbeResult
 from docksight.application.system_status import SystemStatus
-from docksight.domain.errors import DockSightError
+from docksight.domain.errors import DockSightError, ErrorKind
 from tests.fakes import FakeRuntime
 
 
@@ -68,3 +68,44 @@ async def test_unexpected_failures_are_safe_and_unselected_host_is_not_probed() 
     assert result.model_check.state == "not_checked"
     assert "secret-sentinel" not in result.model_dump_json()
     assert "private-provider" not in result.model_dump_json()
+
+
+@pytest.mark.parametrize(
+    ("failure", "expected_code"),
+    [
+        (DockSightError("runtime_timeout", "private-sentinel", ErrorKind.TIMEOUT), "timeout"),
+        (DockSightError("runtime_unavailable", "private-sentinel", ErrorKind.UNAVAILABLE), "runtime_unavailable"),
+        (RuntimeError("private-sentinel"), "check_failed"),
+    ],
+)
+async def test_docker_status_keeps_safe_failure_codes_and_independent_model_status(
+    failure: Exception, expected_code: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    class BrokenRuntime(FakeRuntime):
+        """Raise a controlled transport error during the Docker probe."""
+
+        async def ping(self, host: str) -> None:
+            """Fail with private detail that must not be logged or shown to clients."""
+            raise failure
+
+    result = await SystemStatus(BrokenRuntime(), Probe(), "ollama", "model").check("local", "status-request")
+    assert (result.docker.state, result.docker.code) == ("unavailable", expected_code)
+    assert result.provider_check.state == "available"
+    assert "private-sentinel" not in result.model_dump_json()
+    assert "private-sentinel" not in caplog.text
+    if expected_code == "check_failed":
+        assert "status-request" in caplog.text
+
+
+async def test_provider_timeout_keeps_docker_available_and_model_unchecked() -> None:
+    class TimedOutProbe(Probe):
+        """Represent metadata failure at its own deadline."""
+
+        async def check(self) -> tuple[ProbeResult, ProbeResult]:
+            """Raise the timeout exposed by a bounded provider probe."""
+            raise TimeoutError
+
+    result = await SystemStatus(FakeRuntime(), TimedOutProbe(), "ollama", "model").check("local")
+    assert result.docker.state == "available"
+    assert (result.provider_check.state, result.provider_check.code) == ("unavailable", "timeout")
+    assert (result.model_check.state, result.model_check.code) == ("not_checked", "provider_unavailable")

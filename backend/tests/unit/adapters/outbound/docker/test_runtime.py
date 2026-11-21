@@ -9,8 +9,49 @@ from docksight.adapters.outbound.docker.hosts import HostConfig
 from docksight.adapters.outbound.docker.runtime import DockerRuntime
 from docksight.application.redaction import Redactor
 from docksight.domain.errors import DockSightError, ErrorKind
-from docksight.domain.runtime import ContainerSnapshot
+from docksight.domain.runtime import ContainerSnapshot, ResourceMetrics
 from tests.fakes import snapshot
+
+
+async def test_inventory_and_direct_reads_share_exact_identity_and_environment_redaction() -> None:
+    runtime = DockerRuntime((HostConfig(id="local"),), Redactor(()), env_allowlist=("MODE", "DB_PASSWORD"))
+    sdk = MagicMock()
+    identity = "a" * 64
+    sdk.api.containers.return_value = [{"Id": identity}]
+    sdk.api.inspect_container.return_value = {
+        "Id": identity,
+        "Name": "/worker",
+        "Config": {"Image": "worker:test", "Env": ["MODE=production", "DB_PASSWORD=private-sentinel", "PRIVATE=raw"]},
+        "State": {"Status": "running"},
+    }
+    with patch("docksight.adapters.outbound.docker.runtime.connect", return_value=sdk):
+        (listed,) = await runtime.containers("local")
+        direct = await runtime.inspect("local", identity)
+    sdk.api.containers.assert_called_once_with(all=True, limit=200)
+    assert [call.args for call in sdk.api.inspect_container.call_args_list] == [(identity,), (identity,)]
+    for observed in (listed, direct):
+        assert (observed.host, observed.id, observed.name) == ("local", identity, "worker")
+        assert observed.environment == (("MODE", "production"),)
+    assert sdk.close.call_count == 2
+
+
+@pytest.mark.parametrize("state", ["running", "exited"])
+async def test_metrics_are_measured_only_for_running_containers(state: str) -> None:
+    runtime = DockerRuntime((HostConfig(id="local"),), Redactor(()))
+    sdk = MagicMock()
+    identity = "a" * 64
+    sdk.api.inspect_container.return_value = {"State": {"Status": state}}
+    sdk.api.stats.return_value = {"memory_stats": {"usage": 1024, "limit": 4096}}
+    with patch("docksight.adapters.outbound.docker.runtime.connect", return_value=sdk):
+        metrics = await runtime.stats("local", identity)
+    sdk.api.inspect_container.assert_called_once_with(identity)
+    if state == "running":
+        sdk.api.stats.assert_called_once_with(identity, stream=False)
+        assert metrics == ResourceMetrics(None, 1024, 4096)
+    else:
+        sdk.api.stats.assert_not_called()
+        assert metrics == ResourceMetrics()
+    sdk.close.assert_called_once_with()
 
 
 async def test_ping_uses_a_short_timeout_and_closes_the_selected_connection() -> None:

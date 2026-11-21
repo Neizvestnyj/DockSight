@@ -14,6 +14,8 @@ Dates record merges into `master` unless a release date is set separately. Versi
 ### Changed
 
 - Close empty chat and container searches on outside clicks and retain entered queries.
+- Require 95% combined backend coverage and 90% frontend line coverage. Add regression coverage for saved chat
+  recovery, provider and Docker failures, and offline state maintenance.
 
 ### Fixed
 

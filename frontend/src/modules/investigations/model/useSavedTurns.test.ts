@@ -319,12 +319,16 @@ it('keeps an unsupported saved answer visible without discarding supported histo
   expect(submissions).not.toHaveBeenCalled();
 });
 
-it('retains saved answers and the cursor when loading older history fails', async () => {
+it('retains saved answers and retries the same cursor when loading older history fails', async () => {
   const api = new ApiClient();
   const existing = snapshot();
+  const earlier = snapshot({ query: 'An older question', created_at: '2026-11-03T12:00:00Z' });
   const saved = context([existing]);
   saved.detail = { ...saved.detail!, turns: { items: [existing], next_cursor: 'older-page' } };
-  const older = vi.spyOn(api, 'olderTurns').mockRejectedValue(new TypeError('Read unavailable'));
+  const older = vi
+    .spyOn(api, 'olderTurns')
+    .mockRejectedValueOnce(new TypeError('Read unavailable'))
+    .mockResolvedValueOnce({ items: [earlier, existing], next_cursor: null });
   const submissions = vi.spyOn(api, 'startTurn');
   const { result } = renderHook(() => useSavedTurns(api, 'local', undefined, saved));
 
@@ -337,8 +341,144 @@ it('retains saved answers and the cursor when loading older history fails', asyn
   expect(result.current.nextCursor).toBe('older-page');
   expect(result.current.olderLoading).toBe(false);
   expect(result.current.error).toBe('Could not load older answers.');
+
+  await act(() => result.current.older());
+  expect(older.mock.calls.map(([id, cursor]) => [id, cursor])).toEqual([
+    [existing.investigation_id, 'older-page'],
+    [existing.investigation_id, 'older-page'],
+  ]);
+  expect(result.current.turns.map((turn) => turn.query)).toEqual([earlier.query, existing.query]);
+  expect(result.current.nextCursor).toBeNull();
   expect(submissions).not.toHaveBeenCalled();
 });
+
+it('reconnects a dropped snapshot stream by reading the same turn without submitting again', async () => {
+  vi.useFakeTimers();
+  const running = snapshot({ state: 'running', revision: 1, finished_at: null });
+  const progress = { ...running, revision: 2 };
+  const completed = { ...running, state: 'completed', revision: 3, finished_at: running.created_at };
+  const route = `/api/v1/turns/${running.id}`;
+  const fetcher = vi
+    .fn<typeof fetch>()
+    .mockResolvedValueOnce(Response.json(running))
+    .mockResolvedValueOnce(
+      new Response(`: heartbeat\r\n\r\nevent: turn.snapshot\r\nid: 2\r\ndata: ${JSON.stringify(progress)}\r\n\r\n`, {
+        headers: { 'Content-Type': 'text/event-stream' },
+      }),
+    )
+    .mockResolvedValueOnce(Response.json(completed));
+  const api = new ApiClient('/api/v1', 'token', fetcher);
+  const saved = { ...context([running]), changed: vi.fn() };
+  const { result } = renderHook(() => useSavedTurns(api, 'local', undefined, saved));
+
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  expect(result.current.error).toMatch(/reconnecting to the saved turn/i);
+  expect(result.current.running).toBe(true);
+
+  await act(async () => vi.advanceTimersByTimeAsync(1_000));
+  expect(fetcher.mock.calls.map(([url, init]) => [url, init?.method ?? 'GET'])).toEqual([
+    [route, 'GET'],
+    [`${route}/events`, 'GET'],
+    [route, 'GET'],
+  ]);
+  expect(result.current.running).toBe(false);
+  expect(result.current.error).toBe('');
+  expect(saved.changed).toHaveBeenCalledOnce();
+});
+
+it.each([
+  ['foreign turn', '2', false, 'Turn response is outside the selected scope.'],
+  ['wrong revision', '1', true, 'Unsupported observation revision.'],
+] as const)('rejects an observation frame with a %s', async (_case, revision, owned, message) => {
+  const active = snapshot({ state: 'running', revision: 1 });
+  const update = snapshot({ ...(owned ? { id: active.id } : {}), revision: 2 });
+  const client = new ApiClient(
+    '/api/v1',
+    'token',
+    async () =>
+      new Response(`event: turn.snapshot\nid: ${revision}\ndata: ${JSON.stringify(update)}\n\n`, {
+        headers: { 'Content-Type': 'text/event-stream' },
+      }),
+  );
+  const receive = vi.fn();
+  await expect(client.observeTurn(active.id, receive, new AbortController().signal)).rejects.toThrow(message);
+  expect(receive).not.toHaveBeenCalled();
+});
+
+it('rejects a saved chat or older page containing another scope’s answer', async () => {
+  const owned = snapshot();
+  const archive = context([owned]).detail!;
+  const otherChat = { ...owned, investigation_id: crypto.randomUUID() };
+  const otherHost = { ...owned, host: 'other-host' };
+  const fetcher = vi
+    .fn<typeof fetch>()
+    .mockResolvedValueOnce(Response.json({ ...archive, turns: { items: [otherHost], next_cursor: null } }))
+    .mockResolvedValueOnce(Response.json({ items: [otherChat], next_cursor: null }));
+  const client = new ApiClient('/api/v1', 'token', fetcher);
+  const signal = new AbortController().signal;
+  await expect(client.investigation(archive.id, signal)).rejects.toThrow(
+    'History response is outside the selected scope.',
+  );
+  await expect(client.olderTurns(archive.id, 'opaque+/cursor', signal)).rejects.toThrow(
+    'History response is outside the selected scope.',
+  );
+  expect(fetcher.mock.calls[1]?.[0]).toBe(
+    `/api/v1/investigations/${archive.id}/turns?limit=20&before=opaque%2B%2Fcursor`,
+  );
+});
+
+it('accepts a terminal snapshot from the existing stream without polling or submitting again', async () => {
+  const running = snapshot({ state: 'running', revision: 1, finished_at: null });
+  const terminal = { ...running, state: 'completed', revision: 2, finished_at: running.created_at };
+  const fetcher = vi
+    .fn<typeof fetch>()
+    .mockResolvedValueOnce(Response.json(running))
+    .mockResolvedValueOnce(
+      new Response(`event: turn.snapshot\nid: 2\ndata: ${JSON.stringify(terminal)}\n\n`, {
+        headers: { 'Content-Type': 'text/event-stream' },
+      }),
+    );
+  const api = new ApiClient('/api/v1', 'token', fetcher);
+  const saved = { ...context([running]), changed: vi.fn() };
+  const { result } = renderHook(() => useSavedTurns(api, 'local', undefined, saved));
+  await waitFor(() => expect(result.current.running).toBe(false));
+  expect(result.current.turns[0]?.state).toBe('completed');
+  expect(result.current.error).toBe('');
+  expect(saved.changed).toHaveBeenCalledOnce();
+  expect(fetcher.mock.calls.map(([url, init]) => [url, init?.method ?? 'GET'])).toEqual([
+    [`/api/v1/turns/${running.id}`, 'GET'],
+    [`/api/v1/turns/${running.id}/events`, 'GET'],
+  ]);
+});
+
+it.each(['turn_busy', 'workspace_conflict'])(
+  'keeps the draft after the server rejects admission with %s',
+  async (code) => {
+    const api = new ApiClient();
+    const current = { revision: 5, draft: 'Another tab’s draft' };
+    const admission = vi
+      .spyOn(api, 'startTurn')
+      .mockRejectedValue(new ApiError('Admission refused', code, 'request-id', 'server', 409, current));
+    const reload = vi.spyOn(api, 'investigation');
+    const saved = { ...context([]), conflict: vi.fn(), changed: vi.fn(), restoreDraft: vi.fn() };
+    const { result } = renderHook(() => useSavedTurns(api, 'local', undefined, saved));
+
+    await act(() => result.current.run('My draft'));
+    expect(admission).toHaveBeenCalledOnce();
+    expect(result.current.turns).toEqual([]);
+    expect(result.current.running).toBe(false);
+    expect(reload).not.toHaveBeenCalled();
+    expect(saved.restoreDraft).not.toHaveBeenCalled();
+    if (code === 'workspace_conflict') {
+      expect(saved.conflict).toHaveBeenCalledWith(current);
+      expect(result.current.error).toBe('Admission refused');
+    } else {
+      expect(saved.changed).toHaveBeenCalledOnce();
+      expect(saved.conflict).not.toHaveBeenCalled();
+      expect(result.current.error).toBe('A diagnosis is already running on this host.');
+    }
+  },
+);
 
 it('posts clarification without replacement text and retains parent compare-and-swap', async () => {
   const api = new ApiClient();

@@ -138,6 +138,19 @@ async def test_exhausted_evidence_budget_rejects_logs_without_overspending() -> 
     assert context.used_bytes <= 65536
 
 
+async def test_inventory_reports_truncation_when_remaining_evidence_cannot_hold_all_containers() -> None:
+    runtime = DiscoveryRuntime()
+    context = EvidenceContext()
+    context.record("env", "local", {"padding": "a" * 65000})
+    tools = DiagnosticTools(runtime, context, "local")
+    result = await tools.execute(ToolCall("inventory", "list_containers", {}))
+    rows = result["containers"]
+    assert isinstance(rows, list)
+    assert len(rows) < len(await runtime.containers("local"))
+    assert result["truncated"] is True
+    assert context.used_bytes <= 65536
+
+
 @pytest.mark.parametrize("reference", ["backend-1", "1" * 64])
 async def test_repeated_read_reuses_observations_across_exact_name_and_id(reference: str) -> None:
     runtime = DiscoveryRuntime()

@@ -2,6 +2,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+from docker.errors import DockerException
 
 from docksight.adapters.outbound.docker.hosts import HostConfig, connect, load_hosts
 from docksight.domain.errors import DockSightError
@@ -78,3 +79,41 @@ def test_ssh_failure_closes_the_paramiko_client_and_proxy(tmp_path: Path, transp
             connect(HostConfig(id="remote", url="ssh://alias"), 2.5)
         client_type.return_value.close.assert_called_once()
         proxy_type.return_value.close.assert_called_once()
+
+
+def test_tcp_host_passes_mtls_credentials_and_requires_ca_verification(tmp_path: Path) -> None:
+    ca, cert, key = (tmp_path / name for name in ("ca.pem", "client.pem", "client-key.pem"))
+    for path in (ca, cert, key):
+        path.touch()
+    host = HostConfig(id="remote", url="tcp://engine:2376", ca_cert=str(ca), client_cert=str(cert), client_key=str(key))
+    with patch("docksight.adapters.outbound.docker.hosts.DockerClient", autospec=True) as client:
+        assert connect(host, 4) is client.return_value
+    settings = client.call_args.kwargs
+    assert settings["base_url"] == host.url and settings["timeout"] == 4
+    session = MagicMock()
+    settings["tls"].configure_client(session)
+    assert session.verify == str(ca)
+    assert session.cert == (str(cert), str(key))
+
+
+def test_cleartext_tcp_from_environment_is_rejected_and_closed() -> None:
+    with patch("docksight.adapters.outbound.docker.hosts._ConfiguredClient.from_env") as from_env:
+        client = from_env.return_value
+        client.api.base_url = "http://engine:2375"
+        with pytest.raises(DockSightError) as caught:
+            connect(HostConfig(id="local"), 4)
+    assert caught.value.code == "insecure_transport"
+    client.close.assert_called_once_with()
+
+
+def test_ssh_rejects_an_unsupported_engine_api_and_closes_the_connection(tmp_path: Path) -> None:
+    config = tmp_path / "config"
+    config.touch()
+    with (
+        patch("docker.transport.sshconn.os.path.expanduser", return_value=str(config)),
+        patch("docker.transport.sshconn.paramiko.SSHClient") as client,
+        patch("docker.api.client.APIClient.version", return_value={"ApiVersion": "1.01"}),
+        pytest.raises(DockerException, match="unsupported API version"),
+    ):
+        connect(HostConfig(id="remote", url="ssh://deploy@engine"), 4)
+    client.return_value.close.assert_called_once_with()

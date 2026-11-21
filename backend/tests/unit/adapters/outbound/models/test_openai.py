@@ -1,12 +1,14 @@
 import json
 
 import httpx2
+import pytest
 from openai import AsyncOpenAI
 from openai.types.responses import ResponseFunctionToolCallParam
 from pydantic import TypeAdapter
 
 from docksight.adapters.outbound.models.openai import OpenAIModel
 from docksight.application.ports.models import ModelMessage, ToolSpec
+from docksight.domain.errors import DockSightError, ErrorKind
 
 
 async def test_responses_preserves_native_reasoning_and_call_ids() -> None:
@@ -77,3 +79,46 @@ async def test_responses_preserves_native_reasoning_and_call_ids() -> None:
     TypeAdapter(ResponseFunctionToolCallParam).validate_python(replayed)
     assert "async_" not in replayed
     assert replayed["async"] is False
+
+
+@pytest.mark.parametrize(
+    ("failure", "code", "kind"),
+    [
+        ("incomplete", "model_incomplete", ErrorKind.DEPENDENCY),
+        ("refusal", "model_refusal", ErrorKind.VALIDATION),
+        ("authorization", "provider_authentication", ErrorKind.DEPENDENCY),
+        ("timeout", "provider_timeout", ErrorKind.TIMEOUT),
+        ("disconnected", "provider_unavailable", ErrorKind.UNAVAILABLE),
+        ("malformed_tool", "invalid_model_response", ErrorKind.DEPENDENCY),
+    ],
+)
+async def test_responses_reject_unusable_diagnoses_without_retries(failure: str, code: str, kind: ErrorKind) -> None:
+    requests: list[httpx2.Request] = []
+
+    def reply(request: httpx2.Request) -> httpx2.Response:
+        """Exercise the provider SDK's real HTTP and response decoding paths."""
+        requests.append(request)
+        if failure == "authorization":
+            return httpx2.Response(401, json={"error": {"message": "private-sentinel"}})
+        if failure == "timeout":
+            raise httpx2.ReadTimeout("private-sentinel", request=request)
+        if failure == "disconnected":
+            raise httpx2.ConnectError("private-sentinel", request=request)
+        output = (
+            [{"type": "message", "content": [{"type": "refusal", "refusal": "private-sentinel"}]}]
+            if failure == "refusal"
+            else [{"type": "function_call", "call_id": "call_1", "name": "inspect", "arguments": "private-sentinel"}]
+        )
+        return httpx2.Response(
+            200,
+            json={"status": "incomplete" if failure == "incomplete" else "completed", "output": output},
+        )
+
+    async with AsyncOpenAI(
+        api_key="test", max_retries=0, http_client=httpx2.AsyncClient(transport=httpx2.MockTransport(reply))
+    ) as client:
+        with pytest.raises(DockSightError) as caught:
+            await OpenAIModel(client, "gpt-test").complete([ModelMessage("user", "Diagnose")])
+    assert (caught.value.code, caught.value.kind) == (code, kind)
+    assert "private-sentinel" not in caught.value.message
+    assert len(requests) == 1
