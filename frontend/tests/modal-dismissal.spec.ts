@@ -60,7 +60,7 @@ test('dragging from inside to the backdrop does not dismiss the dialog', async (
 });
 
 test('dismissing action review preserves its prepared ID without executing the action', async ({ page }) => {
-  await openDemo(page);
+  await openDemo(page, { example: true });
   const trigger = page.getByRole('button', { name: 'Review stop' });
   await trigger.click();
   const dialog = page.getByRole('dialog');

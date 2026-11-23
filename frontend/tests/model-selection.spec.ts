@@ -8,7 +8,7 @@ test('switches simulated models without losing the investigation, draft or prepa
   page.on('request', (request) => {
     if (request.url().includes('/api/v1/')) requests.push(request.url());
   });
-  await openDemo(page);
+  await openDemo(page, { example: true });
   await page.getByRole('textbox').fill('Keep this follow-up');
   await page.getByRole('button', { name: 'Review stop' }).click();
   const action = await page.getByRole('dialog').locator('.confirmation-facts code').last().innerText();

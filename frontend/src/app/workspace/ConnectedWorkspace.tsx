@@ -31,7 +31,6 @@ export function ConnectedWorkspace({
   const connection = initialConnection;
   const [hosts, setHosts] = useState<Host[]>(initialConnection.demo ? demoHosts : []);
   const [selectedHost, setHost] = useState(initialConnection.demo ? 'demo-eu' : '');
-  const [showExample, setShowExample] = useState(initialConnection.demo);
   const [hostError, setHostError] = useState('');
   const [hostLoading, setHostLoading] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -107,7 +106,6 @@ export function ConnectedWorkspace({
   function changeHost(value: string) {
     if (value === host) return;
     if (connection.demo) setHost(value);
-    setShowExample(false);
     if (!connection.demo) void saved.create(value).then(() => history.refresh());
   }
 
@@ -149,7 +147,6 @@ export function ConnectedWorkspace({
         hosts={displayHosts}
         host={host}
         changeHost={changeHost}
-        showExample={showExample}
         hostError={translatedHostError}
         hostLoading={hostLoading}
         retryHosts={retryHosts}

@@ -4,6 +4,23 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versions: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Dates record merges into `master` unless a release date is set separately. Version links show the corresponding changes.
 
+## [0.9.1] - 2026-11-22
+
+### Added
+
+- Document the database schema by feature area, with foreign keys, cascade deletion, and retained records.
+
+### Changed
+
+- Require 95% combined backend coverage and 90% frontend line coverage. Add regression coverage for saved chat
+  recovery, provider and Docker failures, and offline state maintenance.
+- Start Demo with a new investigation. Open a simulated diagnosis with **View example** and return to the entry
+  screen with **Exit Demo**.
+
+### Fixed
+
+- Explain how to retry or use Demo when the API connection fails at startup.
+
 ## [0.9.0] - 2026-11-21
 
 ### Added
@@ -366,6 +383,7 @@ Dates record merges into `master` unless a release date is set separately. Versi
 - Prepared actions are bound to the caller and exact target. Unknown mutation outcomes block conflicting actions.
   Runtime mutations are never retried automatically.
 
+[0.9.1]: https://github.com/Neizvestnyj/DockSight/compare/0c0e44e...feature/raise-test-coverage
 [0.9.0]: https://github.com/Neizvestnyj/DockSight/compare/9b3c9ad...feature/chat-and-container-search
 [0.8.3]: https://github.com/Neizvestnyj/DockSight/compare/b54acee...feature/diagnosis-chat-and-login-language-picker
 [0.8.2]: https://github.com/Neizvestnyj/DockSight/compare/master...feature/coverage-badges-and-browser-smoke

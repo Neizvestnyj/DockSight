@@ -7,7 +7,13 @@ import pytest
 from docksight.adapters.outbound.memory.investigations import MemoryInvestigations
 from docksight.adapters.outbound.memory.turns import MemoryTurnStore
 from docksight.application.events import TurnEvent
-from docksight.application.investigations.contracts import DiagnosticCommand, QuestionTurn, SavedTurn, StartTurn
+from docksight.application.investigations.contracts import (
+    AcceptedTurn,
+    DiagnosticCommand,
+    QuestionTurn,
+    SavedTurn,
+    StartTurn,
+)
 from docksight.application.investigations.errors import StorageError
 from docksight.application.investigations.ports import SelectedDiagnostics
 from docksight.application.investigations.runner import TurnRunner
@@ -318,6 +324,43 @@ async def test_turn_failure_uses_safe_message_and_releases_capacity(monkeypatch:
         snapshots = [item async for item in runner.observe("alice", saved.id)]
         assert snapshots[-1].state == "failed"
         assert "private" not in snapshots[-1].model_dump_json()
+    finally:
+        await runner.close()
+    assert source.leases == 0
+
+
+async def test_expired_diagnostic_lease_persists_timeout_without_starting_model_work() -> None:
+    runner, command, source = await setup_runner()
+    source.deadline = asyncio.get_running_loop().time() - 1
+    try:
+        accepted = await runner.submit("alice", command, "req")
+        observed = [item async for item in runner.observe("alice", accepted.snapshot.id)]
+        final = observed[-1]
+        assert final.state == "failed"
+        assert final.error is not None and final.error.code == "turn_timeout"
+        assert final.answer is None
+        assert source.calls == 0
+        assert (await runner.submit("alice", command, "retry")).snapshot == final
+    finally:
+        await runner.close()
+    assert source.leases == 0
+
+
+async def test_cancelled_acceptance_releases_the_reserved_diagnostic_lease(monkeypatch: pytest.MonkeyPatch) -> None:
+    runner, command, source = await setup_runner()
+    accept = runner.turns.accept
+
+    async def interrupted(*args: object, **kwargs: object) -> AcceptedTurn:
+        """Interrupt the store operation before it can admit a turn."""
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(runner.turns, "accept", interrupted)
+    try:
+        with pytest.raises(asyncio.CancelledError):
+            await runner.submit("alice", command, "req")
+        assert source.leases == source.calls == 0
+        monkeypatch.setattr(runner.turns, "accept", accept)
+        assert (await runner.submit("alice", command, "retry")).created
     finally:
         await runner.close()
     assert source.leases == 0

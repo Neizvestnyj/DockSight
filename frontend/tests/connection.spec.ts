@@ -1,21 +1,55 @@
 import { expect, test } from '@playwright/test';
+import { openDemo } from './helpers/demo';
 import { savedApi } from './helpers/saved-api';
 import { chooseOption } from './helpers/select';
 
-test('explains why sign-in is required after retrying the connection', async ({ page }) => {
+test('opens the example explicitly and exits Demo with the keyboard', async ({ page }) => {
+  await openDemo(page);
+  await expect(page.getByRole('heading', { name: 'Start an investigation' })).toBeVisible();
+  const host = page.getByTitle('Workspace: choose host').getByText('Demo host / EU');
+  await expect(host).toBeVisible();
+  expect(await host.evaluate((label) => label.scrollWidth <= label.clientWidth)).toBe(true);
+
+  const example = page.getByRole('button', { name: 'View example' });
+  await example.press('Enter');
+  await expect(page.getByRole('heading', { name: 'Why does payments-api keep restarting?' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Container investigation', exact: true })).toBeFocused();
+
+  await page.getByRole('button', { name: 'Exit Demo' }).press('Enter');
+  await expect(page.getByRole('button', { name: 'Connect API', exact: true })).toBeVisible();
+  const demo = page.getByRole('button', { name: 'Explore Demo' });
+  await expect(demo).toBeFocused();
+  await demo.press('Enter');
+  await expect(page.getByRole('heading', { name: 'Start an investigation' })).toBeVisible();
+});
+
+test('leaves Demo from an existing API workspace without revoking the API session', async ({ page }) => {
+  const api = await savedApi(page);
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'Archived question 1' })).toBeVisible();
+  if ((page.viewportSize()?.width ?? 1440) <= 1100)
+    await page.getByRole('button', { name: 'Open host and containers' }).click();
+  await page.getByRole('button', { name: 'Return to demo' }).click();
+  await expect(page.getByRole('heading', { name: 'Start an investigation' })).toBeVisible();
+  await page.getByRole('button', { name: 'Exit Demo' }).click();
+  await expect(page.getByRole('button', { name: 'Explore Demo' })).toBeFocused();
+  expect(api.signedIn).toBe(true);
+});
+
+test('explains API connection failures before recovery reaches sign-in', async ({ page }) => {
   let attempts = 0;
   await page.route('**/api/v1/auth/session', (route) => {
     attempts++;
-    return attempts < 3
-      ? route.abort('failed')
-      : route.fulfill({ status: 401, json: { code: 'unauthorized', message: 'Unauthorized' } });
+    if (attempts === 1) return route.fulfill({ status: 502 });
+    if (attempts === 2) return route.abort('failed');
+    return route.fulfill({ status: 401, json: { code: 'unauthorized', message: 'Unauthorized' } });
   });
   await page.goto('/');
   const retry = page.getByRole('button', { name: 'Retry connection', exact: true });
-  const error = page.getByRole('heading', { name: 'Could not restore your session.' });
-  await expect(error).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Could not connect to the DockSight API.' })).toBeVisible();
+  await expect(page.getByRole('status')).toContainText('Demo works without the API.');
   await retry.click();
-  await expect(error).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Could not connect to the DockSight API.' })).toBeVisible();
   await retry.click();
   await expect(page.getByRole('heading', { name: 'Sign in to DockSight' })).toBeVisible();
   await expect(page.getByRole('status')).toHaveText('Your session is no longer valid. Sign in again.');

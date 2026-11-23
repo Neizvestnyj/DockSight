@@ -329,7 +329,7 @@ test('keeps large untrusted observations bounded and retains successful data aft
 });
 
 test('keeps demo reads localized and keyboard accessible without translating log text', async ({ page }, info) => {
-  await openDemo(page);
+  await openDemo(page, { example: true });
   await chooseOption(page.getByRole('combobox', { name: 'Language' }), 'ru');
   await chooseContainer(page, 'payments-api', true);
   const facts = page.getByRole('region', { name: 'Факты о контейнере', exact: true });

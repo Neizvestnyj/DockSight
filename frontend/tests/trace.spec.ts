@@ -54,7 +54,7 @@ async function api(page: Page, events: object[]) {
 for (const motion of ['no-preference', 'reduce'] as const) {
   test(`keeps trace and observation disclosures usable with motion preference ${motion}`, async ({ page }) => {
     await page.emulateMedia({ reducedMotion: motion });
-    await openDemo(page);
+    await openDemo(page, { example: true });
     await page.evaluate(() => document.fonts.ready);
     for (const selector of ['.diagnostic-trace', '.raw-evidence']) {
       const disclosure = page.locator(selector);

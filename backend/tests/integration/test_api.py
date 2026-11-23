@@ -1,6 +1,7 @@
 import json
 from unittest.mock import patch
 
+import pytest
 from fastapi.testclient import TestClient
 
 from docksight.application.ports.models import ModelReply, ToolCall
@@ -58,6 +59,32 @@ def test_http_authentication_hosts_and_unknown_host() -> None:
         assert response.json() == [{"id": "local", "name": "Local"}]
         assert api.get("/api/v1/hosts/unknown/containers", headers=HEADERS).status_code == 404
         assert api.get("/api/v1/widgets/schema", headers=HEADERS).json()["schema_version"] == 1
+
+
+def test_runtime_observations_keep_host_scope_and_use_the_canonical_container_id() -> None:
+    raw = FakeRuntime()
+    with client() as http, patch.object(FakeRuntime, "logs", autospec=True, return_value=raw.log_batch) as logs:
+        host_path = "/api/v1/hosts/local"
+        container_path = f"{host_path}/containers/{raw.item.id[:12]}"
+        log_reply = http.get(f"{container_path}/logs?lines=3", headers=HEADERS)
+        assert log_reply.status_code == 200
+        assert log_reply.json()["entries"][0]["message"] == raw.log_batch.entries[0].message
+        assert logs.call_args.args[1:] == ("local", raw.item.id, 3, 65536)
+        stats = http.get(f"{container_path}/stats", headers=HEADERS)
+        assert stats.status_code == 200
+        assert stats.json() == {"cpu_percent": None, "memory_usage_bytes": 1024, "memory_limit_bytes": 4096}
+        group = http.get(f"{host_path}/stacks?kind=compose", headers=HEADERS)
+        assert group.status_code == 200
+        assert group.json()[0]["container_ids"] == [raw.item.id]
+
+
+@pytest.mark.parametrize("lines", [0, 201])
+def test_runtime_log_limits_reject_oversized_reads_before_reaching_docker(lines: int) -> None:
+    with client() as http, patch.object(FakeRuntime, "logs", autospec=True) as logs:
+        identity = FakeRuntime().item.id
+        response = http.get(f"/api/v1/hosts/local/containers/{identity}/logs?lines={lines}", headers=HEADERS)
+    assert response.status_code == 422
+    logs.assert_not_called()
 
 
 def test_streamed_diagnosis_contains_validated_cards_and_terminal_event() -> None:

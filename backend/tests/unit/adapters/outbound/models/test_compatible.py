@@ -187,3 +187,39 @@ async def test_compatible_endpoint_can_return_schema_through_a_forced_tool() -> 
     assert json.loads(result.content) == {"summary": "OK"}
     assert not result.tool_calls
     assert requests[0]["tool_choice"]["function"]["name"] == "submit_diagnosis"
+
+
+@pytest.mark.parametrize(
+    ("reason", "refusal", "code"),
+    [
+        ("length", None, "model_incomplete"),
+        ("content_filter", None, "model_incomplete"),
+        ("stop", "private-sentinel", "model_refusal"),
+        ("stop", None, "invalid_model_response"),
+    ],
+)
+async def test_forced_diagnosis_requires_a_complete_submission(reason: str, refusal: str | None, code: str) -> None:
+    response = {
+        "choices": [
+            {
+                "finish_reason": reason,
+                "message": {"role": "assistant", "content": '{"summary":"partial"}', "refusal": refusal},
+            }
+        ]
+    }
+    http = httpx2.AsyncClient(transport=httpx2.MockTransport(lambda _: httpx2.Response(200, json=response)))
+    async with AsyncOpenAI(api_key="test", max_retries=0, http_client=http) as client:
+        with pytest.raises(DockSightError) as caught:
+            await CompatibleModel(client, "custom", structured_output="tool").complete(
+                [ModelMessage("user", "Respond")], schema={"type": "object"}
+            )
+    assert caught.value.code == code
+    assert "private-sentinel" not in caught.value.message
+
+
+async def test_empty_compatible_response_is_rejected_as_invalid_provider_data() -> None:
+    http = httpx2.AsyncClient(transport=httpx2.MockTransport(lambda _: httpx2.Response(200, json={"choices": []})))
+    async with AsyncOpenAI(api_key="test", max_retries=0, http_client=http) as client:
+        with pytest.raises(DockSightError) as caught:
+            await CompatibleModel(client, "custom").complete([ModelMessage("user", "Diagnose")])
+    assert (caught.value.code, caught.value.kind) == ("invalid_model_response", ErrorKind.DEPENDENCY)

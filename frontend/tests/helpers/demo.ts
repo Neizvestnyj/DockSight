@@ -1,7 +1,7 @@
 import { expect, type Page } from '@playwright/test';
 
 /** Choose simulated data explicitly while isolating bootstrap from unrelated API fixtures. */
-export async function openDemo(page: Page) {
+export async function openDemo(page: Page, { example = false } = {}) {
   await page.route('**/api/v1/auth/session', (route) =>
     route.fulfill({ status: 401, json: { code: 'unauthorized', message: 'Sign in' } }),
   );
@@ -9,4 +9,5 @@ export async function openDemo(page: Page) {
   const entry = page.getByRole('button', { name: /Explore Demo|Открыть демо/ });
   await expect(entry).toBeVisible();
   await entry.click();
+  if (example) await page.getByRole('button', { name: /View example|Посмотреть пример/ }).click();
 }

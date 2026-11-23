@@ -53,8 +53,9 @@ async def test_other_process_cannot_acquire_canonical_state_path(tmp_path: Path)
         await database.close()
 
 
+@pytest.mark.parametrize("offline", [False, True])
 async def test_failed_migration_preserves_existing_data_and_rolls_back_ddl(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, offline: bool
 ) -> None:
     path = tmp_path / "state.sqlite3"
     with closing(sqlite3.connect(path, autocommit=True)) as connection:
@@ -71,8 +72,12 @@ async def test_failed_migration_preserves_existing_data_and_rolls_back_ddl(
     monkeypatch.setattr("docksight.adapters.outbound.persistence.database.command.upgrade", fail)
     database = PersistentDatabase(path)
     try:
-        with pytest.raises(StorageError):
-            await database.initialize_server()
+        if offline:
+            await database.open_existing("migrate")
+        migrate = database.migrate if offline else database.initialize_server
+        with pytest.raises(StorageError) as caught:
+            await migrate()
+        assert isinstance(caught.value.__cause__, OSError)
         assert not database.healthy
     finally:
         await database.close()

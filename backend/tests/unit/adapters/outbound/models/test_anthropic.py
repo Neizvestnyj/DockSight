@@ -76,12 +76,24 @@ async def test_anthropic_tool_results_use_native_message_blocks() -> None:
     assert replayed["input"]["optional"] is None
 
 
-async def test_rate_limit_is_reported_without_automatic_retries() -> None:
+@pytest.mark.parametrize(
+    ("failure", "kind", "code"),
+    [
+        (None, ErrorKind.RATE_LIMIT, "provider_rate_limit"),
+        (httpx2.ReadTimeout, ErrorKind.TIMEOUT, "provider_timeout"),
+        (httpx2.ConnectError, ErrorKind.UNAVAILABLE, "provider_unavailable"),
+    ],
+)
+async def test_provider_failures_are_reported_without_automatic_retries(
+    failure: type[httpx2.RequestError] | None, kind: ErrorKind, code: str
+) -> None:
     requests: list[str] = []
 
     def reply(request: httpx2.Request) -> httpx2.Response:
         """Validate the outgoing provider payload and return the next fixture response."""
         requests.append(str(request.url))
+        if failure is not None:
+            raise failure("private-sentinel", request=request)
         return httpx2.Response(
             429,
             json={
@@ -100,5 +112,29 @@ async def test_rate_limit_is_reported_without_automatic_retries() -> None:
         with pytest.raises(DockSightError) as error:
             await AnthropicModel(client, "claude-test").complete([ModelMessage("user", "Test")])
     assert len(requests) == 1
-    assert error.value.kind == ErrorKind.RATE_LIMIT
+    assert (error.value.kind, error.value.code) == (kind, code)
     assert "private-sentinel" not in str(error.value)
+
+
+@pytest.mark.parametrize(("reason", "code"), [("refusal", "model_refusal"), ("max_tokens", "model_truncated")])
+async def test_incomplete_structured_messages_are_diagnosis_failures(reason: str, code: str) -> None:
+    def reply(request: httpx2.Request) -> httpx2.Response:
+        """Return a stopped response that contains text despite its unsuccessful stop reason."""
+        output_format = json.loads(request.content)["output_config"]["format"]
+        assert output_format["type"] == "json_schema"
+        assert output_format["schema"]["required"] == ["summary"]
+        return httpx2.Response(
+            200,
+            json={"stop_reason": reason, "content": [{"type": "text", "text": "private-sentinel"}]},
+        )
+
+    async with AsyncAnthropic(
+        api_key="test", max_retries=0, http_client=httpx2.AsyncClient(transport=httpx2.MockTransport(reply))
+    ) as client:
+        with pytest.raises(DockSightError) as caught:
+            await AnthropicModel(client, "claude-test").complete(
+                [ModelMessage("user", "Diagnose")],
+                schema={"type": "object", "properties": {"summary": {"type": "string"}}},
+            )
+    assert caught.value.code == code
+    assert "private-sentinel" not in caught.value.message

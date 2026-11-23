@@ -123,7 +123,7 @@ describe('system availability', async () => {
       .spyOn(DemoClient.prototype, 'systemStatus')
       .mockResolvedValue({ ...healthy, model_check: { ...check, state: 'unavailable', code: 'model_not_found' } });
     const diagnose = vi.spyOn(DemoClient.prototype, 'diagnose');
-    await renderDemoApp();
+    await renderDemoApp({ example: true });
     fireEvent.click(await screen.findByTitle('payments-api'));
     const facts = screen.getByRole('region', { name: 'Container facts' });
     expect(await within(facts).findByText('APP_ENV')).toBeInTheDocument();

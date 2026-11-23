@@ -1,7 +1,7 @@
 import controlStyles from '../../shared/ui/Controls.module.css';
 import { LanguageSwitch } from '../providers/LocaleProvider';
 import { useLocale } from '../../shared/i18n/locale';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { DemoClient } from '../../infrastructure/demo/demo';
 import { Connection } from '../../modules/session';
 import { Logo } from '../../shared/ui/ui';
@@ -19,6 +19,7 @@ export function Bootstrap() {
   const [state, setState] = useState<'loading' | 'signed-out' | 'sign-in-required' | 'error'>('loading');
   const [attempt, setAttempt] = useState(0);
   const [connecting, setConnecting] = useState(false);
+  const returningFromDemo = useRef(false);
   useEffect(() => {
     const controller = new AbortController();
     const client = new ApiClient();
@@ -42,12 +43,14 @@ export function Bootstrap() {
       <ConnectedWorkspace
         key={connection.id}
         initialConnection={connection}
-        replaceConnection={(client, demo) =>
-          setConnection((previous) => ({ client, demo, id: (previous?.id ?? 0) + 1 }))
-        }
-        signOut={() => {
-          setConnection(undefined);
+        replaceConnection={(client, demo) => {
+          setConnection((previous) => ({ client, demo, id: (previous?.id ?? 0) + 1 }));
           setState('signed-out');
+        }}
+        signOut={() => {
+          returningFromDemo.current = connection.demo;
+          setConnection(undefined);
+          if (!connection.demo) setState('signed-out');
         }}
       />
     );
@@ -63,15 +66,17 @@ export function Bootstrap() {
             state === 'loading'
               ? 'Restoring your workspace…'
               : state === 'error'
-                ? 'Could not restore your session.'
+                ? 'Could not connect to the DockSight API.'
                 : 'Sign in to DockSight',
           )}
         </h1>
         <p role="status">
           {t(
-            state === 'sign-in-required'
-              ? 'Your session is no longer valid. Sign in again.'
-              : 'Saved chats stay on your DockSight backend. Sign in to reopen your workspace.',
+            state === 'error'
+              ? 'Make sure the DockSight server is running and retry the connection. Demo works without the API.'
+              : state === 'sign-in-required'
+                ? 'Your session is no longer valid. Sign in again.'
+                : 'Saved chats stay on your DockSight backend. Sign in to reopen your workspace.',
           )}
         </p>
         {state !== 'loading' && (
@@ -92,6 +97,11 @@ export function Bootstrap() {
             </button>
             <button
               className={`secondary ${controlStyles['secondary']}`}
+              ref={(button) => {
+                if (!button || !returningFromDemo.current) return;
+                returningFromDemo.current = false;
+                button.focus();
+              }}
               onClick={() => setConnection({ client: new DemoClient(), demo: true, id: 0 })}
             >
               {t('Explore Demo')}

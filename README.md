@@ -47,7 +47,8 @@ npm --prefix frontend run dev -- --host 127.0.0.1 --port 5173
 ```
 
 Open the printed URL, normally [127.0.0.1:5173](http://127.0.0.1:5173), and choose **Explore Demo**.
-Choose a scenario such as **Crash loop** or **Out of memory**, inspect its evidence, and review a simulated action.
+Start an investigation or choose **View example** to inspect its evidence and review a simulated action.
+Choose a different scenario to explore other results. **Exit Demo** returns to the entry screen.
 Demo never changes Docker resources. If the initial session read fails, **Retry connection** retries it.
 
 ### Connect your Docker environment

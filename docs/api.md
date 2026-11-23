@@ -91,7 +91,8 @@ See Docker's [healthcheck semantics](https://docs.docker.com/reference/dockerfil
 
 The React client in `frontend/` implements this API through streaming `fetch` and keeps bearer/CSRF values in memory.
 Startup checks the first-party cookie session before signed-out controls or explicit **Explore Demo** entry.
-Network failures offer **Retry connection**. Its separate, labeled Demo transport performs no Docker or model calls.
+Connection failures during startup show that the API could not be reached and offer **Retry connection**.
+The separate, labeled Demo transport performs no Docker or model calls.
 Local Vite development and preview proxy `/api` to port 8000 with `changeOrigin: true`. Configure the exact public
 browser origin. Development uses `http://127.0.0.1:5173` and preview uses `http://127.0.0.1:4173`.
 Use Vite's printed port if it selects another.

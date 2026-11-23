@@ -14,6 +14,7 @@ and connectors. PNG previews are embedded in the project documentation.
 | 7    | Action details         | [action-details.png](action-details.png)                 |
 | 8    | Action lifecycle       | [action-lifecycle.png](action-lifecycle.png)             |
 | 9 | Persistence and recovery | [persistence-recovery.png](persistence-recovery.png) |
+| 10   | Database schema        | [database-schema.png](database-schema.png)               |
 
 Page IDs match preview filenames. After editing a page, re-export its PNG from the repository root. The installed
 draw.io CLI uses **1-based** `--page-index` values. Check `--help` when using another version.

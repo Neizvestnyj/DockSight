@@ -19,11 +19,14 @@ const russian = {
     'Сохранённый контейнер недоступен. Выберите актуальный контейнер по точному ID.',
   'Restoring your workspace…': 'Восстанавливаем рабочее пространство…',
   'Sign in to DockSight': 'Войти в DockSight',
-  'Could not restore your session.': 'Не удалось восстановить сеанс.',
+  'Could not connect to the DockSight API.': 'Не удалось подключиться к API DockSight.',
+  'Make sure the DockSight server is running and retry the connection. Demo works without the API.':
+    'Проверьте, запущен ли сервер DockSight, и повторите подключение. Демо доступно без API.',
   'Your session is no longer valid. Sign in again.': 'Сессия недействительна. Войдите снова.',
   'Saved chats stay on your DockSight backend. Sign in to reopen your workspace.':
     'Сохранённые чаты хранятся на сервере DockSight. Войдите, чтобы продолжить работу.',
   'Explore Demo': 'Открыть демо',
+  'Exit Demo': 'Выйти из демо',
   'Sign out': 'Выйти',
   'Could not restore saved workspace. Retry the read.':
     'Не удалось восстановить рабочее пространство. Повторите загрузку.',
@@ -543,6 +546,7 @@ const russian = {
   'a configured host': 'из настроек',
   'Which containers need attention, and why?': 'Какие контейнеры требуют внимания и почему?',
   'Check this host': 'Проверить хост',
+  'View example': 'Посмотреть пример',
   'Continue the investigation': 'Продолжить расследование',
   'What else should we check?': 'Что ещё нужно проверить?',
   'Why did this container exit?': 'Почему завершился этот контейнер?',

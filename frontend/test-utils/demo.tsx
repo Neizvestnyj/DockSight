@@ -2,9 +2,10 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import App from '../src/app/App';
 
 /** Enter simulated data explicitly after the session bootstrap decision. */
-export async function renderDemoApp() {
+export async function renderDemoApp({ example = false } = {}) {
   const result = render(<App />);
   await act(async () => {});
   fireEvent.click(screen.getByRole('button', { name: /Explore Demo|Открыть демо/ }));
+  if (example) fireEvent.click(screen.getByRole('button', { name: /View example|Посмотреть пример/ }));
   return result;
 }
