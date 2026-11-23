@@ -6,6 +6,14 @@ Dates record merges into `master` unless a release date is set separately. Versi
 
 ## 0.9.2
 
+### Changed
+
+- Require an explicit request to send changes to a remote repository before pushing a branch.
+
+### Fixed
+
+- Stabilize the Docker log error-status test on slower CI runners while keeping checks for unread error bodies.
+
 ### Security
 
 - Scan Git history for secrets with Gitleaks on pull requests to `master` and pushes to `master`.
