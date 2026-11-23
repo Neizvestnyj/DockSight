@@ -4,6 +4,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versions: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Dates record merges into `master` unless a release date is set separately. Version links show the corresponding changes.
 
+## 0.9.2
+
+### Security
+
+- Scan Git history for secrets with Gitleaks on pull requests to `master` and pushes to `master`.
+
 ## [0.9.1] - 2026-11-22
 
 ### Added

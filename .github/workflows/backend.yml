@@ -30,8 +30,8 @@ jobs:
       - run: uv sync --project backend --locked
       - run: uv run --project backend pre-commit run --all-files
         env:
-          # Branch guards apply locally; CI also validates master after PR merges.
-          SKIP: no-commit-to-branch
+          # Branch guards and staged secret scans apply locally. Secret scanning checks commits separately.
+          SKIP: no-commit-to-branch,gitleaks
       - name: Read combined Python 3.14 coverage
         id: coverage
         run: |
