@@ -36,20 +36,20 @@ test('leaves Demo from an existing API workspace without revoking the API sessio
   expect(api.signedIn).toBe(true);
 });
 
-test('explains why sign-in is required after retrying the connection', async ({ page }) => {
+test('explains API connection failures before recovery reaches sign-in', async ({ page }) => {
   let attempts = 0;
   await page.route('**/api/v1/auth/session', (route) => {
     attempts++;
-    return attempts < 3
-      ? route.abort('failed')
-      : route.fulfill({ status: 401, json: { code: 'unauthorized', message: 'Unauthorized' } });
+    if (attempts === 1) return route.fulfill({ status: 502 });
+    if (attempts === 2) return route.abort('failed');
+    return route.fulfill({ status: 401, json: { code: 'unauthorized', message: 'Unauthorized' } });
   });
   await page.goto('/');
   const retry = page.getByRole('button', { name: 'Retry connection', exact: true });
-  const error = page.getByRole('heading', { name: 'Could not restore your session.' });
-  await expect(error).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Could not connect to the DockSight API.' })).toBeVisible();
+  await expect(page.getByRole('status')).toContainText('Demo works without the API.');
   await retry.click();
-  await expect(error).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Could not connect to the DockSight API.' })).toBeVisible();
   await retry.click();
   await expect(page.getByRole('heading', { name: 'Sign in to DockSight' })).toBeVisible();
   await expect(page.getByRole('status')).toHaveText('Your session is no longer valid. Sign in again.');

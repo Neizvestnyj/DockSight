@@ -17,6 +17,10 @@ Dates record merges into `master` unless a release date is set separately. Versi
 - Start Demo with a new investigation. Open a simulated diagnosis with **View example** and return to the entry
   screen with **Exit Demo**.
 
+### Fixed
+
+- Explain how to retry or use Demo when the API connection fails at startup.
+
 ## [0.9.0] - 2026-11-21
 
 ### Added

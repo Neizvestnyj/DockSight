@@ -238,11 +238,15 @@ it('offers signed-out controls after 401 and enters Demo only explicitly', async
     await screen.findByText('Example data from a fictional host. Connect an API to diagnose your Docker.'),
   ).toBeInTheDocument();
 });
-it('offers a retry after bootstrap network failure without fictional recovery', async () => {
+it('explains how to recover the API connection or enter Demo after a bootstrap network failure', async () => {
   vi.spyOn(ApiClient.prototype, 'session').mockRejectedValue(new TypeError('offline'));
   render(<App />);
-  expect(await screen.findByText('Could not restore your session.')).toBeInTheDocument();
+  expect(await screen.findByRole('heading', { name: 'Could not connect to the DockSight API.' })).toBeInTheDocument();
+  expect(screen.getByRole('status')).toHaveTextContent(
+    'Make sure the DockSight server is running and retry the connection. Demo works without the API.',
+  );
   expect(screen.getByRole('button', { name: 'Retry connection' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Explore Demo' })).toBeEnabled();
   expect(screen.queryByLabelText('Demo scenario')).not.toBeInTheDocument();
 });
 

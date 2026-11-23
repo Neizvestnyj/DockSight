@@ -66,15 +66,17 @@ export function Bootstrap() {
             state === 'loading'
               ? 'Restoring your workspace…'
               : state === 'error'
-                ? 'Could not restore your session.'
+                ? 'Could not connect to the DockSight API.'
                 : 'Sign in to DockSight',
           )}
         </h1>
         <p role="status">
           {t(
-            state === 'sign-in-required'
-              ? 'Your session is no longer valid. Sign in again.'
-              : 'Saved chats stay on your DockSight backend. Sign in to reopen your workspace.',
+            state === 'error'
+              ? 'Make sure the DockSight server is running and retry the connection. Demo works without the API.'
+              : state === 'sign-in-required'
+                ? 'Your session is no longer valid. Sign in again.'
+                : 'Saved chats stay on your DockSight backend. Sign in to reopen your workspace.',
           )}
         </p>
         {state !== 'loading' && (
