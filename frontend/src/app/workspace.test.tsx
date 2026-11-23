@@ -82,7 +82,7 @@ describe('investigation workspace', async () => {
   });
 
   it('opens host selection from the workspace breadcrumb and preserves the current investigation until switching', async () => {
-    await renderDemoApp();
+    await renderDemoApp({ example: true });
     await screen.findByRole('button', { name: 'Review stop' });
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Keep this question' } });
     fireEvent.click(screen.getByTitle('Workspace: choose host'));
@@ -154,7 +154,7 @@ describe('investigation workspace', async () => {
     await waitFor(() => expect(execute).toHaveBeenCalledWith(action.id, 'retained-execution-key'));
   });
   it('connects a conclusion reference to a focusable evidence observation', async () => {
-    await renderDemoApp();
+    await renderDemoApp({ example: true });
     fireEvent.click(await screen.findByRole('button', { name: 'View log evidence' }));
     expect(screen.getByRole('heading', { name: 'Observation' })).toBeInTheDocument();
     expect(screen.getByLabelText('Evidence observation')).toHaveFocus();
@@ -162,7 +162,7 @@ describe('investigation workspace', async () => {
   });
 
   it('requires a separate exact-target confirmation before running an action', async () => {
-    await renderDemoApp();
+    await renderDemoApp({ example: true });
     fireEvent.click(await screen.findByRole('button', { name: 'Review stop' }));
     expect(screen.getByRole('dialog')).toHaveTextContent('1'.repeat(64));
     expect(screen.getByRole('dialog')).toHaveTextContent('demo-eu');
@@ -171,7 +171,7 @@ describe('investigation workspace', async () => {
   });
 
   it('starts an empty separate investigation when the host changes', async () => {
-    await renderDemoApp();
+    await renderDemoApp({ example: true });
     await screen.findByRole('button', { name: 'Review stop' });
     chooseOption(screen.getByLabelText('Configured host'), 'demo-empty');
     expect(await screen.findByText('Start an investigation')).toBeInTheDocument();

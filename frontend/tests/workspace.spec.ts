@@ -122,6 +122,7 @@ test('retains host choice through a discovery retry and restores focus after the
 test('opens host choice from the breadcrumb without losing the current draft or prepared action', async ({
   page,
 }, info) => {
+  await page.getByRole('button', { name: 'View example' }).click();
   await page.getByRole('textbox', { name: 'Continue the investigation' }).fill('Keep this investigation draft');
   await page.getByRole('button', { name: 'Review stop' }).click();
   const actionId = await page.getByRole('dialog').locator('.confirmation-facts code').last().innerText();
@@ -205,6 +206,7 @@ test('shows refresh progress and completion and retains the received list after 
 });
 
 test('shows the product, all widgets, and accessible evidence navigation', async ({ page }, info) => {
+  await page.getByRole('button', { name: 'View example' }).click();
   const logo = page.getByRole('img', { name: 'DockSight', exact: true });
   await expect(logo).toBeVisible();
   await expect
@@ -321,6 +323,7 @@ test('keeps large logs bounded and keyboard-scrollable', async ({ page }) => {
 });
 
 test('can stop, manually retry, and report a terminal failure after HTTP success', async ({ page }) => {
+  await page.getByRole('button', { name: 'View example' }).click();
   await page.getByLabel('Continue the investigation').fill('Inspect this container again.');
   await page.getByRole('button', { name: 'Investigate', exact: true }).click();
   await expect(page.getByRole('status', { name: 'Diagnostic progress' })).toContainText('Inspecting container state');
@@ -343,6 +346,7 @@ test('can stop, manually retry, and report a terminal failure after HTTP success
 });
 
 test('contains focus in confirmation and explains an indeterminate operation', async ({ page }, info) => {
+  await page.getByRole('button', { name: 'View example' }).click();
   await page.getByText('Test error states', { exact: true }).click();
   await chooseOption(page.getByLabel('After action confirmation', { exact: true }), 'indeterminate');
   await page.getByRole('button', { name: 'Review stop' }).click();

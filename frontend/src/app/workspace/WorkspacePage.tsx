@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react';
 import { ArrowRight, ChevronDown, ChevronRight, FlaskConical, LogOut, Menu, MessageSquarePlus } from 'lucide-react';
 import type { Container, DiagnosticTarget, Host } from '../../shared/contracts/contracts';
 import { ApiError } from '../../shared/contracts/errors';
-import { DemoClient, demoAnswer, scenarios, type ScenarioId } from '../../infrastructure/demo/demo';
+import { DemoClient, scenarios, type ScenarioId } from '../../infrastructure/demo/demo';
 import { DemoControls } from './DemoControls';
 import { Select } from '../../shared/ui/Select';
 import { isMessageKey, type MessageKey } from '../../shared/i18n/messages';
@@ -47,7 +47,6 @@ interface WorkspaceProps {
   openHostPicker: () => void;
   connect: () => void;
   returnDemo: () => void;
-  showExample: boolean;
 }
 
 /** Scope inventory, demo controls, and all diagnostic turns to one configured host. */
@@ -62,7 +61,6 @@ export function WorkspacePage({
   openHostPicker,
   connect,
   returnDemo,
-  showExample,
   modelSelection,
   chooseModel,
   saved,
@@ -72,13 +70,10 @@ export function WorkspacePage({
   const { t } = useLocale();
   const { client, demo } = connection;
   const demoClient = client instanceof DemoClient ? client : null;
-  const [initial] = useState(() =>
-    demoClient && showExample && host === 'demo-eu' ? demoClient.remember(demoAnswer('crash_loop', host)) : undefined,
-  );
   const investigation = useInvestigation(
     client,
     host,
-    initial,
+    undefined,
     modelSelection,
     demo
       ? undefined
@@ -286,16 +281,28 @@ export function WorkspacePage({
     setStatusOpen(true);
   }
 
-  /** Make fixture selection a clearly simulated example rather than a live diagnosis. */
+  /** Load the selected fixture as a completed Demo investigation. */
+  function loadExample() {
+    if (!demoClient) return;
+    const item = scenarios.find((row) => row.id === demoClient.scenario)!;
+    const answer = demoClient.example(host);
+    setViewingContainer(false);
+    investigation.example(answer, item.query);
+  }
+
+  /** Apply an explicit scenario change and reset its follow-up draft. */
   function chooseScenario(value: ScenarioId) {
     if (!demoClient) return;
     demoClient.setScenario(value);
     setScenario(value);
-    const item = scenarios.find((row) => row.id === value)!;
-    const answer = demoClient.example(host);
-    setViewingContainer(false);
-    investigation.example(answer, item.query);
+    loadExample();
     setDraft('');
+  }
+
+  /** Open an example from the empty workspace without clearing typed text. */
+  function openExample() {
+    loadExample();
+    openInvestigation();
   }
 
   /** Open direct Docker reads without changing a draft or invoking diagnostic work. */
@@ -508,12 +515,10 @@ export function WorkspacePage({
               {t(demo ? 'Connect API' : 'Change connection')}
               <ArrowRight size={13} />
             </button>
-            {!demo && (
-              <button className={`secondary ${controlStyles['secondary']} ${styles['sign-out']}`} onClick={logout}>
-                <LogOut size={14} aria-hidden="true" />
-                {t('Sign out')}
-              </button>
-            )}
+            <button className={`secondary ${controlStyles['secondary']} ${styles['sign-out']}`} onClick={logout}>
+              <LogOut size={14} aria-hidden="true" />
+              {t(demo ? 'Exit Demo' : 'Sign out')}
+            </button>
           </div>
         </header>
       </>
@@ -779,6 +784,7 @@ export function WorkspacePage({
             target={!demo ? (scopeTarget ?? undefined) : undefined}
             searchTurn={saved.searchTurn}
             active={!viewingContainer}
+            openExample={demo && host !== 'demo-empty' ? openExample : undefined}
           />
         </div>
       </>

@@ -245,3 +245,28 @@ it('offers a retry after bootstrap network failure without fictional recovery', 
   expect(screen.getByRole('button', { name: 'Retry connection' })).toBeInTheDocument();
   expect(screen.queryByLabelText('Demo scenario')).not.toBeInTheDocument();
 });
+
+it('starts Demo in an empty investigation and preserves the draft when opening an example', async () => {
+  vi.spyOn(ApiClient.prototype, 'session').mockRejectedValue(
+    new ApiError('Sign in', 'unauthorized', undefined, 'server', 401),
+  );
+  render(<App />);
+  fireEvent.click(await screen.findByRole('button', { name: 'Explore Demo' }));
+  expect(screen.getByRole('heading', { name: 'Start an investigation' })).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: 'Why does payments-api keep restarting?' })).not.toBeInTheDocument();
+
+  const draft = screen.getByRole('textbox', { name: 'Ask DockSight' });
+  fireEvent.change(draft, { target: { value: 'Which containers are running?' } });
+  fireEvent.click(screen.getByRole('button', { name: 'View example' }));
+  expect(await screen.findByRole('heading', { name: 'Why does payments-api keep restarting?' })).toBeInTheDocument();
+  expect(draft).toHaveValue('Which containers are running?');
+});
+
+it('exits Demo to the entry screen and preserves the connection retry option', async () => {
+  vi.spyOn(ApiClient.prototype, 'session').mockRejectedValue(new TypeError('offline'));
+  render(<App />);
+  fireEvent.click(await screen.findByRole('button', { name: 'Explore Demo' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Exit Demo' }));
+  expect(screen.getByRole('button', { name: 'Retry connection' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Explore Demo' })).toHaveFocus();
+});

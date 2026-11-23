@@ -58,7 +58,7 @@ describe('diagnostic trace transport and retention', async () => {
     );
   });
   it('keeps historical answers usable when no trace was recorded', async () => {
-    await renderDemoApp();
+    await renderDemoApp({ example: true });
     fireEvent.click(await screen.findByText('Diagnostic trace'));
     expect(
       screen

@@ -43,6 +43,7 @@ interface Props {
   target?: DiagnosticTarget;
   searchTurn?: SavedTurn;
   active?: boolean;
+  openExample?: () => void;
 }
 
 /** Compose conclusions, typed observations, and an always-available follow-up query. */
@@ -59,6 +60,7 @@ export function Investigation({
   target,
   searchTurn,
   active = true,
+  openExample,
 }: Props) {
   const { t } = useLocale();
   const blocked = Boolean(blockedReason);
@@ -441,13 +443,21 @@ export function Investigation({
                 host: host || t('a configured host'),
               })}
             </p>
-            <button
-              className={`secondary ${controlStyles['secondary']}`}
-              onClick={() => setDraft(t('Which containers need attention, and why?'))}
-            >
-              {t('Check this host')}
-              <ArrowDown size={14} />
-            </button>
+            <div className={styles['first-run-actions']}>
+              <button
+                className={`secondary ${controlStyles['secondary']}`}
+                onClick={() => setDraft(t('Which containers need attention, and why?'))}
+              >
+                {t('Check this host')}
+                <ArrowDown size={14} />
+              </button>
+              {openExample && (
+                <button className={`secondary ${controlStyles['secondary']}`} onClick={openExample}>
+                  {t('View example')}
+                  <ArrowRight size={14} aria-hidden="true" />
+                </button>
+              )}
+            </div>
           </section>
         )}
       </div>

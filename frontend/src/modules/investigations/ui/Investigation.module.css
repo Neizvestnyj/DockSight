@@ -121,6 +121,11 @@
 .first-run h2 {
   font-size: 22px;
 }
+.first-run-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
 /* stylelint-disable no-descending-specificity -- Preserve the established higher-specificity override. */
 .first-run p {
   margin: 12px 0 20px;
@@ -204,6 +209,9 @@
   }
   .first-run h2 {
     font-size: 22px;
+  }
+  .first-run-actions button {
+    min-height: 44px;
   }
   .progress {
     font-size: 12px;

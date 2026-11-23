@@ -8,7 +8,7 @@ Choose **Explore Demo** from the entry screen, or **Return to demo** from an API
 Demo uses fictional hosts and local fixtures. It needs no backend, Docker connection, or model.
 An initial session-read failure offers **Retry connection** and explicit **Explore Demo** entry.
 
-1. Choose **Crash loop** in the scenario selector.
+1. Choose **View example** to open the default **Crash loop** investigation.
 2. Read the diagnostic conclusion and compare it with container state and startup logs.
 3. Choose **Container evidence** or **Log evidence** to inspect the referenced observation.
 4. Choose **Review stop** to inspect the exact target and operation before confirmation.
@@ -20,6 +20,7 @@ An initial session-read failure offers **Retry connection** and explicit **Explo
 Other scenarios cover OOM, failed dependencies, truncated logs, an unconfirmed exit, and a running container with
 zero CPU.
 Expand **Test error states** to explore connection, streaming, inventory, and action-result failures.
+Choose **Exit Demo** to return to the entry screen. Demo chats and drafts are cleared when you leave.
 
 For your own Docker environment, choose **Connect API**, enter the backend token, and select a configured host.
 Select a container to read its state, metrics, and logs without using the model. Choose **Diagnose** or ask a question

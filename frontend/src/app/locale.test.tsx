@@ -113,7 +113,7 @@ describe('language preference', async () => {
   });
 
   it('localizes demo copy without replacing evidence or the current action', async () => {
-    await renderDemoApp();
+    await renderDemoApp({ example: true });
     const log = 'ValueError: invalid application configuration';
     chooseOption(screen.getByRole('combobox', { name: 'Language' }), 'ru');
     expect(screen.getByRole('heading', { name: 'Диагностика контейнера' })).toBeInTheDocument();

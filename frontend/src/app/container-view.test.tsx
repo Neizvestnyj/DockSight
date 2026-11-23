@@ -14,7 +14,7 @@ describe('read-only container viewing', async () => {
   it('opens Docker facts without a model request and preserves historical cards and drafts', async () => {
     const diagnose = vi.spyOn(DemoClient.prototype, 'diagnose');
     const scenario = vi.spyOn(DemoClient.prototype, 'setScenario');
-    await renderDemoApp();
+    await renderDemoApp({ example: true });
     await screen.findByTitle('payments-api');
     const originalTime = screen.getByRole('group', { name: 'Container status' }).querySelector('time')!.dateTime;
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Keep this follow-up' } });
@@ -62,7 +62,7 @@ describe('read-only container viewing', async () => {
           }),
       )
       .mockResolvedValueOnce(demoContainer(1, 'demo-eu', '2026-10-27T12:00:00Z'));
-    await renderDemoApp();
+    await renderDemoApp({ example: true });
     fireEvent.click(await screen.findByTitle('payments-api'));
     const continueChat = screen.getByRole('button', { name: 'Continue in current chat' });
     expect(continueChat).toHaveAttribute('aria-disabled', 'true');
@@ -85,7 +85,7 @@ describe('read-only container viewing', async () => {
       receive({ ...envelope, type: 'answer.ready', answer: demoAnswer('oom', input.host) });
       receive({ ...envelope, type: 'turn.completed' });
     });
-    await renderDemoApp();
+    await renderDemoApp({ example: true });
     fireEvent.click(await screen.findByTitle('report-worker'));
     const button = screen.getByRole('button', { name: 'Diagnose in a new chat' });
     await waitFor(() => expect(button).toBeEnabled());

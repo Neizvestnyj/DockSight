@@ -108,7 +108,7 @@ test('localizes observer recovery while preserving a server-authored failure mes
 });
 
 test('detects Russian and preserves evidence, action IDs and draft while switching', async ({ page }, info) => {
-  await openDemo(page);
+  await openDemo(page, { example: true });
   await expect(page.getByRole('heading', { name: 'Диагностика контейнера' })).toBeVisible();
   await expect(page.locator('html')).toHaveAttribute('lang', 'ru');
   const summary = await page.getByRole('region', { name: 'Объяснение модели' }).locator('p').first().innerText();
@@ -140,6 +140,8 @@ test('detects Russian and preserves evidence, action IDs and draft while switchi
   await expect(page.getByRole('combobox', { name: 'Language' })).toContainText('English');
   await chooseOption(page.getByRole('combobox', { name: 'Language' }), 'system');
   await expect(page.getByRole('heading', { name: 'Диагностика контейнера' })).toBeVisible();
+  await page.getByRole('button', { name: 'Посмотреть пример' }).click();
+  await expect(page.getByRole('heading', { name: 'Диагностика контейнера' })).toBeFocused();
   await page.getByRole('button', { name: 'Открыть логи как доказательство' }).focus();
   await page.keyboard.press('Enter');
   await expect(page.getByLabel('Наблюдение-источник')).toBeFocused();

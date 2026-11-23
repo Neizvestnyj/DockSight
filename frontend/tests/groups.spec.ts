@@ -55,7 +55,7 @@ test('keeps empty Swarm discovery explicit without calling the model', async ({ 
 for (const motion of ['no-preference', 'reduce'] as const) {
   test(`settles repeated log toggles and preserves evidence with motion preference ${motion}`, async ({ page }) => {
     await page.emulateMedia({ reducedMotion: motion });
-    await openDemo(page);
+    await openDemo(page, { example: true });
     await chooseOption(page.getByRole('combobox', { name: 'Language' }), 'en');
     const card = page.getByRole('group', { name: 'Container logs', exact: true });
     const toggle = card.getByRole('button', { name: /^(Collapse|Expand) logs$/ });

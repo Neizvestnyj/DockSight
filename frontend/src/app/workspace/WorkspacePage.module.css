@@ -235,6 +235,14 @@
   .breadcrumb {
     flex: 1;
   }
+  .workspace-trigger,
+  .connection-state {
+    gap: 6px;
+  }
+  .workspace-trigger > span,
+  .workspace-trigger > :global(.breadcrumb-divider) {
+    display: none;
+  }
   .connection-state :global(.text-button) {
     margin-left: 0;
   }
@@ -262,7 +270,6 @@
   }
   .connection-state {
     font-size: 11px;
-    gap: 6px;
   }
 }
 @media (max-width: 560px) {
@@ -312,13 +319,8 @@
   .mobile-brand :global(.brand-logo) {
     width: 108px;
   }
-  .workspace-trigger > span,
-  .workspace-trigger > :global(.breadcrumb-divider) {
-    display: none;
-  }
   .workspace-trigger {
     min-height: 44px;
-    gap: 6px;
   }
   .connection-state :global(.text-button) {
     display: none;

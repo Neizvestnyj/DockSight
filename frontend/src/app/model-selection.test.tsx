@@ -19,7 +19,7 @@ describe('model selection', async () => {
   it('loads catalogs only when opened and preserves the draft, evidence and prepared actions when switching', async () => {
     const providers = vi.spyOn(DemoClient.prototype, 'modelProviders');
     const catalogs = vi.spyOn(DemoClient.prototype, 'models');
-    await renderDemoApp();
+    await renderDemoApp({ example: true });
     expect(providers).not.toHaveBeenCalled();
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Keep this follow-up' } });
     fireEvent.click(screen.getByRole('button', { name: 'Review stop' }));
