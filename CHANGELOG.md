@@ -4,6 +4,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versions: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Dates record merges into `master` unless a release date is set separately. Version links show the corresponding changes.
 
+## [0.9.2] - 2026-11-23
+
+### Changed
+
+- Require an explicit request to send changes to a remote repository before pushing a branch.
+
+### Fixed
+
+- Stabilize the Docker log error-status test on slower CI runners while keeping checks for unread error bodies.
+
+### Security
+
+- Scan Git history for secrets with Gitleaks on pull requests to `master` and pushes to `master`.
+
 ## [0.9.1] - 2026-11-22
 
 ### Added
@@ -383,10 +397,11 @@ Dates record merges into `master` unless a release date is set separately. Versi
 - Prepared actions are bound to the caller and exact target. Unknown mutation outcomes block conflicting actions.
   Runtime mutations are never retried automatically.
 
-[0.9.1]: https://github.com/Neizvestnyj/DockSight/compare/0c0e44e...feature/raise-test-coverage
-[0.9.0]: https://github.com/Neizvestnyj/DockSight/compare/9b3c9ad...feature/chat-and-container-search
-[0.8.3]: https://github.com/Neizvestnyj/DockSight/compare/b54acee...feature/diagnosis-chat-and-login-language-picker
-[0.8.2]: https://github.com/Neizvestnyj/DockSight/compare/master...feature/coverage-badges-and-browser-smoke
+[0.9.2]: https://github.com/Neizvestnyj/DockSight/compare/e2f3e24f812b4476729d8667b8fc40c00e54184f...feature/gitleaks-ci
+[0.9.1]: https://github.com/Neizvestnyj/DockSight/compare/0c0e44e43fa51d5bb73d4b795069efb753db44ab...e2f3e24f812b4476729d8667b8fc40c00e54184f
+[0.9.0]: https://github.com/Neizvestnyj/DockSight/compare/9b3c9ad9a5d0e286dbfce2ec9e9b2b1ab803f415...0c0e44e43fa51d5bb73d4b795069efb753db44ab
+[0.8.3]: https://github.com/Neizvestnyj/DockSight/compare/b54aceecda216fb6c276638c120bae21814f9b40...9b3c9ad9a5d0e286dbfce2ec9e9b2b1ab803f415
+[0.8.2]: https://github.com/Neizvestnyj/DockSight/compare/0fc86b6bbaea631f299d85501052d08a5cb145c9...b54aceecda216fb6c276638c120bae21814f9b40
 [0.8.1]: https://github.com/Neizvestnyj/DockSight/compare/35d18d7...0fc86b6
 [0.8.0]: https://github.com/Neizvestnyj/DockSight/compare/ea1929b...35d18d7
 [0.7.0]: https://github.com/Neizvestnyj/DockSight/compare/3c69d1a...ea1929b

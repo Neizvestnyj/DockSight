@@ -203,7 +203,8 @@ The Docker case explicitly restarts its owned fixture to exercise lost delivery,
 
 In repository Settings, configure a branch rule for `master`:
 
-- Require pull requests and the Backend and Frontend checks. Both workflows enforce their coverage thresholds.
+- Require pull requests and the Backend, Frontend, and `Secret scan` checks. Backend and Frontend enforce coverage
+  thresholds.
 - Apply the rule to administrators.
 - Disable force pushes and branch deletion.
 - For a solo maintainer, require pull requests without requiring another reviewer's approval.
@@ -211,7 +212,8 @@ In repository Settings, configure a branch rule for `master`:
 Only required checks block merging. Server-side protection applies to every client, including those bypassing local
 hooks. CI runs after a push and cannot reject an already accepted update.
 
-The local branch guard is excluded from the CI hook run so checks still run on `master` after a pull request merge.
+CI skips the local branch guard and the staged Gitleaks hook. `Secret scan` checks commit history on pull requests
+to `master` and on pushes to `master`. Keep its Gitleaks version aligned with the local hook.
 
 ## Tests that use external services
 

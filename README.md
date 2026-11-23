@@ -1,13 +1,13 @@
 # DockSight
 
+![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
+[![XERJ Corpus Hub contributor][xerj-badge]][xerj-profile]
 [![Backend CI][backend-ci-badge]][backend-ci]
 [![Frontend CI][frontend-ci-badge]][frontend-ci]
 [![Backend coverage][backend-coverage-badge]][backend-ci]
 [![Frontend line coverage][frontend-coverage-badge]][frontend-ci]
 [![License: Apache-2.0][license-badge]](LICENSE)
-![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)
-![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
-[![XERJ Corpus Hub contributor][xerj-badge]][xerj-profile]
 
 DockSight is a local web interface for diagnosing Docker containers, Compose projects, and Swarm stacks.
 It collects Docker state and logs, links model explanations to those observations, and prepares restart or stop actions.

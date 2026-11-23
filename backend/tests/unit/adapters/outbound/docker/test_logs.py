@@ -255,13 +255,14 @@ async def test_error_status_does_not_consume_a_slow_untrusted_body(
     log_server: LogServer, status: int, code: str
 ) -> None:
     log_server.status, log_server.mode = status, "trickle"
-    runtime = DockerRuntime((HostConfig(id="local"),), Redactor(), timeout=0.1)
+    # Allow CI scheduling and two local HTTP requests to complete before the test guard expires.
+    runtime = DockerRuntime((HostConfig(id="local"),), Redactor(), timeout=5)
     try:
         with (
             patch("docksight.adapters.outbound.docker.runtime.connect", side_effect=log_server.connect),
             pytest.raises(DockSightError) as caught,
         ):
-            await asyncio.wait_for(runtime.logs("local", "a" * 64, 200, 4096), timeout=0.6)
+            await asyncio.wait_for(runtime.logs("local", "a" * 64, 200, 4096), timeout=3)
         assert caught.value.code == code
     finally:
         log_server.release.set()

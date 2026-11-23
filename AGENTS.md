@@ -21,8 +21,10 @@ actions. Models provide explanations and select from approved tools and widgets.
 - Use patch-based edits. Keep files UTF-8 without BOM, with LF line endings.
 - For structural code exploration, use the installed `codebase-memory` skill. Check index coverage for files used as
   evidence. Read uncovered source directly.
-- Make local commits only. The user normally pushes branches and opens PRs/MRs. Ask before doing either unless the
-  user has explicitly authorized that action. Preparing PR/MR text does not authorize pushing or opening one.
+- Commit locally by default. Push only when the user explicitly asks to push or send changes to a remote repository.
+  Requests to create a branch or put changes on it authorize local Git operations only.
+- Open a PR or MR only at the user's explicit request. Preparing its title or description grants no permission to
+  push a branch or open a PR or MR.
 - Do not publish, squash, or rewrite history unless the user requests that action.
 - Preserve unrelated edits and existing staging. Stage only the files owned by the current task. Never reset the index
   to prepare a commit.
