@@ -237,14 +237,6 @@ Release assets are `compose.yaml`, `docksight.env.example`, `INSTALL.md`, `insta
 The Backend workflow runs `scripts/test_release_installer.sh` against a local release directory: fresh install,
 rerun, backend-only, and a tampered download. Verify `install.ps1` on Windows when changing it.
 
-### Retry a failed release
-
-- Re-run failed jobs in the same workflow run. Matching images and assets are reused after their revision, version,
-  platforms, and identity are verified.
-- A later qualifying run for the same commit resumes the same draft.
-- If a draft or tag points at the wrong commit, delete that draft or tag after review, then re-run the workflow.
-  Never delete a published release or its images to retry.
-
 ## Tests that use external services
 
 Unit and contract tests must mock provider HTTP calls. Mirror source paths in unit tests:

@@ -1,8 +1,8 @@
 # Install DockSight
 
 DockSight runs as two containers: a private backend and a web interface on `http://127.0.0.1:8080`.
-The images are built for Linux `amd64` and `arm64`. Linux Docker hosts are supported. Docker Desktop on macOS and
-Windows is experimental: the installer and Docker inventory work, model provider access is not yet validated.
+The images are built for Linux `amd64` and `arm64`.
+Model access from Docker Desktop on macOS and Windows is not verified yet.
 
 ## Requirements
 

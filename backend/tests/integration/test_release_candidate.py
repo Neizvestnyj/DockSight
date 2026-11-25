@@ -201,7 +201,7 @@ def test_an_unpublished_tag_on_another_commit_fails_closed(tmp_path: Path) -> No
     ref = {"object": {"type": "commit", "sha": OTHER_SHA}}
     routes = _routes(**{f"/repos/{REPOSITORY}/git/ref/tags/v1.0.0": ref})
 
-    with pytest.raises(candidate.QualificationError, match=r"v1.0.0"):
+    with pytest.raises(candidate.QualificationError, match=r"v1.0.0.*[Dd]elete .* re-run the Release workflow"):
         candidate.qualify(_event(), REPOSITORY, _checkout(tmp_path), FakeApi(routes))
 
 
@@ -220,7 +220,7 @@ def test_a_draft_for_another_candidate_fails_closed_and_a_matching_draft_resumes
     other = {"draft": True, "tag_name": "v1.0.0", "target_commitish": OTHER_SHA}
     matching = {"draft": True, "tag_name": "v1.0.0", "target_commitish": SHA}
 
-    with pytest.raises(candidate.QualificationError, match="Draft"):
+    with pytest.raises(candidate.QualificationError, match=r"Draft.*[Dd]elete .* re-run the Release workflow"):
         candidate.publication_state(
             FakeApi(_routes(**{f"/repos/{REPOSITORY}/releases?per_page=100": [other]})), REPOSITORY, "v1.0.0", SHA
         )

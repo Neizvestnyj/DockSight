@@ -4,13 +4,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versions: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Dates record merges into `master` unless a release date is set separately. Version links show the corresponding changes.
 
-## [1.0.0] - 2026-11-24
+## [1.0.0] - 2026-11-25
 
 ### Added
 
 - Install DockSight with Docker Compose from a release. The backend and a web image that serves the built interface
   run behind one loopback origin, keep cookie login, stream diagnoses without buffering, and store state on a named
-  volume. See `deploy/INSTALL.md`. Docker Desktop on macOS and Windows is not yet a validated target.
+  volume. See `deploy/INSTALL.md`. Model access from Docker Desktop on macOS and Windows is not verified yet.
 - Smoke-test the packaged deployment in CI with a deterministic local model, including login, session restore after
   backend recreation, streaming, and Docker inventory through the non-root backend.
 - Publish each new version automatically after Backend, Frontend, and Secret scanning pass on the same `master`

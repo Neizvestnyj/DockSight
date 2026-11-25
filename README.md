@@ -43,7 +43,6 @@ irm https://github.com/Neizvestnyj/DockSight/releases/latest/download/install.ps
 The installer starts DockSight on `http://127.0.0.1:8080` and prints the API token for **Connect API**.
 Run it again to update. `DOCKSIGHT_COMPONENTS=backend` installs only the API.
 See [Install DockSight](deploy/INSTALL.md) for settings, model setup, and uninstalling.
-Docker Desktop on macOS and Windows is experimental.
 
 ## Quick start
 

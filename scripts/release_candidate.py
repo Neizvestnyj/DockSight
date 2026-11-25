@@ -32,6 +32,9 @@ VERSION_PATTERN: Final[re.Pattern[str]] = re.compile(
 API_TIMEOUT: Final[int] = 30
 DEFAULT_API_URL: Final[str] = "https://api.github.com"
 UPLOADS_HOST: Final[str] = "uploads.github.com"
+CONFLICT_HINT: Final[str] = (
+    "Delete that tag or draft after checking which commit should be released, then re-run the Release workflow."
+)
 
 type Api = Callable[[str], object | None]
 
@@ -306,7 +309,9 @@ def publication_state(api: Api, repository: str, tag: str, sha: str) -> str:
         return "published"
     commit = tag_commit(api, repository, tag)
     if commit is not None and commit != sha:
-        raise QualificationError(f"Tag {tag} points at {commit}, not candidate {sha}")
+        raise QualificationError(
+            f"Tag {tag} points at {commit}, not candidate {sha}. {CONFLICT_HINT}"
+        )
     check_drafts(api, repository, tag, sha)
     return "pending"
 
@@ -319,7 +324,7 @@ def check_drafts(api: Api, repository: str, tag: str, sha: str) -> None:
         target = text(draft, "target_commitish")
         if target != sha:
             raise QualificationError(
-                f"Draft release {tag} targets {target}, not candidate {sha}"
+                f"Draft release {tag} targets {target}, not candidate {sha}. {CONFLICT_HINT}"
             )
 
 
