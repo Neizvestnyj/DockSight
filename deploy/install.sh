@@ -48,7 +48,9 @@ version_at_least() {
 
 check_port() {
   case $2 in '' | *[!0-9]*) die "$1 must be a port number." ;; esac
-  [ "$2" -ge 1 ] && [ "$2" -le 65535 ] || die "$1 must be between 1 and 65535."
+  if [ "$2" -lt 1 ] || [ "$2" -gt 65535 ]; then
+    die "$1 must be between 1 and 65535."
+  fi
 }
 
 fetch() {
