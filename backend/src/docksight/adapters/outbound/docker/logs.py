@@ -1,7 +1,7 @@
 from collections.abc import Iterator
 from contextlib import suppress
 from socket import SHUT_RDWR
-from threading import Timer
+from threading import Event, Timer
 from time import monotonic
 from typing import Protocol, cast
 
@@ -37,12 +37,34 @@ class _Socket(Protocol):
         ...
 
 
+def _timed_out() -> DockSightError:
+    """Report a deadline expiry without exposing the bytes read so far."""
+    return DockSightError("runtime_timeout", "Docker log read timed out", ErrorKind.TIMEOUT)
+
+
 def _remaining(deadline: float) -> float:
     """Reject expired reads instead of presenting the bytes collected so far as a complete tail."""
     remaining = deadline - monotonic()
     if remaining <= 0:
-        raise DockSightError("runtime_timeout", "Docker log read timed out", ErrorKind.TIMEOUT)
+        raise _timed_out()
     return remaining
+
+
+def _expired(deadline: float, aborted: Event) -> bool:
+    """Trust a fired abort because platform waits can wake slightly before the monotonic deadline."""
+    return aborted.is_set() or monotonic() >= deadline
+
+
+def _read_timed_out(error: BaseException) -> bool:
+    """Detect a transport read timeout, whose socket limit is the remaining log deadline."""
+    seen: set[int] = set()
+    current: BaseException | None = error
+    while current is not None and id(current) not in seen:
+        if isinstance(current, TimeoutError):
+            return True
+        seen.add(id(current))
+        current = current.__cause__ or current.__context__
+    return False
 
 
 def read_logs(client: LogAPI, container_id: str, tty: bool, lines: int, deadline: float, scan_limit: int) -> bytes:
@@ -55,16 +77,18 @@ def read_logs(client: LogAPI, container_id: str, tty: bool, lines: int, deadline
             url, params=params, stream=True, timeout=_remaining(deadline)
         )
     except Timeout as exc:
-        raise DockSightError("runtime_timeout", "Docker log read timed out", ErrorKind.TIMEOUT) from exc
+        raise _timed_out() from exc
     with response:
         if response.status_code == 404:
             raise NotFound("Container not found")
         response.raise_for_status()
         raw = client._get_raw_response_socket(response)  # pyright: ignore[reportPrivateUsage]
         transport = cast(_Socket, getattr(raw, "_sock", raw))
+        aborted = Event()
 
         def abort() -> None:
             """Unblock HTTP reads without closing a buffered response from a competing thread."""
+            aborted.set()
             if isinstance(transport, Channel):
                 # Paramiko shutdown only marks EOF. Close buffers locally; the worker owns client shutdown.
                 transport.in_buffer.close()
@@ -77,13 +101,13 @@ def read_logs(client: LogAPI, container_id: str, tty: bool, lines: int, deadline
         timer.daemon = True
         timer.start()
         try:
-            return _read_body(response, tty, deadline, scan_limit)
+            return _read_body(response, tty, deadline, scan_limit, aborted)
         finally:
             timer.cancel()
             timer.join()
 
 
-def _read_body(response: Response, tty: bool, deadline: float, scan_limit: int) -> bytes:
+def _read_body(response: Response, tty: bool, deadline: float, scan_limit: int, aborted: Event) -> bytes:
     """Keep transport failures explicit and distinguish deadline cancellation from a complete response."""
     try:
         chunks = response.iter_content(16384) if tty else _frames(response, deadline, scan_limit)
@@ -97,13 +121,14 @@ def _read_body(response: Response, tty: bool, deadline: float, scan_limit: int) 
                     ErrorKind.DEPENDENCY,
                 )
             result.extend(chunk)
-        _remaining(deadline)
+        if _expired(deadline, aborted):
+            raise _timed_out()
         return bytes(result)
     except DockSightError:
         raise
     except Exception as exc:
-        if monotonic() >= deadline:
-            raise DockSightError("runtime_timeout", "Docker log read timed out", ErrorKind.TIMEOUT) from exc
+        if _expired(deadline, aborted) or _read_timed_out(exc):
+            raise _timed_out() from exc
         raise DockerException("Docker log stream failed") from exc
 
 

@@ -1,6 +1,6 @@
 [project]
 name = "docksight"
-version = "0.9.2"
+version = "1.0.0"
 description = "Docker diagnostics with typed UI responses and confirmed actions"
 requires-python = ">=3.12"
 dependencies = [
@@ -75,6 +75,7 @@ select = ["E", "F", "I", "UP", "B", "ASYNC", "RUF"]
 
 [tool.pyright]
 include = ["src", "../scripts"]
+extraPaths = ["src", "../scripts"]
 typeCheckingMode = "strict"
 pythonVersion = "3.12"
 venvPath = "."

@@ -215,6 +215,28 @@ hooks. CI runs after a push and cannot reject an already accepted update.
 CI skips the local branch guard and the staged Gitleaks hook. `Secret scan` checks commit history on pull requests
 to `master` and on pushes to `master`. Keep its Gitleaks version aligned with the local hook.
 
+## Releases
+
+The Release workflow publishes the version in `backend/pyproject.toml` once Backend, Frontend, and Secret scanning
+all succeed on the same push to `master`. Versions below `1.0.0` are skipped. A version that is already published is
+skipped, so merges without a version bump publish nothing.
+
+| Job       | Permissions                     | Result                                                          |
+|-----------|---------------------------------|-----------------------------------------------------------------|
+| `qualify` | `actions: read, contents: read` | Commit, version, tag, and the exact `CHANGELOG.md` section      |
+| `build`   | `contents: read`                | Native `amd64` and `arm64` image archives that passed the smoke |
+| `draft`   | `contents: write`               | Draft release tied to the commit                                |
+| `images`  | `packages: write`               | `vX.Y.Z` multi-platform images in GHCR                          |
+| `release` | `contents: write`               | Digest-pinned assets, the published release, and the Git tag    |
+
+All runs share one concurrency group. Each run rechecks release state before writing. An unpublished tag or draft
+for another commit fails the run without moving a tag or replacing an image.
+
+Release assets are `compose.yaml`, `docksight.env.example`, `INSTALL.md`, `install.sh`, and `install.ps1`.
+`scripts/render_release_installer.sh` writes the tag and the `compose.yaml` checksum into both installers.
+The Backend workflow runs `scripts/test_release_installer.sh` against a local release directory: fresh install,
+rerun, backend-only, and a tampered download. Verify `install.ps1` on Windows when changing it.
+
 ## Tests that use external services
 
 Unit and contract tests must mock provider HTTP calls. Mirror source paths in unit tests:

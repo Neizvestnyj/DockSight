@@ -1,0 +1,237 @@
+name: Release
+
+# Publish each new version after Backend, Frontend, and Secret scanning all succeed on the same master push.
+on:
+  workflow_run:
+    workflows: [Backend, Frontend, Secret scanning]
+    types: [completed]
+    branches: [master]
+
+permissions: {}
+
+# Serialize every release write. Each run rechecks release state under this lock before writing.
+concurrency:
+  group: release
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  qualify:
+    name: Qualify release candidate
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'master' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      publish: ${{ steps.candidate.outputs.publish }}
+      sha: ${{ steps.candidate.outputs.sha }}
+      version: ${{ steps.candidate.outputs.version }}
+      tag: ${{ steps.candidate.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+      - name: Qualify the tested commit
+        id: candidate
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: >-
+          python3 scripts/release_candidate.py qualify --event "$GITHUB_EVENT_PATH" --repository "$REPOSITORY"
+          --root . --notes "$RUNNER_TEMP/release-notes.md"
+      - name: Keep release notes
+        if: steps.candidate.outputs.publish == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-notes
+          path: ${{ runner.temp }}/release-notes.md
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 7
+
+  build:
+    name: Build and smoke-test ${{ matrix.arch }} images
+    needs: qualify
+    if: needs.qualify.outputs.publish == 'true'
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    env:
+      ARCH: ${{ matrix.arch }}
+      SHA: ${{ needs.qualify.outputs.sha }}
+      VERSION: ${{ needs.qualify.outputs.version }}
+      REPOSITORY: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.qualify.outputs.sha }}
+          persist-credentials: false
+      - name: Build OCI image archives
+        run: |
+          docker buildx create --name release --driver docker-container --use
+          mkdir -p "$RUNNER_TEMP/images"
+          for component in backend frontend; do
+            docker buildx build --platform "linux/$ARCH" --file "$component/Dockerfile" \
+              --provenance=false --sbom=false \
+              --label "org.opencontainers.image.source=https://github.com/$REPOSITORY" \
+              --label "org.opencontainers.image.revision=$SHA" \
+              --label "org.opencontainers.image.version=$VERSION" \
+              --label "org.opencontainers.image.title=docksight-$component" \
+              --output "type=oci,dest=$RUNNER_TEMP/images/$component.tar,name=docksight-$component:release-$ARCH" .
+            docker load --input "$RUNNER_TEMP/images/$component.tar"
+          done
+      - name: Verify the loaded images are the archived images
+        run: >-
+          python3 scripts/publish_release.py check-archives --repository "$REPOSITORY" --sha "$SHA"
+          --version "$VERSION" --arch "$ARCH" --archives "$RUNNER_TEMP/images"
+      - name: Smoke-test the packaged deployment
+        env:
+          DOCKSIGHT_EXPECTED_VERSION: ${{ needs.qualify.outputs.version }}
+        run: bash scripts/smoke_release_compose.sh "docksight-backend:release-$ARCH" "docksight-frontend:release-$ARCH"
+      - name: Keep the tested image archives
+        uses: actions/upload-artifact@v7
+        with:
+          name: images-${{ matrix.arch }}
+          path: ${{ runner.temp }}/images/*.tar
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 7
+
+  draft:
+    name: Create or resume the draft release
+    needs: [qualify, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    outputs:
+      state: ${{ steps.draft.outputs.state }}
+      release_id: ${{ steps.draft.outputs.release_id }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.qualify.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-notes
+          path: ${{ runner.temp }}/notes
+      - name: Recheck release state and create or resume the draft
+        id: draft
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          SHA: ${{ needs.qualify.outputs.sha }}
+          TAG: ${{ needs.qualify.outputs.tag }}
+        run: >-
+          python3 scripts/publish_release.py draft --repository "$REPOSITORY" --sha "$SHA" --tag "$TAG"
+          --notes "$RUNNER_TEMP/notes/release-notes.md"
+
+  images:
+    name: Publish the tested images
+    needs: [qualify, draft]
+    if: needs.draft.outputs.state == 'pending'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      backend_digest: ${{ steps.images.outputs.backend_digest }}
+      frontend_digest: ${{ steps.images.outputs.frontend_digest }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.qualify.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: images-*
+          path: ${{ runner.temp }}/images
+      - name: Sign in to GitHub Container Registry
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          command -v skopeo >/dev/null || { sudo apt-get update && sudo apt-get install --yes skopeo; }
+          printf '%s' "$GITHUB_TOKEN" | skopeo login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+      - name: Publish or reuse the multi-platform images
+        id: images
+        env:
+          REPOSITORY: ${{ github.repository }}
+          SHA: ${{ needs.qualify.outputs.sha }}
+          VERSION: ${{ needs.qualify.outputs.version }}
+        run: |
+          namespace=$(printf '%s' "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')
+          python3 scripts/publish_release.py images --repository "$REPOSITORY" --sha "$SHA" --version "$VERSION" \
+            --namespace "$namespace" --archives "$RUNNER_TEMP/images"
+      - name: Sign out of GitHub Container Registry
+        if: always()
+        run: |
+          skopeo logout ghcr.io || true
+          docker logout ghcr.io || true
+
+  release:
+    name: Publish the GitHub Release
+    needs: [qualify, draft, images]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      REPOSITORY: ${{ github.repository }}
+      SHA: ${{ needs.qualify.outputs.sha }}
+      TAG: ${{ needs.qualify.outputs.tag }}
+      VERSION: ${{ needs.qualify.outputs.version }}
+      BACKEND_DIGEST: ${{ needs.images.outputs.backend_digest }}
+      FRONTEND_DIGEST: ${{ needs.images.outputs.frontend_digest }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.qualify.outputs.sha }}
+          persist-credentials: false
+      - name: Render and check the installation files
+        run: |
+          namespace=$(printf '%s' "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')
+          backend="ghcr.io/$namespace/docksight-backend:$TAG@$BACKEND_DIGEST"
+          frontend="ghcr.io/$namespace/docksight-frontend:$TAG@$FRONTEND_DIGEST"
+          assets="$RUNNER_TEMP/assets"
+          mkdir -p "$assets"
+          bash scripts/render_release_compose.sh deploy/compose.yaml "$backend" "$frontend" > "$assets/compose.yaml"
+          cp deploy/docksight.env.example deploy/INSTALL.md "$assets/"
+          for installer in install.sh install.ps1; do
+            bash scripts/render_release_installer.sh "deploy/$installer" "$TAG" "$assets/compose.yaml" \
+              > "$assets/$installer"
+          done
+          check="$RUNNER_TEMP/install-check"
+          mkdir -p "$check"
+          cp "$assets/compose.yaml" "$check/"
+          sed -e 's/^DOCKSIGHT_API_TOKEN=$/DOCKSIGHT_API_TOKEN=release-check-token-0123456789/' \
+            -e 's/^DOCKSIGHT_DOCKER_GID=$/DOCKSIGHT_DOCKER_GID=999/' "$assets/docksight.env.example" > "$check/.env"
+          (cd "$check" && docker compose config --quiet)
+          printf 'BACKEND_REF=%s\nFRONTEND_REF=%s\n' "$backend" "$frontend" >> "$GITHUB_ENV"
+      - name: Verify anonymous access, upload assets, and publish
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ needs.draft.outputs.release_id }}
+        run: |
+          command -v skopeo >/dev/null || { sudo apt-get update && sudo apt-get install --yes skopeo; }
+          python3 scripts/publish_release.py release --repository "$REPOSITORY" --sha "$SHA" --version "$VERSION" \
+            --release-id "$RELEASE_ID" --assets "$RUNNER_TEMP/assets" \
+            --image "backend=$BACKEND_REF" --image "frontend=$FRONTEND_REF"

@@ -242,6 +242,39 @@ generation.
 Selecting an exact container and choosing **Diagnose** collects its snapshot and logs. Response validation still
 applies.
 
+## Docker Compose release
+
+Releases ship `install.sh`, `install.ps1`, `compose.yaml`, `docksight.env.example`, and `INSTALL.md`. See
+[Install DockSight](../deploy/INSTALL.md). The installers embed the release tag and the `compose.yaml` checksum,
+create `.env` once, and rerun as the update path. `DOCKSIGHT_COMPONENTS=backend` adds a managed
+`compose.override.yaml` that publishes only the API on `127.0.0.1:${DOCKSIGHT_API_PORT:-8000}`.
+The template in `deploy/` defines:
+
+| Service   | Image                                    | Exposure                                         |
+|-----------|------------------------------------------|--------------------------------------------------|
+| `backend` | `ghcr.io/neizvestnyj/docksight-backend`  | Private. Docker socket through a numeric group   |
+| `web`     | `ghcr.io/neizvestnyj/docksight-frontend` | `127.0.0.1:${DOCKSIGHT_HTTP_PORT:-8080}`         |
+
+- The web image serves the production bundle with unprivileged NGINX and proxies `/api/` and `/health/` to
+  `backend:8000` without rewriting paths. API responses, including SSE streams, are not buffered.
+- The backend runs one worker as UID 10001 and keeps SQLite state on the `state` named volume.
+- Compose forces `DOCKSIGHT_STATE_PATH=/var/lib/docksight/state.sqlite3` and defaults `DOCKSIGHT_BROWSER_ORIGIN` to
+  `http://127.0.0.1:8080` with `DOCKSIGHT_COOKIE_SECURE=false`. Other settings come from `.env`.
+- `host.docker.internal` maps to the host gateway for a model provider on the Docker host.
+- Release images carry `org.opencontainers.image.source`, `revision`, `version`, and `title` labels. Tags are
+  `vX.Y.Z`. There is no `latest` tag.
+
+Build and smoke-test the pair locally:
+
+```sh
+docker build -f backend/Dockerfile -t docksight-backend:local .
+docker build -f frontend/Dockerfile -t docksight-frontend:local .
+bash scripts/smoke_release_compose.sh docksight-backend:local docksight-frontend:local
+```
+
+The smoke test starts a uniquely named Compose project with a generated token, a temporary state volume, and a
+deterministic model stub. It removes only that project. It requires bash, curl, and Docker Compose v2.
+
 ## Backend image
 
 ```sh

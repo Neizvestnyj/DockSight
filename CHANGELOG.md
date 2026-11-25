@@ -4,6 +4,27 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versions: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Dates record merges into `master` unless a release date is set separately. Version links show the corresponding changes.
 
+## [1.0.0] - 2026-11-25
+
+### Added
+
+- Install DockSight with Docker Compose from a release. The backend and a web image that serves the built interface
+  run behind one loopback origin, keep cookie login, stream diagnoses without buffering, and store state on a named
+  volume. See `deploy/INSTALL.md`. Model access from Docker Desktop on macOS and Windows is not verified yet.
+- Smoke-test the packaged deployment in CI with a deterministic local model, including login, session restore after
+  backend recreation, streaming, and Docker inventory through the non-root backend.
+- Publish each new version automatically after Backend, Frontend, and Secret scanning pass on the same `master`
+  push. Releases contain `vX.Y.Z` images for Linux `amd64` and `arm64` that passed the smoke test, the changelog notes,
+  and digest-pinned installation files. Failed publications resume the same draft and never move a published tag.
+- Install, update, or install only the backend with one command: `install.sh` for Linux and macOS and `install.ps1`
+  for Windows. The installer verifies the release `compose.yaml`, generates the API token, detects the Docker socket
+  group, keeps existing settings on reruns, and prints the address and token.
+
+### Fixed
+
+- Return `runtime_timeout` without partial output when a Docker log read hits its deadline on Windows. Previously the
+  deadline could fire slightly early and return `runtime_unavailable` or, over SSH with a TTY, a truncated log tail.
+
 ## [0.9.2] - 2026-11-23
 
 ### Changed
@@ -397,7 +418,8 @@ Dates record merges into `master` unless a release date is set separately. Versi
 - Prepared actions are bound to the caller and exact target. Unknown mutation outcomes block conflicting actions.
   Runtime mutations are never retried automatically.
 
-[0.9.2]: https://github.com/Neizvestnyj/DockSight/compare/e2f3e24f812b4476729d8667b8fc40c00e54184f...feature/gitleaks-ci
+[1.0.0]: https://github.com/Neizvestnyj/DockSight/compare/b7edadae82e4dbb6ee15c84ff77725599f5e7838...v1.0.0
+[0.9.2]: https://github.com/Neizvestnyj/DockSight/compare/e2f3e24f812b4476729d8667b8fc40c00e54184f...b7edadae82e4dbb6ee15c84ff77725599f5e7838
 [0.9.1]: https://github.com/Neizvestnyj/DockSight/compare/0c0e44e43fa51d5bb73d4b795069efb753db44ab...e2f3e24f812b4476729d8667b8fc40c00e54184f
 [0.9.0]: https://github.com/Neizvestnyj/DockSight/compare/9b3c9ad9a5d0e286dbfce2ec9e9b2b1ab803f415...0c0e44e43fa51d5bb73d4b795069efb753db44ab
 [0.8.3]: https://github.com/Neizvestnyj/DockSight/compare/b54aceecda216fb6c276638c120bae21814f9b40...9b3c9ad9a5d0e286dbfce2ec9e9b2b1ab803f415

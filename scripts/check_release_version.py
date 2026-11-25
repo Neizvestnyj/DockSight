@@ -8,11 +8,14 @@ import tomllib
 from pathlib import Path
 
 
-def main() -> int:
-    """Report frontend version mismatches against the backend package version."""
-    root = Path(__file__).resolve().parents[1]
+class ReleaseVersionError(ValueError):
+    """Package metadata in a checkout disagrees about the release version."""
+
+
+def release_version(root: Path) -> str:
+    """Return the backend package version after verifying that frontend metadata matches it."""
     with (root / "backend/pyproject.toml").open("rb") as manifest:
-        release_version: str = tomllib.load(manifest)["project"]["version"]
+        version: str = tomllib.load(manifest)["project"]["version"]
 
     frontend = root / "frontend"
     package = json.loads((frontend / "package.json").read_text(encoding="utf-8"))
@@ -24,19 +27,28 @@ def main() -> int:
         'frontend/package-lock.json packages[""].version': locked_package_version,
     }
     mismatches = [
-        f"{field} reports {version}."
-        for field, version in versions.items()
-        if version != release_version
+        f"{field} reports {found}."
+        for field, found in versions.items()
+        if found != version
     ]
     if mismatches:
-        print(
-            f"Expected DockSight release version {release_version} from backend/pyproject.toml.",
-            file=sys.stderr,
-        )
-        print("\n".join(mismatches), file=sys.stderr)
+        lines = [
+            f"Expected DockSight release version {version} from backend/pyproject.toml.",
+            *mismatches,
+        ]
+        raise ReleaseVersionError("\n".join(lines))
+    return version
+
+
+def main() -> int:
+    """Report frontend version mismatches against the backend package version."""
+    try:
+        version = release_version(Path(__file__).resolve().parents[1])
+    except ReleaseVersionError as error:
+        print(error, file=sys.stderr)
         return 1
 
-    print(f"Backend and frontend share DockSight release version {release_version}.")
+    print(f"Backend and frontend share DockSight release version {version}.")
     return 0
 
 
