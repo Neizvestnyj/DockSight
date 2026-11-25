@@ -1,0 +1,55 @@
+# DockSight Docker Compose deployment.
+# Release assets pin both images by digest. Deployment settings are read from .env next to this file.
+name: docksight
+
+services:
+  backend:
+    image: ${DOCKSIGHT_BACKEND_IMAGE:?Set DOCKSIGHT_BACKEND_IMAGE to the backend image reference}
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: true
+    environment:
+      DOCKSIGHT_STATE_BACKEND: sqlite
+      DOCKSIGHT_STATE_PATH: /var/lib/docksight/state.sqlite3
+      DOCKSIGHT_BROWSER_ORIGIN: ${DOCKSIGHT_BROWSER_ORIGIN:-http://127.0.0.1:8080}
+      DOCKSIGHT_COOKIE_SECURE: ${DOCKSIGHT_COOKIE_SECURE:-false}
+    user: "10001:10001"
+    group_add:
+      - "${DOCKSIGHT_DOCKER_GID:?Set DOCKSIGHT_DOCKER_GID to the numeric group of the Docker socket}"
+    volumes:
+      - type: volume
+        source: state
+        target: /var/lib/docksight
+      - type: bind
+        source: /var/run/docker.sock
+        target: /var/run/docker.sock
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3)
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+      start_interval: 1s
+
+  web:
+    image: ${DOCKSIGHT_FRONTEND_IMAGE:?Set DOCKSIGHT_FRONTEND_IMAGE to the frontend image reference}
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${DOCKSIGHT_HTTP_PORT:-8080}:8080"
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+
+volumes:
+  state:

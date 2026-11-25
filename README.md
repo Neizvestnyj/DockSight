@@ -26,9 +26,28 @@ Each action requires confirmation.
 Model explanations can be wrong. Valid evidence references do not prove a root-cause claim.
 Review the linked observations before acting.
 
+## Install
+
+Requires Docker with Docker Compose v2.24 or later. Linux and macOS:
+
+```sh
+curl -fsSL https://github.com/Neizvestnyj/DockSight/releases/latest/download/install.sh | sh
+```
+
+Windows PowerShell:
+
+```powershell
+irm https://github.com/Neizvestnyj/DockSight/releases/latest/download/install.ps1 | iex
+```
+
+The installer starts DockSight on `http://127.0.0.1:8080` and prints the API token for **Connect API**.
+Run it again to update. `DOCKSIGHT_COMPONENTS=backend` installs only the API.
+See [Install DockSight](deploy/INSTALL.md) for settings, model setup, and uninstalling.
+Docker Desktop on macOS and Windows is experimental.
+
 ## Quick start
 
-Clone the repository:
+Run DockSight from source for development or the Demo. Clone the repository:
 
 ```sh
 git clone https://github.com/Neizvestnyj/DockSight.git
