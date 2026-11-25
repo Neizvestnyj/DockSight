@@ -513,6 +513,15 @@ def test_release_workflow_limits_write_permissions_to_qualified_publication_jobs
     assert not any(job.get("continue-on-error") for job in jobs.values())
 
 
+def test_build_archives_load_into_the_runner_classic_image_store() -> None:
+    """Docker 28 without the containerd store rejects OCI exporter tarballs, so builds use the docker exporter."""
+    workflow = yaml.safe_load((ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8"))
+    build = "\n".join(step.get("run", "") for step in workflow["jobs"]["build"]["steps"])
+
+    assert '--output "type=docker,dest=' in build
+    assert "type=oci" not in build
+
+
 def test_release_artifacts_can_be_replaced_when_all_jobs_are_rerun() -> None:
     workflow = yaml.safe_load((ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8"))
     uploads = [

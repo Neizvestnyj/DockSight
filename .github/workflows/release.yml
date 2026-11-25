@@ -82,7 +82,7 @@ jobs:
         with:
           ref: ${{ needs.qualify.outputs.sha }}
           persist-credentials: false
-      - name: Build OCI image archives
+      - name: Build image archives
         run: |
           docker buildx create --name release --driver docker-container --use
           mkdir -p "$RUNNER_TEMP/images"
@@ -93,7 +93,7 @@ jobs:
               --label "org.opencontainers.image.revision=$SHA" \
               --label "org.opencontainers.image.version=$VERSION" \
               --label "org.opencontainers.image.title=docksight-$component" \
-              --output "type=oci,dest=$RUNNER_TEMP/images/$component.tar,name=docksight-$component:release-$ARCH" .
+              --output "type=docker,dest=$RUNNER_TEMP/images/$component.tar,name=docksight-$component:release-$ARCH" .
             docker load --input "$RUNNER_TEMP/images/$component.tar"
           done
       - name: Verify the loaded images are the archived images
