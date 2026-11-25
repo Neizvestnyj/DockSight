@@ -497,6 +497,15 @@ def publish_release(
         raise ReleaseError(f"Published tag {tag} does not point at {sha}")
 
 
+def registry_reference(reference: str) -> str:
+    """Drop the tag of a tag-and-digest reference; older skopeo rejects references with both."""
+    name, separator, manifest_digest = reference.partition("@")
+    if not separator:
+        return reference
+    repository, _, last = name.rpartition("/")
+    return f"{repository}/{last.split(':', 1)[0]}@{manifest_digest}"
+
+
 class SkopeoRegistry:
     """Registry operations through skopeo and Docker Buildx with credentials from prior logins."""
 
@@ -521,7 +530,7 @@ class SkopeoRegistry:
             "--retry-times",
             "3",
             "--raw",
-            f"docker://{reference}",
+            f"docker://{registry_reference(reference)}",
         )
         if result.returncode == 0:
             return result.stdout
@@ -548,7 +557,7 @@ class SkopeoRegistry:
             "3",
             "--config",
             "--raw",
-            f"docker://{reference}",
+            f"docker://{registry_reference(reference)}",
         )
         if result.returncode != 0:
             raise ReleaseError(f"Cannot read the config of {reference}")

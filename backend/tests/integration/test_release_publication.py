@@ -513,6 +513,29 @@ def test_release_workflow_limits_write_permissions_to_qualified_publication_jobs
     assert not any(job.get("continue-on-error") for job in jobs.values())
 
 
+@pytest.mark.parametrize(
+    ("reference", "expected"),
+    [
+        (f"ghcr.io/ns/docksight-backend:v1.0.0@sha256:{'a' * 64}", f"ghcr.io/ns/docksight-backend@sha256:{'a' * 64}"),
+        (f"localhost:5000/docksight:v1.0.0@sha256:{'b' * 64}", f"localhost:5000/docksight@sha256:{'b' * 64}"),
+        (f"ghcr.io/ns/docksight-backend@sha256:{'c' * 64}", f"ghcr.io/ns/docksight-backend@sha256:{'c' * 64}"),
+        ("ghcr.io/ns/docksight-backend:v1.0.0", "ghcr.io/ns/docksight-backend:v1.0.0"),
+    ],
+)
+def test_registry_reads_drop_the_tag_of_a_digest_reference(reference: str, expected: str) -> None:
+    """skopeo 1.13 on Ubuntu 24.04 rejects references that carry both a tag and a digest."""
+    assert publish.registry_reference(reference) == expected
+
+
+def test_compose_wait_covers_both_services() -> None:
+    """`docker compose up --wait` treats a service without a healthcheck as ready before nginx listens."""
+    services = yaml.safe_load((ROOT / "deploy/compose.yaml").read_text(encoding="utf-8"))["services"]
+
+    for name in ("backend", "web"):
+        assert services[name]["healthcheck"]["test"][0] == "CMD"
+        assert services[name]["healthcheck"]["start_interval"] == "1s"
+
+
 def test_build_archives_load_into_the_runner_classic_image_store() -> None:
     """Docker 28 without the containerd store rejects OCI exporter tarballs, so builds use the docker exporter."""
     workflow = yaml.safe_load((ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8"))
