@@ -269,8 +269,27 @@ async def test_error_status_does_not_consume_a_slow_untrusted_body(
         await asyncio.wait_for(runtime.close(), timeout=1)
 
 
-@pytest.mark.parametrize("tty", [False, True], ids=["multiplexed", "tty"])
-async def test_ssh_deadline_interrupts_buffered_channel_reads(tty: bool) -> None:
+class EarlyTimer:
+    """Model a platform wait that wakes before the monotonic clock reaches the log deadline."""
+
+    def __init__(self, interval: float, function: Callable[[], None]) -> None:
+        """Keep the abort callback and ignore the requested delay."""
+        self.function = function
+        self.daemon = False
+
+    def start(self) -> None:
+        """Abort the read immediately, as a Windows wait may wake up to a clock tick early."""
+        self.function()
+
+    def cancel(self) -> None:
+        """Accept cancellation after the callback already ran."""
+
+    def join(self) -> None:
+        """Return at once because no thread was started."""
+
+
+def ssh_log_response(tty: bool) -> tuple[Channel, Response, APIClient]:
+    """Build an SDK response that reads a declared 2 MiB log body from a buffered Paramiko channel."""
     channel = Channel(1)
     channel.active = True
     channel.transport = MagicMock()
@@ -286,6 +305,42 @@ async def test_ssh_deadline_interrupts_buffered_channel_reads(tty: bool) -> None
     response.raw = SimpleNamespace(_fp=http_response, read=http_response.read, close=http_response.close)
     client = APIClient(base_url="tcp://127.0.0.1:1", version="1.45")
     client.base_url = "http+docker://ssh"
+    return channel, response, client
+
+
+@pytest.mark.parametrize("tty", [False, True], ids=["multiplexed", "tty"])
+async def test_deadline_abort_before_the_clock_expires_still_rejects_partial_logs(tty: bool) -> None:
+    channel, response, client = ssh_log_response(tty)
+    try:
+        with (
+            patch.object(client, "_get", return_value=response),
+            patch("docksight.adapters.outbound.docker.logs.Timer", EarlyTimer),
+            pytest.raises(DockSightError) as caught,
+        ):
+            await asyncio.to_thread(read_logs, client, "a" * 64, tty, 200, monotonic() + 30, 8388608)
+        assert caught.value.code == "runtime_timeout"
+    finally:
+        channel.close()
+        client.close()
+
+
+@pytest.mark.parametrize("tty", [False, True], ids=["multiplexed", "tty"])
+async def test_body_read_timeout_before_the_clock_expires_is_a_log_timeout(tty: bool) -> None:
+    """The body socket timeout is the remaining deadline and may fire just before the abort timer."""
+    channel, response, client = ssh_log_response(tty)
+    channel.settimeout(0.05)
+    try:
+        with patch.object(client, "_get", return_value=response), pytest.raises(DockSightError) as caught:
+            await asyncio.to_thread(read_logs, client, "a" * 64, tty, 200, monotonic() + 30, 8388608)
+        assert caught.value.code == "runtime_timeout"
+    finally:
+        channel.close()
+        client.close()
+
+
+@pytest.mark.parametrize("tty", [False, True], ids=["multiplexed", "tty"])
+async def test_ssh_deadline_interrupts_buffered_channel_reads(tty: bool) -> None:
+    channel, response, client = ssh_log_response(tty)
     stopped = Event()
 
     def trickle() -> None:

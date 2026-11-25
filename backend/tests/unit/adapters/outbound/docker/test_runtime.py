@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from docker.errors import DockerException, NotFound
 from paramiko import SSHException
-from requests import RequestException
+from requests import ReadTimeout, RequestException
 
 from docksight.adapters.outbound.docker.hosts import HostConfig
 from docksight.adapters.outbound.docker.runtime import DockerRuntime
@@ -101,6 +101,21 @@ async def test_failed_restart_translates_sdk_errors_without_retrying(
     assert (caught.value.code, caught.value.kind) == (code, kind)
     assert caught.value.__cause__ is failure
     sdk.api.restart.assert_called_once_with("a" * 64, timeout=10)
+    sdk.close.assert_called_once()
+    await runtime.close()
+
+
+async def test_log_sdk_timeout_is_a_timeout_even_before_the_clock_reaches_the_deadline() -> None:
+    """Windows socket timeouts can fire slightly before the monotonic log deadline."""
+    runtime = DockerRuntime((HostConfig(id="local"),), Redactor(()), timeout=30)
+    sdk = MagicMock()
+    failure = ReadTimeout("read timed out")
+    sdk.api.inspect_container.side_effect = failure
+    with patch("docksight.adapters.outbound.docker.runtime.connect", return_value=sdk):
+        with pytest.raises(DockSightError) as caught:
+            await runtime.logs("local", "a" * 64, lines=3, max_bytes=256)
+    assert (caught.value.code, caught.value.kind) == ("runtime_timeout", ErrorKind.TIMEOUT)
+    assert caught.value.__cause__ is failure
     sdk.close.assert_called_once()
     await runtime.close()
 

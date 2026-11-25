@@ -20,6 +20,11 @@ Dates record merges into `master` unless a release date is set separately. Versi
   for Windows. The installer verifies the release `compose.yaml`, generates the API token, detects the Docker socket
   group, keeps existing settings on reruns, and prints the address and token.
 
+### Fixed
+
+- Return `runtime_timeout` without partial output when a Docker log read hits its deadline on Windows. Previously the
+  deadline could fire slightly early and return `runtime_unavailable` or, over SSH with a TTY, a truncated log tail.
+
 ## [0.9.2] - 2026-11-23
 
 ### Changed

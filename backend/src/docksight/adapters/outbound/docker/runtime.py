@@ -5,7 +5,7 @@ from typing import Any, Final, Literal, Protocol, cast
 
 from docker.errors import DockerException, NotFound
 from paramiko import SSHException
-from requests import RequestException
+from requests import RequestException, Timeout
 
 from docksight.adapters.outbound.docker.groups import SwarmAPI, compose_stacks, swarm_stacks
 from docksight.adapters.outbound.docker.hosts import HostConfig, connect
@@ -25,9 +25,12 @@ from docksight.domain.runtime import (
 MAX_LOG_SCAN_BYTES: Final = 8 * 1024 * 1024
 
 
-def _transport_failure(deadline: float | None) -> DockSightError:
-    """Distinguish a transport failure after an operation deadline from an early disconnect."""
-    if deadline is not None and monotonic() >= deadline:
+def _transport_failure(error: Exception, deadline: float | None) -> DockSightError:
+    """Distinguish an exhausted operation deadline from an early disconnect.
+
+    A deadline-bound SDK timeout spends the same budget, but Windows may report it just before the clock does.
+    """
+    if deadline is not None and (isinstance(error, Timeout) or monotonic() >= deadline):
         return DockSightError("runtime_timeout", "Docker operation timed out", ErrorKind.TIMEOUT)
     return DockSightError("runtime_unavailable", "Docker operation failed", ErrorKind.UNAVAILABLE)
 
@@ -107,7 +110,7 @@ class DockerRuntime:
             except NotFound as exc:
                 raise DockSightError("container_not_found", "Container not found", ErrorKind.NOT_FOUND) from exc
             except (DockerException, RequestException, SSHException, OSError) as exc:
-                raise _transport_failure(deadline) from exc
+                raise _transport_failure(exc, deadline) from exc
 
         try:
             async with asyncio.timeout(effective_timeout + 5):
